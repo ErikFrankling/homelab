@@ -1,0 +1,150 @@
+networks:
+  proxy:
+    external: true
+
+services:
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - ~/.secrets/traefik.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik/traefik.yml:/traefik.yml:ro
+      - ./config/traefik/dynamic.yml:/dynamic.yml:ro
+      - ~/data/traefik/acme.json:/acme.json
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dashboard.rule: "Host(`traefik.${DOMAIN}`)"
+      traefik.http.routers.dashboard.service: "api@internal"
+      traefik.http.routers.dashboard.middlewares: "lan-only@file"
+
+  adguard:
+    image: adguard/adguardhome
+    container_name: adguard
+    restart: unless-stopped
+    networks:
+      - proxy
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "3000:3000/tcp"
+    volumes:
+      - ~/data/adguard/work:/opt/adguardhome/work
+      - ~/data/adguard/conf:/opt/adguardhome/conf
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.adguard.rule: "Host(`adguard.${DOMAIN}`)"
+      traefik.http.services.adguard.loadbalancer.server.port: "80"
+      traefik.http.routers.adguard.middlewares: "lan-only@file"
+
+      # traefik.http.services.adguard.loadbalancer.server.port: "3000" # only enable during initial setup
+
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    environment:
+      # - SIGNUPS_ALLOWED=false
+      - DOMAIN=https://vault.${DOMAIN}
+    volumes:
+      - ~/data/vaultwarden:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.vaultwarden.rule: "Host(`vault.${DOMAIN}`)"
+      traefik.http.services.vaultwarden.loadbalancer.server.port: "80"
+
+  hermes:
+    build: ./hermes
+    container_name: hermes
+    restart: unless-stopped
+    volumes:
+      - ~/data/hermes:/opt/data
+      # - ~/data/syncthing/Obsidian:/vault:ro
+    command: ["hermes", "gateway", "run"]
+    extra_hosts:
+      - "gpu:192.168.50.232" # ip adress of the machine running the llm
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:latest-slim
+    container_name: openwebui
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    volumes:
+      - ~/data/openwebui:/app/backend/data
+    environment:
+      - WEBUI_AUTH=false
+      - ENABLE_RAG_WEB_SEARCH=True
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - RAG_WEB_SEARCH_RESULT_COUNT=5
+      - RAG_WEB_SEARCH_CONCURRENT_REQUESTS=10
+      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.openwebui.rule: "Host(`chat.${DOMAIN}`)"
+      traefik.http.services.openwebui.loadbalancer.server.port: "8080"
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    networks:
+      - proxy
+    # volumes:
+    #   - ~/data/searxng:/etc/searxng:rw
+    volumes:
+      - ./config/searxng:/etc/searxng:rw
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+  openclaw-gateway:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    ports:
+      - "18789:18789"
+    volumes:
+      - ~/data/openclaw/config:/home/node/.openclaw
+      - ~/data/openclaw/workspace:/home/node/.openclaw/workspace
+    environment:
+      - OPENCLAW_DISABLE_BONJOUR=1
+      - SEARXNG_BASE_URL=http://searxng:8080
+    env_file:
+      - ~/.secrets/openclaw.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "gpu:192.168.50.232"
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.openclaw.rule: "Host(`claw.${DOMAIN}`)"
+      traefik.http.services.openclaw.loadbalancer.server.port: "18789"
+      traefik.http.routers.openclaw.middlewares: "lan-only@file"

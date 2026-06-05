@@ -1,0 +1,12 @@
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "08cb479685035da715b4488cde7b7865f837815d90b40c8ad477444c3c7aa7cd"
+  limiter: false
+  bind_address: "0.0.0.0"
+  port: 8080

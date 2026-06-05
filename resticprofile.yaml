@@ -1,0 +1,48 @@
+version: "1"
+
+default:
+  repository: "s3:s3.us-west-004.backblazeb2.com/yourname-homelab-restic"
+  password-command: "cat /etc/restic/password.txt"
+  env-file: "/etc/restic/b2.env"
+  initialize: true
+
+  retention:
+    after-backup: true
+    keep-daily: 7
+    keep-weekly: 4
+    keep-monthly: 6
+    keep-yearly: 1
+    prune: true
+
+docker-data:
+  inherit: default
+  backup:
+    source:
+      - "/home/debian/data"
+    exclude:
+      - "*.log"
+      - "*/cache/*"
+      - "*/Cache/*"
+    tag: ["docker-data"]
+    schedule: "*-*-* 03:00:00"
+    schedule-permission: system
+    schedule-lock-wait: 10m
+  check:
+    schedule: "*-*-* 06:00:00"
+    schedule-permission: system
+
+vaultwarden:
+  inherit: default
+  backup:
+    source:
+      - "/home/debian/data/vaultwarden"
+    tag: ["vaultwarden"]
+    schedule: "*-*-* 00/6:00:00"
+    schedule-permission: system
+  retention:
+    after-backup: true
+    keep-daily: 14
+    keep-weekly: 8
+    keep-monthly: 12
+    keep-yearly: 2
+    prune: true

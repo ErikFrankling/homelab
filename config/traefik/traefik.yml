@@ -1,0 +1,46 @@
+api:
+  dashboard: true
+  insecure: false
+
+log:
+  level: WARN
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: "erikfrankling.duckdns.org"
+            sans:
+              - "*.erikfrankling.duckdns.org"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: erik.frankling@frankling.se
+      storage: /acme.json
+      dnsChallenge:
+        provider: duckdns
+        propagation:
+          disableChecks: true
+          delayBeforeChecks: 120
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: proxy
+  file:
+    filename: /dynamic.yml
+    watch: true
