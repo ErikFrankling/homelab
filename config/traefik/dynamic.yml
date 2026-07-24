@@ -6,3 +6,59 @@ http:
           - "192.168.50.0/24"
           - "10.8.0.0/24"
           - "127.0.0.1/32"
+
+  routers:
+    naiaclaw-api:
+      rule: "Host(`naiaclaw-api.erikfrankling.duckdns.org`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - lan-only
+      service: naiaclaw-api
+      tls: {}
+    p9-eval-a:
+      rule: "Host(`p9eval.erikfrankling.duckdns.org`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - lan-only
+      service: p9-eval-a
+      tls: {}
+
+    p9-mcp-test:
+      rule: "Host(`planet9-test.erikfrankling.duckdns.org`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - lan-only
+      service: p9-mcp-test
+      tls: {}
+
+    p9-registry:
+      rule: "Host(`registry.erikfrankling.duckdns.org`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - lan-only
+      service: p9-registry
+      tls: {}
+
+  services:
+    p9-eval-a:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.50.200:30080"
+
+    p9-mcp-test:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.50.200:30081"
+
+    p9-registry:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.50.200:30500"
+    naiaclaw-api:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.50.200:30085"
