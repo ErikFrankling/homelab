@@ -31,4 +31,4 @@ spec:
     name: homelab
   targetNamespace: homelab
   timeout: 10m
-  wait: false
+  wait: true

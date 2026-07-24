@@ -7,6 +7,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/sbin/ip address replace 192.168.50.100/24 dev eth0
+ExecStartPost=-/usr/bin/arping -U -c 3 -I eth0 192.168.50.100
 ExecStop=-/usr/sbin/ip address delete 192.168.50.100/24 dev eth0
 RemainAfterExit=yes
 
