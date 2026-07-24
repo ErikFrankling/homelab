@@ -14,7 +14,7 @@ spec:
       command:
         - sh
         - -c
-        - trap : TERM INT; sleep infinity & wait
+        - "trap : TERM INT; sleep infinity & wait"
       resources:
         limits:
           cpu: 500m

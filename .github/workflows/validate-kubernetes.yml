@@ -25,19 +25,23 @@ jobs:
       - name: Render optional media manifests
         run: kubectl kustomize kubernetes/optional/media > /tmp/media.yaml
 
+      - name: Stage operational manifests
+        run: cp ops/migration-helper.yaml /tmp/migration-helper.yaml
+
       - name: Validate built-in Kubernetes schemas
         run: |
           docker run --rm \
             -v /tmp:/manifests:ro \
             ghcr.io/yannh/kubeconform:v0.7.0 \
             -strict -summary -ignore-missing-schemas -skip Secret \
-            /manifests/homelab.yaml /manifests/media.yaml
+            /manifests/homelab.yaml /manifests/media.yaml \
+            /manifests/migration-helper.yaml
 
       - name: Verify SOPS files are encrypted
         run: |
           for file in $(find kubernetes -type f -name '*.enc.yaml'); do
             grep -q '^sops:' "$file"
-            grep -q 'ENC\\[AES256_GCM' "$file"
+            grep -Fq 'ENC[AES256_GCM' "$file"
           done
 
       - name: Reject plaintext Kubernetes Secrets
