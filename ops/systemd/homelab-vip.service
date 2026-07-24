@@ -2,6 +2,7 @@
 Description=Legacy homelab service IP on the k3s node
 Documentation=https://github.com/ErikFrankling/homelab
 After=network-online.target
+Before=k3s.service
 Wants=network-online.target
 
 [Service]

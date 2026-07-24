@@ -1,0 +1,4 @@
+# Advertise the stable homelab VIP through K3s ServiceLB. Traffic addressed to
+# this IP then follows the source-preserving LoadBalancer path instead of the
+# host-port NAT path.
+node-external-ip: 192.168.50.100
