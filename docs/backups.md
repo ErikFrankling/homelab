@@ -12,6 +12,31 @@ copy, not a backup.
 - `homelab-restore-verify` independently restores the latest snapshot into
   scratch space, runs SQLite integrity checks, and verifies required data roots.
 
+## What is actually backed up
+
+- Git/SOPS is the backup for Kubernetes objects, routes, image references, and
+  reconstructible SearXNG configuration.
+- Restic covers AdGuard state, Vaultwarden data/keys, Hermes state, Open WebUI
+  data, and OpenClaw configuration/workspace.
+- Vaultwarden and Open WebUI databases are copied through SQLite's online
+  backup API before restic reads them.
+- Reconstructible Open WebUI caches are excluded.
+- Traefik ACME state is retained locally but can be reissued from the encrypted
+  DuckDNS credential.
+- Downloaded media is excluded by default; media-app configuration and
+  qBittorrent resume state must be included when that optional package is
+  activated.
+
+Backing up PVC YAML is not a data backup. The payload lives in local-path
+directories on VM 200 and must leave that VM and the Proxmox disk. The five live
+application PVs use reclaim policy `Retain`, but that protects only against
+accidental PVC deletion, not disk/host loss.
+
+Velero with file-system backup is the conventional cluster-wide alternative.
+For this one namespace it still needs a node agent and application-consistent
+database handling, so the explicit restic jobs are smaller and easier to
+inspect. Reconsider Velero if more namespaces need policy-driven backup.
+
 ## Activation gates
 
 1. Create a real Backblaze B2 bucket or prefix.
@@ -37,7 +62,9 @@ is reconstructible from encrypted Git state. Traefik certificates can be
 reissued from the encrypted DuckDNS credential, although its retained ACME PVC
 should also be included in a broader cluster recovery plan.
 
-Media application configurations and qBittorrent resume state belong in
-backups. Downloaded media is excluded by default because it is large and
-usually reacquirable; irreplaceable personal media needs a separate off-site
-policy.
+Irreplaceable personal media needs a separate off-site policy.
+
+References:
+
+- https://velero.io/docs/main/file-system-backup/
+- https://restic.readthedocs.io/en/stable/

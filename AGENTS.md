@@ -5,44 +5,54 @@ Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
 
 ## Working Rules
 
-- This repo is the discussion/workspace for the homelab. Check the live hosts before assuming the repo is current.
-- The local checkout on this PC can be behind the real working state. The user has said the real repo state may live inside the Docker host checkout and may simply not have been committed, pushed, and pulled here yet.
-- When the repo looks empty or stale, inspect `/home/debian/homelab` on `ssh docker` before drawing conclusions.
+- This public repo and GitHub `main` are the active homelab source. Check Flux
+  and the live k3s host before assuming a local checkout is current.
+- The Docker VM is a powered-off rollback artifact. Never start it while
+  `homelab-vip.service` is active on VM 200.
+- The frozen Docker checkout is `/home/debian/homelab` at commit `e16ee23`.
+  It is reachable by SSH only during an intentional rollback.
 - Do not edit live host config, restart services, resize VMs, or change Kubernetes workloads unless the user explicitly asks.
 - This repository is **public**: `https://github.com/ErikFrankling/homelab`.
   Plaintext credentials, kubeconfigs, VPN material, certificates, and application
   secrets must never be committed.
 - Kubernetes secrets are encrypted with SOPS/age. The age identity is kept
-  outside Git and installed as `homelab/sops-age`. Only the age recipient is
-  public in `.sops.yaml`.
+  outside Git at `/home/erikf/.config/sops/age/homelab-k3s.agekey` and installed
+  as `homelab/sops-age`. Only the age recipient is public in `.sops.yaml`.
 - Avoid committing secrets. Live env files are under `/home/debian/.secrets` on the Docker VM and should stay out of git.
 
-## Migration State
+## Current Deployment State
 
-The Docker-to-k3s migration is staged and has explicit rollback points:
+The Docker-to-k3s migration completed on 2026-07-24:
 
 - Docker commit `e16ee23` preserves the four reverse-proxy routes that were
   previously uncommitted on the live host.
-- The Docker VM remains the active production path until all Kubernetes
-  workloads, TLS, data, and routes pass cutover checks.
+- All application file manifests matched by aggregate SHA-256 after the copy.
+  Vaultwarden/Open WebUI SQLite integrity checks and selected row counts matched
+  the stopped sources.
+- VM 100 is stopped with `onboot=0`; its containers, data, and 150 GiB disk are
+  intact. VM 200 owns the active `192.168.50.100` VIP.
 - The obsolete `husk` Helm release and namespace were removed on 2026-07-24.
   A verified logical PostgreSQL dump is retained privately under
   `/home/ubuntu/retired-husk` on `naiaclaw`.
 - VM 200's disk was expanded online from 80 GiB to 160 GiB. The root filesystem
-  had about 93 GiB free after expansion.
-- Flux controllers are installed, but this repo deliberately bootstraps only one
-  namespace-scoped `GitRepository` and `Kustomization`. The reconciler uses the
-  `homelab-reconciler` service account and cannot mutate other namespaces or
-  cluster-scoped resources.
-- `kubernetes/homelab` is the active Flux path. Workload replicas are held at
-  zero during data migration and are changed to one only after the copy.
+  had about 76 GiB free after migration and image pulls. VM RAM is 13 GiB.
+- Flux reconciles `kubernetes/homelab` from public `main` every minute with
+  health waiting enabled. The `homelab-reconciler` service account cannot
+  mutate other namespaces or cluster-scoped resources.
+- AdGuard, Vaultwarden, Hermes, Open WebUI, SearXNG, and OpenClaw run with one
+  replica in namespace `homelab`. Their five application PVs have live reclaim
+  policy `Retain` and their PVCs are excluded from Flux pruning.
 - Shared Traefik configuration is tracked under
   `kubernetes/bootstrap/traefik` and applied separately because it lives in
-  `kube-system`. DuckDNS ACME state is persistent.
-- At cutover, `192.168.50.100` moves from VM 100 to VM 200 using
-  `ops/systemd/homelab-vip.service`. DuckDNS and existing LAN DNS clients can
-  therefore keep the same address. Never start VM 100 while that VIP is active
-  on VM 200.
+  `kube-system`. DuckDNS ACME state is persistent. The active Let's Encrypt
+  apex/wildcard certificate was verified with a valid trust chain and expires
+  2026-10-22.
+- `ops/systemd/homelab-vip.service` installs `.100` before k3s starts;
+  `ops/k3s/config.yaml` advertises it as the node external IP so ServiceLB
+  preserves LAN source addresses. Never start VM 100 while the VIP is active.
+- Because ServiceLB owns host port 53, `/etc/resolv.conf` on `naiaclaw` points
+  to `/run/systemd/resolve/resolv.conf` instead of the intercepted local stub.
+  `ops/sysctl/99-homelab.conf` raises inotify capacity for cluster workloads.
 - Backups are not currently operational. The old restic profile contains a
   placeholder repository and has never run. The new CronJobs remain suspended
   until a real B2 repository, scoped credentials, off-cluster password recovery
@@ -101,17 +111,16 @@ Primary spec sources:
 
 `qm list`/`qm config` on 2026-07-24:
 
-- VM `100` named `docker`: running during migration, 6144 MB RAM, 150 GB
-  boot disk, 4 vCPUs, onboot enabled until final cutover.
-- VM `200` named `naiaclaw`: running, 10240 MB RAM, 160 GB boot disk, 4
+- VM `100` named `docker`: stopped, 6144 MB RAM, 150 GB boot disk, 4 vCPUs,
+  `onboot=0`.
+- VM `200` named `naiaclaw`: running, 13312 MB RAM, 160 GB boot disk, 4
   vCPUs, onboot enabled.
 - VM `9000`: stopped template/VM, 2048 MB RAM, 3 GB disk.
 
-The active allocations still exceed comfortable headroom on a host with about
-16 GB physical RAM. Stopping VM 100 is part of the final cutover, but it must
-not happen before the `.100` VIP and registry/TLS routes are verified.
+After cutover the Proxmox host reported about 1.6 GiB available and 640 MiB swap
+used. VM 200 reported no Kubernetes memory or disk pressure.
 
-## Docker VM
+## Docker VM (rollback only)
 
 - Hostname: `docker`.
 - OS: Debian 12 (`bookworm`), kernel `6.1.0-47-cloud-amd64`.
@@ -123,7 +132,7 @@ not happen before the `.100` VIP and registry/TLS routes are verified.
 - Compose config file: `/home/debian/homelab/docker-compose.yml`.
 - Docker network `proxy`: external compose network, subnet `172.19.0.0/16`.
 
-Live containers observed on 2026-07-24:
+Preserved containers inventoried before shutdown:
 
 - `traefik`: `traefik:v3`, ports 80/443, routes dashboard through Traefik labels.
 - `adguard`: `adguard/adguardhome`, DNS on 53 TCP/UDP, setup/admin port 3000.
@@ -133,24 +142,25 @@ Live containers observed on 2026-07-24:
 - `searxng`: `searxng/searxng:latest`.
 - `openclaw`: `ghcr.io/openclaw/openclaw:latest`, port 18789, container name `openclaw`.
 
-The live checkout is clean at commit `e16ee23` on `main`. The seven containers
-had been running for about two weeks with zero restarts when inventoried. Their
-persistent data totals about 3.8 GiB under `/home/debian/data`.
+The checkout is clean at commit `e16ee23` on `main`. Six application containers
+were stopped cleanly before copying; the VM was then shut down with Traefik.
+Persistent data is frozen at the cutover point under `/home/debian/data` and
+totals about 3.8 GiB.
 
 ## k3s VM
 
 - Hostname: `naiaclaw`.
-- OS: Ubuntu 24.04.4 LTS, kernel `6.8.0-124-generic`.
-- Proxmox config: 4 vCPUs, 10240 MB RAM, 160 GB disk, IP
+- OS: Ubuntu 24.04.4 LTS, kernel `6.8.0-136-generic`.
+- Proxmox config: 4 vCPUs, 13312 MB RAM, 160 GB disk, IP
   `192.168.50.200/24`, gateway `192.168.50.1`.
 - k3s: `v1.35.5+k3s1`.
 - Kubernetes node: single node `naiaclaw`, role `control-plane`, container runtime `containerd://2.2.3-k3s1`.
 - `kubectl` needs sudo for `/etc/rancher/k3s/k3s.yaml` on this VM.
-- After disk expansion, root is about 154 GiB total with about 93 GiB
-  available.
-- After Husk removal, `kubectl top node` observed about 7726 MiB memory usage
-  (77%) with no swap. This is still tight enough that app resource use must be
-  watched during cutover.
+- Node addresses are internal `192.168.50.200` and external/VIP
+  `192.168.50.100`.
+- Root is about 154 GiB total with about 76 GiB available after migration.
+- Final `kubectl top node` observed about 10190 MiB (78%). `free` reported about
+  5 GiB available, no swap, and Kubernetes reported no memory pressure.
 
 Namespaces/workloads observed include:
 
@@ -168,7 +178,8 @@ disk, and do not place media on the root-backed storage class.
 
 - `docker-compose.yml`: Docker VM compose stack for Traefik, AdGuard, Vaultwarden, Hermes, Open WebUI, SearXNG, and OpenClaw.
 - `config/traefik/traefik.yml`: static Traefik config with DuckDNS DNS challenge and wildcard certs for `erikfrankling.duckdns.org`.
-- `config/traefik/dynamic.yml`: dynamic Traefik config. This file currently has unstaged local/live changes.
+- `config/traefik/dynamic.yml`: clean legacy dynamic config preserved by commit
+  `e16ee23`.
 - `config/searxng/settings.yml`: SearXNG config mounted into the container.
 - `resticprofile.yaml`: Restic backup profiles for Docker data and Vaultwarden, using Backblaze B2-style S3 config placeholders.
 - `hermes/`: local Hermes container build and entrypoint.
@@ -176,9 +187,9 @@ disk, and do not place media on the root-backed storage class.
   shared Traefik ACME configuration.
 - `kubernetes/homelab/`: active namespace-scoped application, ingress, storage,
   encrypted-secret, and suspended-backup manifests.
-- `kubernetes/optional/media/`: inactive Mullvad/qBittorrent/*arr/Jellyfin
+- `kubernetes/optional/media/`: inactive Mullvad/qBittorrent/Servarr/Jellyfin
   design.
-- `ops/`: cutover-only migration helper and `.100` VIP systemd unit.
+- `ops/`: migration helper plus tracked VIP, k3s, and sysctl host configuration.
 
 ## Useful Commands
 
@@ -186,7 +197,8 @@ disk, and do not place media on the root-backed storage class.
 ssh proxmox 'free -h; qm list; pvesm status'
 ssh proxmox 'dmidecode -t system -t baseboard -t memory'
 ssh proxmox 'qm config 100; qm config 200'
-ssh docker 'cd /home/debian/homelab && git status --short --branch && docker ps'
-ssh naiaclaw 'free -h; df -h'
-ssh naiaclaw 'sudo kubectl get nodes -o wide; sudo kubectl top nodes; sudo kubectl get pods -A'
+ssh naiaclaw 'systemctl status homelab-vip; ip -brief address show eth0'
+ssh naiaclaw 'free -h; df -h /; sudo kubectl top nodes'
+ssh naiaclaw 'sudo kubectl -n homelab get kustomization,pods,pvc'
+ssh naiaclaw 'sudo kubectl get nodes -o wide; sudo kubectl get pods -A'
 ```

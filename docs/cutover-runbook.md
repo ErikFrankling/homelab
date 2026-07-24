@@ -1,5 +1,8 @@
 # Docker-to-k3s cutover runbook
 
+Cutover completed on 2026-07-24. This remains the audit trail and rollback
+procedure.
+
 ## Invariants
 
 - Do not stop VM 100 before the registry route works through cluster Traefik.
@@ -25,7 +28,8 @@
 
 ## Copy and switch
 
-1. Stop the seven Compose containers cleanly. Do not delete them or their data.
+1. Stop the six application containers cleanly; keep old Traefik running until
+   `.200` validation finishes. Do not delete containers or data.
 2. Stream each data directory into the matching migration-helper mount,
    preserving numeric owners:
    - AdGuard `data/adguard/*` to `/mnt/adguard`
@@ -42,12 +46,14 @@
 6. Test all applications against `.200` using `curl --resolve`, including
    registry `/v2/`, wildcard SAN/issuer/expiry, data presence, and authentication
    state.
-7. Shut down VM 100 in Proxmox.
-8. Install and start `ops/systemd/homelab-vip.service` on VM 200.
-9. Re-test using normal DuckDNS resolution to `.100`.
-10. Set VM 100 `onboot=0`. Keep its disk and `onboot=1` for VM 200.
-11. Restart one noncritical private-registry workload and prove it can pull
-    through the new registry route.
+7. Install `ops/k3s/config.yaml`, the sysctl file, and the disabled VIP unit.
+8. Shut down VM 100, set `onboot=0`, then enable the VIP unit on VM 200.
+9. Increase VM 200 to 13 GiB, reboot it, and verify that `.100` is the node
+   external IP and all LoadBalancer Services advertise it.
+10. Re-test using normal DuckDNS resolution to `.100`.
+11. Pull a known private-registry digest through the normal registry hostname.
+12. Patch the five dynamically provisioned application PVs to reclaim policy
+    `Retain`.
 
 ## Verification matrix
 
@@ -61,7 +67,7 @@
 | `naiaclaw-api.*` | 200, LAN only |
 | `planet9-test.*` | 200, LAN only |
 | `registry.*` | `/v2/` reachable, LAN only |
-| `p9eval.*` | Known pre-migration failure until its workload returns |
+| `p9eval.*` | Pre-existing 502; still 502 after migration |
 
 Also verify DNS 53 over TCP and UDP, direct OpenClaw port 18789, pod
 readiness/restarts, node memory, root disk, Flux readiness, and Traefik ACME
@@ -69,9 +75,9 @@ logs.
 
 ## Rollback
 
-1. Scale homelab Deployments to zero.
+1. Suspend the Flux Kustomization, then scale homelab Deployments to zero.
 2. Stop and disable `homelab-vip.service`; verify `.100` is absent from VM 200.
-3. Start VM 100 and its Compose project.
+3. Start VM 100 and run its Compose project.
 4. Verify `.100`, wildcard TLS, registry, DNS, and application routes.
 5. Do not copy Kubernetes data back without a deliberate conflict-free restore
    plan; choose one environment as authoritative.
