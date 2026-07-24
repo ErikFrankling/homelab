@@ -32,6 +32,18 @@ metadata:
   namespace: homelab
 rules:
   - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
       - traefik.io
     resources:
       - ingressroutes
