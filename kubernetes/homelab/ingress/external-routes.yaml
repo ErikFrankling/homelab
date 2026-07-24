@@ -34,3 +34,24 @@ spec:
       services:
         - name: external-p9-registry
           port: 80
+---
+# opencode web/agent server runs on the GPU/PC box (192.168.50.232:4096),
+# outside the cluster. Routed here so it is reachable at its own HTTPS origin
+# (opencode.erikfrankling.duckdns.org) with the wildcard cert -- same-origin
+# access avoids opencode's cross-origin browser pairing prompt. lan-only keeps
+# it to the LAN and the 10.8.0.0/24 VPN; the server itself is unsecured.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: opencode
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`opencode.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-opencode-pc
+          port: 80

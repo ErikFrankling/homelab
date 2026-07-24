@@ -109,3 +109,31 @@ ports:
   - name: http
     port: 30500
     protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-opencode-pc
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: external-opencode-pc
+  labels:
+    kubernetes.io/service-name: external-opencode-pc
+addressType: IPv4
+endpoints:
+  - addresses:
+      - 192.168.50.232
+    conditions:
+      ready: true
+ports:
+  - name: http
+    port: 4096
+    protocol: TCP

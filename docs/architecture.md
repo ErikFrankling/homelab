@@ -59,6 +59,13 @@ EndpointSlices targeting the node's existing NodePorts. `p9eval` was already
 unavailable on port 30080 before migration; it remains represented so the
 pre-existing failure is explicit.
 
+`opencode.*` is an external route to the opencode web/agent server on the
+GPU/PC box (`192.168.50.232:4096`), also modelled as a selectorless Service plus
+EndpointSlice. It carries `lan-only`, so it is reachable only from the LAN and
+the `10.8.0.0/24` VPN. Serving it at its own HTTPS origin lets the browser treat
+opencode as same-origin and skips opencode's cross-origin pairing handshake; the
+opencode server itself runs without a password.
+
 Images are pinned to the exact digests observed on the Docker host. Hermes is
 also pinned to upstream commit
 `43bca6d107c86efc7e60a4a35ca8a55e1b4b4c1e` and built by GitHub Actions.
