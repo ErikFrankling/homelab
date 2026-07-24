@@ -34,4 +34,3 @@ spec:
       services:
         - name: external-p9-registry
           port: 80
-  tls: {}

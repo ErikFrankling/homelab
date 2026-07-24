@@ -37,4 +37,3 @@ spec:
       services:
         - name: openclaw
           port: 18789
-  tls: {}
