@@ -1,0 +1,44 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: media
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`qbittorrent.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: qbittorrent
+          port: 8080
+    - kind: Rule
+      match: Host(`sonarr.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: sonarr
+          port: 8989
+    - kind: Rule
+      match: Host(`radarr.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: radarr
+          port: 7878
+    - kind: Rule
+      match: Host(`prowlarr.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: prowlarr
+          port: 9696
+    - kind: Rule
+      match: Host(`jellyfin.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: jellyfin
+          port: 8096
+  tls: {}

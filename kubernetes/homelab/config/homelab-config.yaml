@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homelab-config
+data:
+  DOMAIN: erikfrankling.duckdns.org
+  TZ: Europe/Stockholm

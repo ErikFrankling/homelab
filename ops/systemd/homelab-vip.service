@@ -1,0 +1,14 @@
+[Unit]
+Description=Legacy homelab service IP on the k3s node
+Documentation=https://github.com/ErikFrankling/homelab
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip address replace 192.168.50.100/24 dev eth0
+ExecStop=-/usr/sbin/ip address delete 192.168.50.100/24 dev eth0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

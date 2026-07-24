@@ -16,6 +16,7 @@ http:
         - lan-only
       service: naiaclaw-api
       tls: {}
+
     p9-eval-a:
       rule: "Host(`p9eval.erikfrankling.duckdns.org`)"
       entryPoints:
@@ -58,6 +59,7 @@ http:
       loadBalancer:
         servers:
           - url: "http://192.168.50.200:30500"
+
     naiaclaw-api:
       loadBalancer:
         servers:

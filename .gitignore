@@ -1,0 +1,14 @@
+# Never commit local credentials or rendered secret material.
+.secrets/
+*.agekey
+*.decrypted.*
+*.secret.yaml
+!*.enc.yaml
+acme.json
+kubeconfig
+kubeconfig.*
+
+# Local tooling output.
+.kubeconform/
+rendered/
+tmp/

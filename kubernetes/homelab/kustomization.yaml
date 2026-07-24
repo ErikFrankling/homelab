@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: homelab
+resources:
+  - config/homelab-config.yaml
+  - ingress/middleware.yaml
+  - ingress/routes.yaml
+  - ingress/external-services.yaml
+  - ingress/external-routes.yaml
+  - apps/adguard.yaml
+  - apps/vaultwarden.yaml
+  - apps/hermes.yaml
+  - apps/openwebui.yaml
+  - apps/searxng.yaml
+  - apps/openclaw.yaml
+  - secrets/openclaw.enc.yaml
+  - secrets/searxng.enc.yaml
+  - backup/backup.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: homelab

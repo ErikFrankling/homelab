@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: homelab
+  labels:
+    app.kubernetes.io/part-of: homelab
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homelab-reconciler
+  namespace: homelab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: homelab-reconciler-admin
+  namespace: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: homelab-reconciler
+    namespace: homelab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: homelab-traefik-editor
+  namespace: homelab
+rules:
+  - apiGroups:
+      - traefik.io
+    resources:
+      - ingressroutes
+      - middlewares
+      - serverstransports
+      - traefikservices
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: homelab-reconciler-traefik
+  namespace: homelab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: homelab-traefik-editor
+subjects:
+  - kind: ServiceAccount
+    name: homelab-reconciler
+    namespace: homelab

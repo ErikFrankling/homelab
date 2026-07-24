@@ -1,0 +1,263 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homelab-backup-scripts
+data:
+  backup.sh: |
+    set -eu
+
+    if ! restic snapshots >/dev/null 2>&1; then
+      restic init
+    fi
+
+    restic backup \
+      --tag homelab \
+      --exclude=/data/openwebui/cache \
+      --exclude=/data/openwebui/webui.db \
+      --exclude=/data/openwebui/webui.db-shm \
+      --exclude=/data/openwebui/webui.db-wal \
+      --exclude=/data/vaultwarden/db.sqlite3 \
+      --exclude=/data/vaultwarden/db.sqlite3-shm \
+      --exclude=/data/vaultwarden/db.sqlite3-wal \
+      /data/adguard \
+      /data/hermes \
+      /data/openclaw \
+      /data/openwebui \
+      /data/vaultwarden \
+      /snapshots
+
+    restic forget \
+      --tag homelab \
+      --keep-daily 7 \
+      --keep-weekly 4 \
+      --keep-monthly 6 \
+      --keep-yearly 1 \
+      --prune
+
+  snapshot.py: |
+    import os
+    import sqlite3
+
+    snapshots = (
+        ("/sources/vaultwarden/db.sqlite3", "/snapshots/vaultwarden/db.sqlite3"),
+        ("/sources/openwebui/webui.db", "/snapshots/openwebui/webui.db"),
+    )
+
+    for source, target in snapshots:
+        if not os.path.exists(source):
+            continue
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as src:
+            with sqlite3.connect(target) as dst:
+                src.backup(dst)
+                result = dst.execute("PRAGMA integrity_check").fetchone()[0]
+                if result != "ok":
+                    raise RuntimeError(f"{source}: integrity_check returned {result!r}")
+
+  verify.py: |
+    import glob
+    import os
+    import sqlite3
+
+    databases = glob.glob("/restore/snapshots/**/*.db", recursive=True)
+    if not databases:
+        raise RuntimeError("restore contains no SQLite snapshots")
+
+    for database in databases:
+        with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
+            result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if result != "ok":
+                raise RuntimeError(f"{database}: integrity_check returned {result!r}")
+
+    required = (
+        "/restore/data/adguard",
+        "/restore/data/hermes",
+        "/restore/data/openclaw",
+        "/restore/data/openwebui",
+        "/restore/data/vaultwarden",
+    )
+    missing = [path for path in required if not os.path.isdir(path)]
+    if missing:
+        raise RuntimeError(f"restore is missing required paths: {missing}")
+
+    print(f"verified {len(databases)} SQLite snapshots and required data roots")
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: homelab-backup
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  schedule: "17 */6 * * *"
+  successfulJobsHistoryLimit: 3
+  suspend: true
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        spec:
+          automountServiceAccountToken: false
+          initContainers:
+            - name: sqlite-snapshots
+              image: python:3.13-alpine
+              command:
+                - python
+                - /scripts/snapshot.py
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+              volumeMounts:
+                - mountPath: /scripts
+                  name: scripts
+                  readOnly: true
+                - mountPath: /snapshots
+                  name: snapshots
+                - mountPath: /sources/openwebui
+                  name: openwebui
+                  readOnly: true
+                - mountPath: /sources/vaultwarden
+                  name: vaultwarden
+                  readOnly: true
+          containers:
+            - name: restic
+              image: restic/restic:0.18.1
+              command:
+                - /bin/sh
+                - /scripts/backup.sh
+              envFrom:
+                - secretRef:
+                    name: backup-repository
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 1Gi
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+              volumeMounts:
+                - mountPath: /scripts
+                  name: scripts
+                  readOnly: true
+                - mountPath: /snapshots
+                  name: snapshots
+                  readOnly: true
+                - mountPath: /data/adguard
+                  name: adguard
+                  readOnly: true
+                - mountPath: /data/hermes
+                  name: hermes
+                  readOnly: true
+                - mountPath: /data/openclaw
+                  name: openclaw
+                  readOnly: true
+                - mountPath: /data/openwebui
+                  name: openwebui
+                  readOnly: true
+                - mountPath: /data/vaultwarden
+                  name: vaultwarden
+                  readOnly: true
+          restartPolicy: Never
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap:
+                defaultMode: 365
+                name: homelab-backup-scripts
+            - name: snapshots
+              emptyDir: {}
+            - name: adguard
+              persistentVolumeClaim:
+                claimName: adguard-data
+            - name: hermes
+              persistentVolumeClaim:
+                claimName: hermes-data
+            - name: openclaw
+              persistentVolumeClaim:
+                claimName: openclaw-data
+            - name: openwebui
+              persistentVolumeClaim:
+                claimName: openwebui-data
+            - name: vaultwarden
+              persistentVolumeClaim:
+                claimName: vaultwarden-data
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: homelab-restore-verify
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  schedule: "43 5 * * 0"
+  successfulJobsHistoryLimit: 3
+  suspend: true
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        spec:
+          automountServiceAccountToken: false
+          initContainers:
+            - name: restore
+              image: restic/restic:0.18.1
+              args:
+                - restore
+                - latest
+                - --tag
+                - homelab
+                - --target
+                - /restore
+              envFrom:
+                - secretRef:
+                    name: backup-repository
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 1Gi
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+              volumeMounts:
+                - mountPath: /restore
+                  name: restore
+          containers:
+            - name: verify
+              image: python:3.13-alpine
+              command:
+                - python
+                - /scripts/verify.py
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+              volumeMounts:
+                - mountPath: /restore
+                  name: restore
+                  readOnly: true
+                - mountPath: /scripts
+                  name: scripts
+                  readOnly: true
+          restartPolicy: Never
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: restore
+              emptyDir:
+                sizeLimit: 20Gi
+            - name: scripts
+              configMap:
+                defaultMode: 365
+                name: homelab-backup-scripts

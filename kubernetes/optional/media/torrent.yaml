@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qbittorrent
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qbittorrent
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qbittorrent
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: gluetun
+          image: qmcgaw/gluetun:v3.40.2@sha256:1a7b76c83640c45d75ffff8899a01df6c0baf9ad6c53999dc4fbedcd217d3c84
+          restartPolicy: Always
+          env:
+            - name: FIREWALL_INPUT_PORTS
+              value: "8080"
+            - name: VPN_SERVICE_PROVIDER
+              value: custom
+            - name: VPN_TYPE
+              value: wireguard
+          envFrom:
+            - secretRef:
+                name: media-vpn
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 25m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+                - NET_ADMIN
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            exec:
+              command:
+                - /gluetun-entrypoint
+                - healthcheck
+            failureThreshold: 30
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: /dev/net/tun
+              name: tun
+        - name: initialize-media-folders
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - >-
+              mkdir -p
+              /data/torrents/.incomplete
+              /data/torrents/tv
+              /data/torrents/movies
+              /data/media/tv
+              /data/media/movies
+              && chown 1000:1000
+              /data/torrents
+              /data/torrents/.incomplete
+              /data/torrents/tv
+              /data/torrents/movies
+              /data/media
+              /data/media/tv
+              /data/media/movies
+          resources:
+            limits:
+              cpu: 250m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /data
+              name: media
+      containers:
+        - name: qbittorrent
+          image: lscr.io/linuxserver/qbittorrent:latest@sha256:b024436f8ca665d16d9a997d26fd27fdf867ee5566ba09f32764e7b2976d3e02
+          env:
+            - name: PGID
+              value: "1000"
+            - name: PUID
+              value: "1000"
+            - name: TZ
+              value: Europe/Stockholm
+            - name: UMASK
+              value: "002"
+            - name: WEBUI_PORT
+              value: "8080"
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 12
+            periodSeconds: 10
+            tcpSocket:
+              port: http
+          resources:
+            limits:
+              cpu: "2"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /config
+              name: config
+            - mountPath: /data/torrents
+              name: media
+              subPath: torrents
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: qbittorrent-config
+        - name: media
+          persistentVolumeClaim:
+            claimName: media-data
+        - hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+          name: tun
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qbittorrent
+spec:
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: qbittorrent
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qbittorrent-vpn-killswitch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: qbittorrent
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    - to:
+        - ipBlock:
+            # Fail-closed placeholder. Replace with the selected Mullvad peer.
+            cidr: 203.0.113.1/32
+      ports:
+        - port: 51820
+          protocol: UDP
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: homelab
+      ports:
+        - port: 8080
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 8080
+          protocol: TCP

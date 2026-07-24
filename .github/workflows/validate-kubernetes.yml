@@ -1,0 +1,50 @@
+name: Validate Kubernetes
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.35.0
+
+      - name: Render active homelab manifests
+        run: kubectl kustomize kubernetes/homelab > /tmp/homelab.yaml
+
+      - name: Render optional media manifests
+        run: kubectl kustomize kubernetes/optional/media > /tmp/media.yaml
+
+      - name: Validate built-in Kubernetes schemas
+        run: |
+          docker run --rm \
+            -v /tmp:/manifests:ro \
+            ghcr.io/yannh/kubeconform:v0.7.0 \
+            -strict -summary -ignore-missing-schemas -skip Secret \
+            /manifests/homelab.yaml /manifests/media.yaml
+
+      - name: Verify SOPS files are encrypted
+        run: |
+          for file in $(find kubernetes -type f -name '*.enc.yaml'); do
+            grep -q '^sops:' "$file"
+            grep -q 'ENC\\[AES256_GCM' "$file"
+          done
+
+      - name: Reject plaintext Kubernetes Secrets
+        run: |
+          if find kubernetes -type f -name '*.yaml' ! -name '*.enc.yaml' -print0 \
+            | xargs -0 grep -lE '^kind:[[:space:]]+Secret$' \
+            | grep .; then
+            echo "Plaintext Kubernetes Secret found outside an encrypted .enc.yaml file."
+            exit 1
+          fi

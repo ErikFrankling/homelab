@@ -1,0 +1,48 @@
+name: Build Hermes image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - hermes/**
+      - .github/workflows/hermes-image.yml
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/erikfrankling/homelab-hermes
+  HERMES_COMMIT: 43bca6d107c86efc7e60a4a35ca8a55e1b4b4c1e
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: hermes
+          push: true
+          build-args: |
+            HERMES_COMMIT=${{ env.HERMES_COMMIT }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:hermes-43bca6d
+            ${{ env.IMAGE_NAME }}:git-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.HERMES_COMMIT }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

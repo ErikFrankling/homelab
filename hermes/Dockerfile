@@ -1,11 +1,15 @@
 FROM debian:bookworm
 
+ARG HERMES_COMMIT=43bca6d107c86efc7e60a4a35ca8a55e1b4b4c1e
+
 RUN apt-get update && apt-get install -y \
     git nodejs npm python3 python3-pip \
     ripgrep ffmpeg gcc python3-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --recurse-submodules https://github.com/NousResearch/hermes-agent.git /opt/hermes
+RUN git clone https://github.com/NousResearch/hermes-agent.git /opt/hermes \
+    && git -C /opt/hermes checkout "$HERMES_COMMIT" \
+    && git -C /opt/hermes submodule update --init --recursive
 
 WORKDIR /opt/hermes
 RUN pip install -e ".[all]" --break-system-packages

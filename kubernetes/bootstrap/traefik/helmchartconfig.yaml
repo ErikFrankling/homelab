@@ -1,0 +1,76 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    additionalArguments:
+      - "--log.level=WARN"
+    certificatesResolvers:
+      letsencrypt:
+        acme:
+          dnsChallenge:
+            provider: duckdns
+            propagation:
+              delayBeforeChecks: 120
+              disableChecks: true
+            resolvers:
+              - "1.1.1.1:53"
+              - "8.8.8.8:53"
+          email: erik.frankling@frankling.se
+          storage: /data/acme.json
+    deployment:
+      initContainers:
+        - name: volume-permissions
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - touch /data/acme.json && chown 65532:65532 /data/acme.json && chmod 600 /data/acme.json
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /data
+              name: data
+    env:
+      - name: DUCKDNS_TOKEN
+        valueFrom:
+          secretKeyRef:
+            key: DUCKDNS_TOKEN
+            name: duckdns-acme
+    persistence:
+      accessMode: ReadWriteOnce
+      annotations:
+        helm.sh/resource-policy: keep
+      enabled: true
+      size: 128Mi
+      storageClass: local-path
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              permanent: true
+              scheme: https
+              to: websecure
+      websecure:
+        http:
+          tls:
+            certResolver: letsencrypt
+            domains:
+              - main: erikfrankling.duckdns.org
+                sans:
+                  - "*.erikfrankling.duckdns.org"
+            enabled: true
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    service:
+      spec:
+        externalTrafficPolicy: Local

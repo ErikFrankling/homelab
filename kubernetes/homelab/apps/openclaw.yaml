@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openclaw-data
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw
+spec:
+  replicas: 0
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openclaw
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openclaw
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: openclaw
+          image: ghcr.io/openclaw/openclaw:2026.5.28@sha256:dbad4655fb87aa8d8662323daf9f46f4721504324e22c9f99d84849e609f5b2c
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OPENCLAW_DISABLE_BONJOUR
+              value: "1"
+            - name: SEARXNG_BASE_URL
+              value: http://searxng:8080
+          envFrom:
+            - secretRef:
+                name: openclaw-env
+          ports:
+            - containerPort: 18789
+              name: http
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "2"
+              memory: 1536Mi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            failureThreshold: 60
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 10
+          volumeMounts:
+            - mountPath: /home/node/.openclaw
+              name: data
+      hostAliases:
+        - hostnames:
+            - host.docker.internal
+          ip: 192.168.50.200
+        - hostnames:
+            - gpu
+          ip: 192.168.50.232
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: openclaw-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw
+spec:
+  externalTrafficPolicy: Local
+  ports:
+    - name: http
+      port: 18789
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: openclaw
+  type: LoadBalancer

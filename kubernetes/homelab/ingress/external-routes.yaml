@@ -1,0 +1,37 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: cluster-experiments
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`naiaclaw-api.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-naiaclaw-api
+          port: 80
+    - kind: Rule
+      match: Host(`p9eval.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-p9-eval
+          port: 80
+    - kind: Rule
+      match: Host(`planet9-test.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-p9-mcp-test
+          port: 80
+    - kind: Rule
+      match: Host(`registry.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-p9-registry
+          port: 80
+  tls: {}

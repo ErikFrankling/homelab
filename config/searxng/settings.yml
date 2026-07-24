@@ -6,7 +6,9 @@ search:
     - json
 
 server:
-  secret_key: "08cb479685035da715b4488cde7b7865f837815d90b40c8ad477444c3c7aa7cd"
+  # The live Kubernetes settings file is SOPS-encrypted. This public,
+  # legacy-Compose copy deliberately contains no usable secret.
+  secret_key: "REPLACE_WITH_A_SECRET_OUTSIDE_GIT"
   limiter: false
   bind_address: "0.0.0.0"
   port: 8080
