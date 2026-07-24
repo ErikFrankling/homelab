@@ -32,7 +32,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: hermes
-          image: ghcr.io/erikfrankling/homelab-hermes:hermes-43bca6d
+          image: ghcr.io/erikfrankling/homelab-hermes:hermes-43bca6d@sha256:773c53b65413dc8063db40c95e3b28337e8cb4fa4713a8691599cf318bf08a5d
           imagePullPolicy: IfNotPresent
           args:
             - hermes
