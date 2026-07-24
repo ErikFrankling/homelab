@@ -30,7 +30,7 @@ spec:
     - kind: Rule
       match: Host(`registry.erikfrankling.duckdns.org`)
       middlewares:
-        - name: lan-only
+        - name: lan-and-cluster
       services:
         - name: external-p9-registry
           port: 80
