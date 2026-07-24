@@ -73,8 +73,12 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           volumeMounts:
-            - mountPath: /opt/adguardhome
+            - mountPath: /opt/adguardhome/conf
               name: data
+              subPath: conf
+            - mountPath: /opt/adguardhome/work
+              name: data
+              subPath: work
       terminationGracePeriodSeconds: 30
       volumes:
         - name: data
