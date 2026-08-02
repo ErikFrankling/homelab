@@ -37,3 +37,13 @@ spec:
       services:
         - name: openclaw
           port: 18789
+    # This endpoint receives screenshots of whatever is on screen. lan-only is
+    # load-bearing here, not defence in depth -- it must never be reachable
+    # from the internet.
+    - kind: Rule
+      match: Host(`time.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: time
+          port: 80

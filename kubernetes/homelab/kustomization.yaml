@@ -13,6 +13,7 @@ resources:
   - apps/openwebui.yaml
   - apps/searxng.yaml
   - apps/openclaw.yaml
+  - apps/time.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
   - backup/backup.yaml
