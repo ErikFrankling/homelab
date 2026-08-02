@@ -2,3 +2,11 @@
 # this IP then follows the source-preserving LoadBalancer path instead of the
 # host-port NAT path.
 node-external-ip: 192.168.50.100
+
+# advertise-address defaults to node-external-ip, which put the VIP in the
+# kubernetes Service endpoint. Pods reaching the apiserver through 10.43.0.1
+# were then DNATed to the VIP and hairpinned back into the node, which fails --
+# it took out every pod that talks to the API (Flux, Kyverno) while leaving
+# everything that does not looking healthy. Pin this to the node IP so in-cluster
+# API traffic stays off the VIP; ServiceLB keeps using node-external-ip.
+advertise-address: 192.168.50.200
