@@ -19,6 +19,18 @@ Apply in this order:
    is intentionally outside the namespace-scoped Flux boundary.
 4. Wait for Traefik to roll out and for its `data` PVC to bind.
 5. `kubectl apply -f flux.yaml`
+6. GPU only: install `nvidia-container-toolkit` on the node and restart k3s,
+   then apply the device plugin and label the node. The label is required — the
+   chart's default `nodeAffinity` expects Node Feature Discovery, which this
+   cluster does not run, so without it the DaemonSet stays at `DESIRED 0`.
+
+   ```bash
+   kubectl apply -f nvidia-device-plugin/helmchart.yaml
+   kubectl label node naiaclaw nvidia.com/gpu.present=true
+   ```
+
+   Never taint the node: it is the only node. See
+   [docs/gpu-passthrough.md](../../docs/gpu-passthrough.md).
 
 The Flux Kustomization initially uses `wait: false` so local-path PVCs can
 exist before the migration helper binds them. Set it to `true` in the final

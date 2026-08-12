@@ -1,0 +1,30 @@
+# NVIDIA device plugin for the passed-through GTX 1060 on VM 200.
+#
+# Cluster infrastructure, deliberately outside the namespace-scoped Flux
+# boundary, installed through the k3s Helm controller like Traefik.
+#
+# No node taint and no node label. naiaclaw is a single-node cluster, so an
+# nvidia.com/gpu:NoSchedule taint would make every unrelated workload
+# unschedulable. See docs/gpu-passthrough.md.
+#
+# Requires nvidia-container-toolkit installed on the node and k3s restarted
+# afterwards, otherwise containerd has no "nvidia" runtime handler and the
+# plugin will CrashLoopBackOff.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nvidia-device-plugin
+  namespace: kube-system
+spec:
+  repo: https://nvidia.github.io/k8s-device-plugin
+  chart: nvidia-device-plugin
+  version: 0.19.3
+  targetNamespace: nvidia-device-plugin
+  createNamespace: true
+  valuesContent: |-
+    runtimeClassName: nvidia
+    resources:
+      requests:
+        memory: 32Mi
+      limits:
+        memory: 128Mi

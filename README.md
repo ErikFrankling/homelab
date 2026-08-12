@@ -6,14 +6,20 @@ deployment and preserves the old Compose deployment as rollback documentation.
 
 Live state and operating rules are recorded in [AGENTS.md](AGENTS.md). See
 [docs/architecture.md](docs/architecture.md) for the design,
-[docs/cutover-runbook.md](docs/cutover-runbook.md) for cutover/rollback, and
-[docs/backups.md](docs/backups.md) for the backup activation gates.
+[docs/cutover-runbook.md](docs/cutover-runbook.md) for cutover/rollback,
+[docs/backups.md](docs/backups.md) for the backup activation gates,
+[docs/gpu-passthrough.md](docs/gpu-passthrough.md) for the GPU passed through to
+VM 200 for text-to-speech, and [docs/tailscale.md](docs/tailscale.md) for
+remote access via the Tailscale subnet router on the Proxmox host.
 
 ## Current state
 
 - Proxmox VM 100 (`docker`) is stopped with `onboot=0`; its 150 GiB disk and
   stopped containers remain the rollback source.
-- VM 200 (`naiaclaw`) runs k3s with 13 GiB RAM and a 160 GiB disk.
+- VM 200 (`naiaclaw`) runs k3s with 12 GiB RAM and a 160 GiB disk. The host's
+  GTX 1060 is passed through for TTS; RAM dropped from 13 GiB to 12 GiB because
+  passthrough pins the whole guest allocation. See
+  [docs/gpu-passthrough.md](docs/gpu-passthrough.md).
 - `192.168.50.100` is a persistent VIP on VM 200, so DuckDNS names and LAN DNS
   clients did not change.
 - All six migrated workloads run in namespace `homelab`; Flux reconciles public

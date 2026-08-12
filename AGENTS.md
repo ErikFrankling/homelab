@@ -35,7 +35,11 @@ The Docker-to-k3s migration completed on 2026-07-24:
   A verified logical PostgreSQL dump is retained privately under
   `/home/ubuntu/retired-husk` on `naiaclaw`.
 - VM 200's disk was expanded online from 80 GiB to 160 GiB. The root filesystem
-  had about 76 GiB free after migration and image pulls. VM RAM is 13 GiB.
+  had about 76 GiB free after migration and image pulls. VM RAM is 12 GiB,
+  reduced from 13 GiB on 2026-08-06 when the GTX 1060 was passed through: PCI
+  passthrough locks and prefaults the whole guest allocation, so 13 GiB no
+  longer fits alongside Proxmox on a 15.6 GiB host. Filling the two empty DIMM
+  slots is the way to get it back. See `docs/gpu-passthrough.md`.
 - Flux reconciles `kubernetes/homelab` from public `main` every minute with
   health waiting enabled. The `homelab-reconciler` service account cannot
   mutate other namespaces or cluster-scoped resources.
@@ -74,7 +78,10 @@ The Docker-to-k3s migration completed on 2026-07-24:
 - Motherboard/baseboard reported by DMI: Gigabyte `Z270P-D3-CF`, version `x.x`.
 - BIOS: American Megatrends `F7`, release date `2017-11-08`.
 - CPU: Intel Core i7-6700K, 4 cores / 8 threads, base 4.00 GHz, turbo up to 4.20 GHz, VT-x available.
-- GPU: NVIDIA GeForce GTX 1060 3GB (`GP106`, PCI id `10de:1c02`).
+- GPU: NVIDIA GeForce GTX 1060 3GB (`GP106`, PCI id `10de:1c02`). Bound to
+  `vfio-pci` on the host and passed through to VM 200 for text-to-speech since
+  2026-08-06. It is the host's only display adapter, so the host has no console
+  after early boot. See `docs/gpu-passthrough.md`.
 - NIC: Realtek RTL8111/8168/8211/8411 gigabit Ethernet.
 - Primary disk: Crucial/Micron `CT1000E100SSD8` 1 TB NVMe, LVM-backed Proxmox storage.
 - Storage pools:

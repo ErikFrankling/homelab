@@ -6,7 +6,7 @@
 |---|---|---|
 | Proxmox | `192.168.50.169` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
-| k3s VM (`naiaclaw`) | `192.168.50.200` | Single Kubernetes node, 13 GiB RAM |
+| k3s VM (`naiaclaw`) | `192.168.50.200` | Single Kubernetes node, 12 GiB RAM, GTX 1060 passed through |
 | Homelab service VIP | `192.168.50.100` | Active on k3s through systemd |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |
 
@@ -62,13 +62,49 @@ pre-existing failure is explicit.
 `opencode.*` is an external route to the opencode web/agent server on the
 GPU/PC box (`192.168.50.232:4096`), also modelled as a selectorless Service plus
 EndpointSlice. It carries `lan-only`, so it is reachable only from the LAN and
-the `10.8.0.0/24` VPN. Serving it at its own HTTPS origin lets the browser treat
+the Tailscale tailnet (`100.64.0.0/10`, see
+[tailscale.md](tailscale.md)). Serving it at its own HTTPS origin lets the
+browser treat
 opencode as same-origin and skips opencode's cross-origin pairing handshake; the
 opencode server itself runs without a password.
 
 Images are pinned to the exact digests observed on the Docker host. Hermes is
 also pinned to upstream commit
 `43bca6d107c86efc7e60a4a35ca8a55e1b4b4c1e` and built by GitHub Actions.
+
+## CPU requests are deliberately unset
+
+Manifests in this repository set memory requests and limits but **no CPU
+requests**. This is intentional and specific to a single-node cluster.
+
+A CPU request is a reservation the scheduler subtracts from allocatable capacity
+whether or not the pod uses it. Its purpose is bin-packing across machines. With
+one node there is nothing to pack, so the number buys nothing and only creates
+`Pending` pods: on 2026-08-06 the node sat at 99% requested CPU while actual
+usage was a fraction of that, and nothing new could schedule.
+
+CPU is compressible. With no requests, the Linux CFS scheduler time-shares the
+node the way a normal operating system does — under load everything gets slower
+in proportion, and nothing fails to schedule. For a homelab that is the correct
+trade: contention is cheap, `Pending` is expensive.
+
+Rules that go with this choice:
+
+- **Memory requests stay.** Memory is incompressible. Removing memory requests
+  invites OOM kills and breaks eviction ordering. Keeping them also holds pods
+  in `Burstable` QoS rather than `BestEffort`, which is evicted first.
+- **`kube-system` is untouched.** CFS shares derive from requests, so if
+  everything requests nothing, everything gets an equal share. CoreDNS and
+  Traefik should win under contention, so their requests are left alone.
+- **Do not copy this to a multi-node or cloud cluster.** There the requests are
+  load-bearing: they drive placement, cluster autoscaler scale-up and
+  scale-down, and any per-tenant guarantee. Removing them there causes
+  unschedulable workloads and silent performance cliffs, not savings.
+
+Workloads created at runtime by an API rather than from a manifest here (for
+example `agents.x-k8s.io` Sandboxes, whose resources are stamped into the CR at
+create time) cannot be fixed by editing this repository. Those need either a
+change at their source or a Kyverno mutate policy.
 
 ## Storage and lifecycle
 
@@ -78,8 +114,11 @@ are descriptive rather than enforced quotas. Each PVC carries
 were patched to reclaim policy `Retain`. Manual PVC deletion still causes an
 outage and leaves a `Released` PV that must be rebound deliberately.
 
-VM 200 has 13 GiB RAM and a 160 GiB root disk. After cutover, the node reported
-no memory/disk pressure and about 76 GiB disk space available. Media is excluded
+VM 200 has 12 GiB RAM and a 160 GiB root disk. After cutover, the node reported
+no memory/disk pressure and about 76 GiB disk space available. RAM was reduced
+from 13 GiB on 2026-08-06: PCI passthrough locks and prefaults the entire guest
+allocation, so 13 GiB of the host's 15.6 GiB no longer fit alongside Proxmox.
+See [gpu-passthrough.md](gpu-passthrough.md). Media is excluded
 from root-backed storage; the optional package requires a separate static local
 PV with reclaim policy `Retain`.
 
