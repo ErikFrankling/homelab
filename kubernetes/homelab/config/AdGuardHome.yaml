@@ -173,18 +173,25 @@ filtering:
   rewrites:
     - domain: husk-security.dev
       answer: 10.0.127.250
+      enabled: true
     - domain: '*.husk-security.dev'
       answer: 10.0.127.250
+      enabled: true
     - domain: staging.husk-security.dev
       answer: 10.0.127.251
+      enabled: true
     - domain: auth-staging.husk-security.dev
       answer: 10.0.127.251
+      enabled: true
     - domain: admin-staging.husk-security.dev
       answer: 10.0.127.251
+      enabled: true
     - domain: grafana-staging.husk-security.dev
       answer: 10.0.127.251
+      enabled: true
     - domain: analytics-staging.husk-security.dev
       answer: 10.0.127.251
+      enabled: true
   safe_fs_patterns:
     - /opt/adguardhome/work/userfilters/*
   safebrowsing_cache_size: 1048576
