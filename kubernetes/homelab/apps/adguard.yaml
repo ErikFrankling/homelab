@@ -30,6 +30,35 @@ spec:
         app.kubernetes.io/name: adguard
     spec:
       automountServiceAccountToken: false
+      # Renders the git-tracked config (adguard-config ConfigMap) into the
+      # conf dir on the PVC on every start, substituting the admin password
+      # hash from the sops-encrypted adguard-env secret. Git is the source of
+      # truth: web-UI config changes are overwritten on the next restart.
+      initContainers:
+        - name: render-config
+          image: adguard/adguardhome:v0.107.73@sha256:7fbf01d73ecb7a32d2d9e6cef8bf88e64bd787889ca80a1e8bce30cd4c084442
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - sed "s|__ADGUARD_PASSWORD_HASH__|$ADGUARD_PASSWORD_HASH|" /config-template/AdGuardHome.yaml > /opt/adguardhome/conf/AdGuardHome.yaml
+          env:
+            - name: ADGUARD_PASSWORD_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: adguard-env
+                  key: ADGUARD_PASSWORD_HASH
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /config-template
+              name: config-template
+              readOnly: true
+            - mountPath: /opt/adguardhome/conf
+              name: data
+              subPath: conf
       containers:
         - name: adguard
           image: adguard/adguardhome:v0.107.73@sha256:7fbf01d73ecb7a32d2d9e6cef8bf88e64bd787889ca80a1e8bce30cd4c084442
@@ -83,6 +112,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: adguard-data
+        - name: config-template
+          configMap:
+            name: adguard-config
 ---
 apiVersion: v1
 kind: Service

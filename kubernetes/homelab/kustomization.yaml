@@ -16,7 +16,14 @@ resources:
   - apps/time.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
+  - secrets/adguard.enc.yaml
   - backup/backup.yaml
+configMapGenerator:
+  # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
+  # deployment automatically.
+  - name: adguard-config
+    files:
+      - config/AdGuardHome.yaml
 labels:
   - includeSelectors: false
     pairs:
