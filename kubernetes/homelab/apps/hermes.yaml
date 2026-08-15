@@ -48,7 +48,6 @@ spec:
                   name: homelab-config
           resources:
             limits:
-              cpu: "2"
               memory: 1Gi
             requests:
               memory: 192Mi

@@ -72,10 +72,11 @@ Images are pinned to the exact digests observed on the Docker host. Hermes is
 also pinned to upstream commit
 `43bca6d107c86efc7e60a4a35ca8a55e1b4b4c1e` and built by GitHub Actions.
 
-## CPU requests are deliberately unset
+## CPU requests and limits are deliberately unset
 
 Manifests in this repository set memory requests and limits but **no CPU
-requests**. This is intentional and specific to a single-node cluster.
+requests and no CPU limits**. This is intentional and specific to a single-node
+cluster.
 
 A CPU request is a reservation the scheduler subtracts from allocatable capacity
 whether or not the pod uses it. Its purpose is bin-packing across machines. With
@@ -83,10 +84,17 @@ one node there is nothing to pack, so the number buys nothing and only creates
 `Pending` pods: on 2026-08-06 the node sat at 99% requested CPU while actual
 usage was a fraction of that, and nothing new could schedule.
 
-CPU is compressible. With no requests, the Linux CFS scheduler time-shares the
-node the way a normal operating system does — under load everything gets slower
-in proportion, and nothing fails to schedule. For a homelab that is the correct
-trade: contention is cheap, `Pending` is expensive.
+Removing only the requests is not enough: **a container with a CPU limit and no
+CPU request gets its request defaulted to the limit**, silently recreating the
+reservation. That is exactly what happened after the first pass — the node
+showed 92% requested CPU and four pods sat `Pending` for days with no CPU
+request written anywhere in this repository. A CPU limit also imposes CFS quota
+throttling, a hard ceiling that idles cores while a pod is starved. So both go.
+
+CPU is compressible. With no requests and no limits, the Linux CFS scheduler
+time-shares the node the way a normal operating system does — under load
+everything gets slower in proportion, and nothing fails to schedule. For a
+homelab that is the correct trade: contention is cheap, `Pending` is expensive.
 
 Rules that go with this choice:
 

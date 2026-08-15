@@ -39,7 +39,6 @@ spec:
               port: http
           resources:
             limits:
-              cpu: "1"
               memory: 768Mi
             requests:
               memory: 256Mi
@@ -115,7 +114,6 @@ spec:
               port: http
           resources:
             limits:
-              cpu: "1"
               memory: 768Mi
             requests:
               memory: 256Mi
@@ -191,7 +189,6 @@ spec:
               port: http
           resources:
             limits:
-              cpu: 500m
               memory: 512Mi
             requests:
               memory: 128Mi
@@ -256,7 +253,6 @@ spec:
               port: http
           resources:
             limits:
-              cpu: "2"
               memory: 2Gi
             requests:
               memory: 512Mi

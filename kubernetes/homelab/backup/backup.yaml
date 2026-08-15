@@ -107,7 +107,6 @@ spec:
                 - /scripts/snapshot.py
               resources:
                 limits:
-                  cpu: "1"
                   memory: 512Mi
                 requests:
                   memory: 64Mi
@@ -134,7 +133,6 @@ spec:
                     name: backup-repository
               resources:
                 limits:
-                  cpu: "2"
                   memory: 1Gi
                 requests:
                   memory: 128Mi
@@ -219,7 +217,6 @@ spec:
                     name: backup-repository
               resources:
                 limits:
-                  cpu: "2"
                   memory: 1Gi
                 requests:
                   memory: 128Mi
@@ -234,7 +231,6 @@ spec:
                 - /scripts/verify.py
               resources:
                 limits:
-                  cpu: "1"
                   memory: 512Mi
                 requests:
                   memory: 64Mi

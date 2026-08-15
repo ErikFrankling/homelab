@@ -32,7 +32,6 @@ spec:
                 name: media-vpn
           resources:
             limits:
-              cpu: 500m
               memory: 256Mi
             requests:
               memory: 64Mi
@@ -77,7 +76,6 @@ spec:
               /data/media/movies
           resources:
             limits:
-              cpu: 250m
               memory: 128Mi
             requests:
               memory: 16Mi
@@ -111,7 +109,6 @@ spec:
               port: http
           resources:
             limits:
-              cpu: "2"
               memory: 1Gi
             requests:
               memory: 256Mi
