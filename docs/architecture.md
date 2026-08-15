@@ -6,7 +6,7 @@
 |---|---|---|
 | Proxmox | `192.168.50.169` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
-| k3s VM (`naiaclaw`) | `192.168.50.200` | Single Kubernetes node, 12 GiB RAM, GTX 1060 passed through |
+| k3s VM (`naiaclaw`) | `192.168.50.200` | Single Kubernetes node, 8 vCPU (all host threads), 58 GiB RAM, GTX 1060 passed through |
 | Homelab service VIP | `192.168.50.100` | Active on k3s through systemd |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |
 
@@ -96,23 +96,29 @@ time-shares the node the way a normal operating system does — under load
 everything gets slower in proportion, and nothing fails to schedule. For a
 homelab that is the correct trade: contention is cheap, `Pending` is expensive.
 
-Beyond keeping the manifests clean, the cluster enforces this stance at the
-node level so a forgotten CPU request or limit in a future manifest can never
-bring back `Pending` pods or throttling:
+Beyond keeping the manifests clean, the node is set up so CPU gates as little
+as this stack allows:
 
 - **The kubelet runs with `cpu-cfs-quota=false`** (`ops/k3s/config.yaml`,
   installed at `/etc/rancher/k3s/config.yaml`). CPU limits are never enforced;
   a limit in a manifest is dead text.
-- **A Kyverno `ClusterPolicy` (`zero-cpu-requests`,
-  `kubernetes/bootstrap/kyverno/`) forces `requests.cpu: "0"` onto every pod at
-  admission** outside `kube-system`/`kyverno`/`flux-system`. This also covers
-  workloads stamped at runtime by an API rather than a manifest, such as the
-  naiaclaw `agents.x-k8s.io` Sandboxes. Forcing `0` rather than deleting the
-  field matters: the apiserver defaults an absent CPU request from the limit
-  *after* mutating webhooks, so deletion silently reinstates the reservation.
-  The policy is admin-applied like Traefik (the `homelab` Kustomization has no
-  cluster-scoped rights) and fails open, so a broken Kyverno cannot block
-  admission — it merely returns the cluster to manifests-only behavior.
+- **The VM owns all 8 host threads.** Proxmox caps a VM's vCPUs at the host's
+  logical CPU count, so 8 is the hardware ceiling. vCPUs are ordinary host
+  threads, not reservations — the Proxmox host (which only routes Tailscale)
+  needs nothing carved out and is never starved. This doubles the request
+  ledger, which only runtime-stamped workloads draw from (naiaclaw Sandboxes,
+  ~500m each); nothing deployed from this repository requests CPU at all.
+
+There is no software switch that disables CPU-request accounting entirely —
+verified empirically on this cluster on 2026-08-15. The scheduler's
+`NodeResourcesFit.ignoredResources` option only applies to extended resources
+(a 10-CPU-request pod still failed with `Insufficient cpu`), and the kubelet
+independently re-checks fit with hard-coded defaults at bind time (the same
+pod pinned via `nodeName` to bypass the scheduler was rejected `OutOfcpu`).
+The only software workaround is rewriting requests at admission, which was
+tried and deliberately rejected as pod-fiddling. If the 8-CPU ledger ever
+fills again, the honest options are lowering the sandbox catalog's CPU
+requests at their source or more hardware.
 
 Rules that go with this choice:
 
@@ -135,11 +141,10 @@ are descriptive rather than enforced quotas. Each PVC carries
 were patched to reclaim policy `Retain`. Manual PVC deletion still causes an
 outage and leaves a `Released` PV that must be rebound deliberately.
 
-VM 200 has 12 GiB RAM and a 160 GiB root disk. After cutover, the node reported
-no memory/disk pressure and about 76 GiB disk space available. RAM was reduced
-from 13 GiB on 2026-08-06: PCI passthrough locks and prefaults the entire guest
-allocation, so 13 GiB of the host's 15.6 GiB no longer fit alongside Proxmox.
-See [gpu-passthrough.md](gpu-passthrough.md). Media is excluded
+VM 200 has 58 GiB RAM and a 160 GiB root disk. After cutover, the node reported
+no memory/disk pressure and about 76 GiB disk space available. PCI passthrough
+locks and prefaults the entire guest allocation at start; see
+[gpu-passthrough.md](gpu-passthrough.md). Media is excluded
 from root-backed storage; the optional package requires a separate static local
 PV with reclaim policy `Retain`.
 
