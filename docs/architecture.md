@@ -96,6 +96,24 @@ time-shares the node the way a normal operating system does — under load
 everything gets slower in proportion, and nothing fails to schedule. For a
 homelab that is the correct trade: contention is cheap, `Pending` is expensive.
 
+Beyond keeping the manifests clean, the cluster enforces this stance at the
+node level so a forgotten CPU request or limit in a future manifest can never
+bring back `Pending` pods or throttling:
+
+- **The kubelet runs with `cpu-cfs-quota=false`** (`ops/k3s/config.yaml`,
+  installed at `/etc/rancher/k3s/config.yaml`). CPU limits are never enforced;
+  a limit in a manifest is dead text.
+- **A Kyverno `ClusterPolicy` (`zero-cpu-requests`,
+  `kubernetes/bootstrap/kyverno/`) forces `requests.cpu: "0"` onto every pod at
+  admission** outside `kube-system`/`kyverno`/`flux-system`. This also covers
+  workloads stamped at runtime by an API rather than a manifest, such as the
+  naiaclaw `agents.x-k8s.io` Sandboxes. Forcing `0` rather than deleting the
+  field matters: the apiserver defaults an absent CPU request from the limit
+  *after* mutating webhooks, so deletion silently reinstates the reservation.
+  The policy is admin-applied like Traefik (the `homelab` Kustomization has no
+  cluster-scoped rights) and fails open, so a broken Kyverno cannot block
+  admission — it merely returns the cluster to manifests-only behavior.
+
 Rules that go with this choice:
 
 - **Memory requests stay.** Memory is incompressible. Removing memory requests
@@ -108,11 +126,6 @@ Rules that go with this choice:
   load-bearing: they drive placement, cluster autoscaler scale-up and
   scale-down, and any per-tenant guarantee. Removing them there causes
   unschedulable workloads and silent performance cliffs, not savings.
-
-Workloads created at runtime by an API rather than from a manifest here (for
-example `agents.x-k8s.io` Sandboxes, whose resources are stamped into the CR at
-create time) cannot be fixed by editing this repository. Those need either a
-change at their source or a Kyverno mutate policy.
 
 ## Storage and lifecycle
 

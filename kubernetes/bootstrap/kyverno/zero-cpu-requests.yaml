@@ -1,0 +1,35 @@
+# Single-node cluster: CPU requests only create Pending pods, so every pod is
+# admitted with requests.cpu forced to 0. Deleting the field instead would not
+# work: the apiserver re-defaults an absent request from the limit after
+# mutating webhooks run. See docs/architecture.md.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: zero-cpu-requests
+spec:
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: zero-cpu-requests
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kyverno, flux-system]
+      mutate:
+        patchStrategicMerge:
+          spec:
+            containers:
+              - (name): "*"
+                resources:
+                  requests:
+                    cpu: "0"
+            initContainers:
+              - (name): "*"
+                resources:
+                  requests:
+                    cpu: "0"

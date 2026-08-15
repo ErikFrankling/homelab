@@ -10,3 +10,7 @@ node-external-ip: 192.168.50.100
 # everything that does not looking healthy. Pin this to the node IP so in-cluster
 # API traffic stays off the VIP; ServiceLB keeps using node-external-ip.
 advertise-address: 192.168.50.200
+
+# The kubelet never enforces CPU limits on this node; see docs/architecture.md.
+kubelet-arg:
+  - cpu-cfs-quota=false
