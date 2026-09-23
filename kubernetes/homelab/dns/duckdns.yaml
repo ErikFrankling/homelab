@@ -105,13 +105,18 @@ spec:
                   memory: 64Mi
                 requests:
                   memory: 16Mi
+              # runAsUser/runAsGroup are pinned because curlimages/curl
+              # declares USER by name (curl_user), and runAsNonRoot refuses to
+              # start a container whose user it cannot verify as numeric.
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop:
                     - ALL
                 readOnlyRootFilesystem: true
+                runAsGroup: 101
                 runAsNonRoot: true
+                runAsUser: 100
               volumeMounts:
                 - mountPath: /scripts
                   name: scripts
