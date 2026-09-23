@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: duckdns-updater-scripts
+data:
+  update.sh: |
+    set -eu
+
+    # DuckDNS's documented duck.sh pipes the request URL into `curl -K -`
+    # rather than passing it as an argument, so the token never lands in argv
+    # where anything reading the container's /proc could pick it up. Same shape
+    # here.
+    #
+    # The stock recipe also leaves ip= empty, which tells DuckDNS to adopt the
+    # source address of the request. From inside the cluster that resolves to
+    # the house's public WAN address, which would repoint every
+    # *.erikfrankling.duckdns.org name away from the VIP and black-hole the
+    # whole LAN. Always send the VIP explicitly.
+    response=$(
+      printf 'url=https://www.duckdns.org/update?domains=%s&token=%s&ip=%s&verbose=true\n' \
+        "$DUCKDNS_DOMAIN" "$DUCKDNS_TOKEN" "$DUCKDNS_IP" |
+        curl --silent --show-error --max-time 30 --retry 3 --retry-delay 5 --config -
+    )
+
+    # verbose=true answers with four lines: OK|KO, IPv4, IPv6, UPDATED|NOCHANGE.
+    status=$(printf '%s\n' "$response" | sed -n 1p)
+    address=$(printf '%s\n' "$response" | sed -n 2p)
+    outcome=$(printf '%s\n' "$response" | sed -n 4p)
+
+    # KO is what DuckDNS returns for a bad token or an unknown domain. It still
+    # answers HTTP 200, so curl's --fail cannot catch this.
+    if [ "$status" != "OK" ]; then
+      echo "duckdns refused the update: ${status:-<empty response>}" >&2
+      exit 1
+    fi
+
+    # DuckDNS echoes back the address it stored. It should always equal what we
+    # sent, so this only catches a truncated or garbled reply rather than a
+    # genuine disagreement -- cheap enough to keep as a parse sanity check.
+    if [ "$address" != "$DUCKDNS_IP" ]; then
+      echo "duckdns accepted the update but reports ${address:-<empty>}, wanted ${DUCKDNS_IP}" >&2
+      exit 1
+    fi
+
+    echo "${DUCKDNS_DOMAIN}.duckdns.org -> ${address} (${outcome})"
+---
+# Re-asserts the DuckDNS A record for erikfrankling.duckdns.org.
+#
+# Nothing else owns that record: the IP was set by hand once, and every
+# certificate renewal silently wipes it. cert-manager's DuckDNS solver
+# (csp33/cert-manager-duckdns-webhook) builds its DNS-01 cleanup call in
+# src/duckdns/connector.go as:
+#
+#     if txt == "" { q.Add("clear", "true") } else { q.Add("txt", txt) }
+#
+# so the cleanup request carries clear=true and no txt= parameter at all.
+# DuckDNS reads a clear=true without txt= as the *IP* API, where the spec says
+# the update "will ignore all ip's and clear both your records" -- the A and
+# AAAA records, not the TXT record it meant to remove. The 2026-09-22 renewal
+# did exactly that and left every *.erikfrankling.duckdns.org name
+# unresolvable for about seven hours.
+#
+# Sending ip= on its own does not disturb an in-flight _acme-challenge TXT
+# record, so this is safe to keep running across a renewal.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: duckdns-updater
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  # DuckDNS's own documentation settles on five minutes; it also bounds the
+  # outage after a cert-manager cleanup to roughly one cycle.
+  schedule: "*/5 * * * *"
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      backoffLimit: 2
+      template:
+        spec:
+          automountServiceAccountToken: false
+          containers:
+            - name: duckdns
+              image: curlimages/curl:8.11.1
+              command:
+                - /bin/sh
+                - /scripts/update.sh
+              env:
+                # The DuckDNS subdomain label on its own, not the FQDN.
+                - name: DUCKDNS_DOMAIN
+                  value: "erikfrankling"
+                # The VIP homelab-vip.service puts on VM 200, which is what
+                # every route behind Traefik expects to be reachable at.
+                - name: DUCKDNS_IP
+                  value: "192.168.50.100"
+                - name: DUCKDNS_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: duckdns-updater
+                      key: DUCKDNS_TOKEN
+              resources:
+                limits:
+                  memory: 64Mi
+                requests:
+                  memory: 16Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+              volumeMounts:
+                - mountPath: /scripts
+                  name: scripts
+                  readOnly: true
+          restartPolicy: Never
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap:
+                defaultMode: 365
+                name: duckdns-updater-scripts
