@@ -1,0 +1,115 @@
+# Executor (https://executor.sh): one MCP endpoint in front of every
+# integration, shared by all agents. Web UI and MCP (/mcp) are served from the
+# same process over a SQLite file in /data, which also holds the generated
+# session secret and the master key that encrypts stored credentials -- losing
+# the PV loses every connected account.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: executor-data
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: executor
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: executor
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: executor
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: executor
+          image: ghcr.io/rhyssullivan/executor-selfhost:1.6.10@sha256:b9e001775d3eb7d662d347c8f7054333c78c1a4fd97cb5a86dc1d1d1406093b9
+          imagePullPolicy: IfNotPresent
+          env:
+            # Must match the URL browsers load exactly, or logins fail with
+            # an invalid-origin error.
+            - name: EXECUTOR_WEB_BASE_URL
+              value: https://executor.erikfrankling.duckdns.org
+            # Upstream integrations on the LAN (the PC's computer-use MCP at
+            # 192.168.50.232) are refused by the SSRF guard without this.
+            # It also lets sandboxed tool code reach the LAN; acceptable
+            # because the only account is the owner's and the route is
+            # lan-only.
+            - name: EXECUTOR_ALLOW_LOCAL_NETWORK
+              value: "true"
+          envFrom:
+            # EXECUTOR_BOOTSTRAP_ADMIN_{EMAIL,PASSWORD}: creates the owner on
+            # first boot so there is no open first-run signup window.
+            - secretRef:
+                name: executor-bootstrap
+          ports:
+            - containerPort: 4788
+              name: http
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /data
+              name: data
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: executor-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: executor
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: executor

@@ -37,6 +37,15 @@ spec:
       services:
         - name: openclaw
           port: 18789
+    # Executor holds OAuth tokens for every connected account and proxies the
+    # PC's computer-use MCP. lan-only is load-bearing: never expose it.
+    - kind: Rule
+      match: Host(`executor.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: executor
+          port: 80
     # This endpoint receives screenshots of whatever is on screen. lan-only is
     # load-bearing here, not defence in depth -- it must never be reachable
     # from the internet.

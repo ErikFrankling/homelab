@@ -14,11 +14,13 @@ resources:
   - apps/searxng.yaml
   - apps/openclaw.yaml
   - apps/time.yaml
+  - apps/executor.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
   - secrets/adguard.enc.yaml
   - secrets/duckdns.enc.yaml
+  - secrets/executor.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
