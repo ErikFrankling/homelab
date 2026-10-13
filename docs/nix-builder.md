@@ -2,7 +2,9 @@
 
 `kubernetes/homelab/apps/nix-builder.yaml` runs one pod that builds the NixOS
 system closures for `pc` and `framework` and serves them as a binary cache.
-The machines then update by downloading, never by compiling. The client side
+The machines then update by downloading, never by compiling. The nightly job
+pushes the dotfiles to `main` only once both closures are built here, so
+`main` itself says what is in the cache. The client side
 (timers, substituter settings, the nightly update job) lives in the dotfiles
 repository.
 
@@ -13,7 +15,6 @@ repository.
 | `seed` (init) | `nixos/nix` image | Substitutes nix, sshd, harmonia and friends into the volume from one pinned nixpkgs revision |
 | `builder` | port 2222 on the VIP, LAN only | sshd; the PC builds with `nix build --store ssh-ng://root@192.168.50.100:2222` |
 | `cache` | `https://nix-cache.erikfrankling.duckdns.org` | harmonia, serving the builder's `/nix/store` signed |
-| `latest` | `https://nix-cache.erikfrankling.duckdns.org/latest/<host>.json` | Revision and store path of the newest complete closure |
 
 The builder's store is the cache. Building a system closure leaves every path
 of it valid in that store, including what came from `cache.nixos.org`, so a

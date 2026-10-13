@@ -7,7 +7,7 @@
 # See docs/nix-builder.md.
 #
 # The volume is mounted at /nix and therefore hides any store an image brings
-# along. That is why all three containers run a plain Debian image and take
+# along. That is why both containers run a plain Debian image and take
 # their binaries from /nix/var/builder/bin, which the init container fills.
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -162,41 +162,6 @@ spec:
             - mountPath: /secrets
               name: signing-key
               readOnly: true
-        # Serves /latest/<host>.json: the git revision and system store path of
-        # the newest closure that built completely. The machines read it to
-        # know exactly what to fetch, so they never evaluate or build.
-        - name: latest
-          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
-          imagePullPolicy: IfNotPresent
-          command:
-            - /nix/var/builder/bin/darkhttpd
-            - /nix/var/builder/www
-            - --port
-            - "8080"
-            - --no-listing
-          ports:
-            - containerPort: 8080
-              name: latest
-              protocol: TCP
-          resources:
-            limits:
-              memory: 64Mi
-            requests:
-              memory: 8Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            runAsNonRoot: true
-            runAsUser: 65532
-            runAsGroup: 65532
-            seccompProfile:
-              type: RuntimeDefault
-          volumeMounts:
-            - mountPath: /nix
-              name: store
-              readOnly: true
       terminationGracePeriodSeconds: 30
       volumes:
         - name: store
@@ -221,10 +186,6 @@ spec:
       port: 5000
       protocol: TCP
       targetPort: cache
-    - name: latest
-      port: 8080
-      protocol: TCP
-      targetPort: latest
   selector:
     app.kubernetes.io/name: nix-builder
 ---

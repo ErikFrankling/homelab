@@ -22,7 +22,7 @@ getent passwd sshd > /dev/null \
   || useradd --system --no-create-home --home-dir /var/empty --shell /usr/sbin/nologin sshd
 
 mkdir -p /etc/nix /root/.ssh /var/empty /run/sshd \
-  "$state/ssh" "$state/build" "$state/www/latest" /nix/var/nix/gcroots/auto-update
+  "$state/ssh" "$state/build" /nix/var/nix/gcroots/auto-update
 cp /config/nix.conf /etc/nix/nix.conf
 
 # ConfigMap volumes are group- and world-writable, which sshd's StrictModes

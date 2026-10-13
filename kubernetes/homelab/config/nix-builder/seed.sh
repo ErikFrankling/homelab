@@ -12,10 +12,11 @@ set -eu
 root=/mnt
 state="$root/nix/var/builder"
 stamp="$state/seeded-rev"
-packages="nix openssh harmonia darkhttpd bashInteractive coreutils gnugrep gnused findutils gitMinimal cacert"
+packages="nix openssh harmonia bashInteractive coreutils gnugrep gnused findutils gitMinimal cacert"
 
-# The static server for the "latest" pointers starts alongside the builder.
-mkdir -p "$state/www/latest"
+# local-path creates the volume directory world-writable, and Nix refuses a
+# store whose parent anyone can write to.
+chmod 0755 "$root/nix"
 
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$NIXPKGS_REV" ]; then
   echo "tools already seeded from nixpkgs $NIXPKGS_REV"
