@@ -56,3 +56,20 @@ spec:
       services:
         - name: time
           port: 80
+    # Nix binary cache and the "latest closure" pointers (apps/nix-builder.yaml).
+    # Everything in it is signed and none of it is secret, but the store holds
+    # private configuration, so it stays on the LAN and the tailnet.
+    - kind: Rule
+      match: Host(`nix-cache.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: nix-builder
+          port: 5000
+    - kind: Rule
+      match: Host(`nix-cache.erikfrankling.duckdns.org`) && PathPrefix(`/latest/`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: nix-builder
+          port: 8080

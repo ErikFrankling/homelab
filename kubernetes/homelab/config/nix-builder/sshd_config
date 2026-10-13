@@ -1,0 +1,14 @@
+Port 2222
+HostKey /nix/var/builder/ssh/ssh_host_ed25519_key
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+# The image has no PAM stack for sshd.
+UsePAM no
+AuthorizedKeysFile /root/.ssh/authorized_keys
+# Non-interactive sessions (`nix-daemon --stdio`) get no profile; without this
+# they find neither nix nor a CA bundle.
+SetEnv PATH=/nix/var/builder/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin NIX_SSL_CERT_FILE=/nix/var/builder/ca-bundle.crt
+# A nightly build is one connection that is silent for long stretches.
+ClientAliveInterval 30
+ClientAliveCountMax 10

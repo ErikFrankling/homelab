@@ -1,0 +1,5 @@
+bind = "[::]:5000"
+workers = 4
+# Lower wins; cache.nixos.org is 40. Clients on the LAN should ask here first.
+priority = 20
+sign_key_paths = ["/secrets/signing-key"]

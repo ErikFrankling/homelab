@@ -15,12 +15,14 @@ resources:
   - apps/openclaw.yaml
   - apps/time.yaml
   - apps/executor.yaml
+  - apps/nix-builder.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
   - secrets/adguard.enc.yaml
   - secrets/duckdns.enc.yaml
   - secrets/executor.enc.yaml
+  - secrets/nix-builder.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
@@ -28,6 +30,15 @@ configMapGenerator:
   - name: adguard-config
     files:
       - config/AdGuardHome.yaml
+  # Same idea: any change to the builder's scripts or settings restarts it.
+  - name: nix-builder-config
+    files:
+      - config/nix-builder/seed.sh
+      - config/nix-builder/entrypoint.sh
+      - config/nix-builder/sshd_config
+      - config/nix-builder/nix.conf
+      - config/nix-builder/harmonia.toml
+      - config/nix-builder/authorized_keys
 labels:
   - includeSelectors: false
     pairs:

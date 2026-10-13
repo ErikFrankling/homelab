@@ -8,7 +8,8 @@ Live state and operating rules are recorded in [AGENTS.md](AGENTS.md). See
 [docs/architecture.md](docs/architecture.md) for the design,
 [docs/cutover-runbook.md](docs/cutover-runbook.md) for cutover/rollback,
 [docs/backups.md](docs/backups.md) for the backup activation gates,
-[docs/gpu-passthrough.md](docs/gpu-passthrough.md) for the GPU passed through to
+[docs/nix-builder.md](docs/nix-builder.md) for the Nix build server and binary
+cache, [docs/gpu-passthrough.md](docs/gpu-passthrough.md) for the GPU passed through to
 VM 200 for text-to-speech, and [docs/tailscale.md](docs/tailscale.md) for
 remote access via the Tailscale subnet router on the Proxmox host.
 

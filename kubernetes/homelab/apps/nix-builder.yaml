@@ -1,0 +1,250 @@
+# Nix build server and binary cache for the NixOS machines (pc, framework).
+#
+# Every night the PC evaluates the dotfiles flake and builds both system
+# closures here over SSH (`nix build --store ssh-ng://`), so neither machine
+# compiles anything itself. harmonia serves this same /nix/store as a signed
+# binary cache at nix-cache.erikfrankling.duckdns.org; there is no upload step.
+# See docs/nix-builder.md.
+#
+# The volume is mounted at /nix and therefore hides any store an image brings
+# along. That is why all three containers run a plain Debian image and take
+# their binaries from /nix/var/builder/bin, which the init container fills.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nix-builder-store
+  annotations:
+    # Losing it costs a full re-download and rebuild of both closures, and the
+    # SSH host key the PC has pinned.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Cosmetic: local-path enforces no capacity. The real bound is min-free
+      # in config/nix-builder/nix.conf plus the nightly job's own pruning.
+      storage: 150Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nix-builder
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nix-builder
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nix-builder
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: seed
+          image: nixos/nix:latest@sha256:62c506c32c75395163676006f0c00d75c31578fffaac1167d600289f72477b78
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/config/seed.sh"]
+          env:
+            # The nixpkgs revision the pod's own tools come from. Keep it at a
+            # revision whose packages are in cache.nixos.org; the dotfiles
+            # flake.lock nixpkgs pin is a good source.
+            - name: NIXPKGS_REV
+              value: 608d0cadfed240589a7eea422407a547ad626a14
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              memory: 256Mi
+          volumeMounts:
+            - mountPath: /mnt/nix
+              name: store
+            - mountPath: /config
+              name: config
+              readOnly: true
+      containers:
+        - name: builder
+          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/config/entrypoint.sh"]
+          ports:
+            - containerPort: 2222
+              name: ssh
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            periodSeconds: 30
+            tcpSocket:
+              port: ssh
+          readinessProbe:
+            failureThreshold: 12
+            periodSeconds: 10
+            tcpSocket:
+              port: ssh
+          resources:
+            # This is what keeps a build from hurting the rest of the node.
+            # The limit is a hard cgroup ceiling: a build that outgrows it is
+            # OOM-killed inside this container and nothing else is touched.
+            # The request is deliberately tiny, which does two things. Under
+            # node memory pressure the kubelet evicts by usage above request,
+            # so this pod goes first; and a low request gives it the highest
+            # oom_score_adj of any Burstable pod, so the kernel picks it first
+            # too. No CPU request means the smallest CPU share under contention
+            # (see docs/architecture.md).
+            limits:
+              memory: 24Gi
+            requests:
+              memory: 512Mi
+          securityContext:
+            # The Nix build sandbox needs mount and user namespaces, which the
+            # default container profile denies. Privileged is the price of
+            # sandboxed builds; the alternative, sandbox = false, runs every
+            # package's build script unconfined in this container instead.
+            privileged: true
+          volumeMounts:
+            - mountPath: /nix
+              name: store
+            - mountPath: /config
+              name: config
+              readOnly: true
+        - name: cache
+          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
+          imagePullPolicy: IfNotPresent
+          command: ["/nix/var/builder/bin/harmonia-cache"]
+          env:
+            - name: CONFIG_FILE
+              value: /config/harmonia.toml
+          ports:
+            - containerPort: 5000
+              name: cache
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /nix-cache-info
+              port: cache
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /nix-cache-info
+              port: cache
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /nix
+              name: store
+              readOnly: true
+            - mountPath: /config
+              name: config
+              readOnly: true
+            - mountPath: /secrets
+              name: signing-key
+              readOnly: true
+        # Serves /latest/<host>.json: the git revision and system store path of
+        # the newest closure that built completely. The machines read it to
+        # know exactly what to fetch, so they never evaluate or build.
+        - name: latest
+          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
+          imagePullPolicy: IfNotPresent
+          command:
+            - /nix/var/builder/bin/darkhttpd
+            - /nix/var/builder/www
+            - --port
+            - "8080"
+            - --no-listing
+          ports:
+            - containerPort: 8080
+              name: latest
+              protocol: TCP
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              memory: 8Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /nix
+              name: store
+              readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: store
+          persistentVolumeClaim:
+            claimName: nix-builder-store
+        - name: config
+          configMap:
+            name: nix-builder-config
+        - name: signing-key
+          secret:
+            secretName: nix-builder-signing-key
+            # Only the cache container mounts it, and it runs as 65532.
+            defaultMode: 0444
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nix-builder
+spec:
+  ports:
+    - name: cache
+      port: 5000
+      protocol: TCP
+      targetPort: cache
+    - name: latest
+      port: 8080
+      protocol: TCP
+      targetPort: latest
+  selector:
+    app.kubernetes.io/name: nix-builder
+---
+# SSH into the builder for `--store ssh-ng://`. Key-only, root, into a
+# privileged container: whoever holds an authorized key effectively has root on
+# the node, which the PC's key already has through `ssh naiaclaw`. Keep
+# config/nix-builder/authorized_keys to that one key.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nix-builder-ssh
+spec:
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 192.168.50.0/24
+  ports:
+    - name: ssh
+      port: 2222
+      protocol: TCP
+      targetPort: ssh
+  selector:
+    app.kubernetes.io/name: nix-builder
+  type: LoadBalancer
