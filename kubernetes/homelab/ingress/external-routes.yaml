@@ -23,7 +23,7 @@ spec:
     - kind: Rule
       match: Host(`planet9-test.erikfrankling.duckdns.org`)
       middlewares:
-        - name: lan-only
+        - name: lan-and-cluster
       services:
         - name: external-p9-mcp-test
           port: 80
