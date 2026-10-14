@@ -63,15 +63,12 @@ nix store info --store ssh-ng://root@192.168.50.100:2222
 ssh naiaclaw 'sudo kubectl -n homelab get pod -l app.kubernetes.io/name=nix-builder; df -h /'
 ```
 
-## Known limit: nested user namespaces
+## Nested user namespaces
 
-The node is Ubuntu 24.04 with `kernel.apparmor_restrict_unprivileged_userns=1`.
-Nix's own sandbox is unaffected (the daemon is root), but a build that creates a
-user namespace of its own inside the sandbox fails with
-`bwrap: setting up uid map: Permission denied`. `vmware-workstation` does this.
-The nightly job works around it by building that one derivation on the PC and
-copying it here (`nix copy --to ssh-ng://nix-builder`).
-
-Setting the sysctl to `0` in `ops/sysctl/99-homelab.conf` would remove the
-limit. It is a node-wide relaxation of an Ubuntu hardening default, so it has
-not been done.
+The node is Ubuntu 24.04, which by default denies unprivileged user namespaces
+(`kernel.apparmor_restrict_unprivileged_userns=1`). Nix's own sandbox does not
+care, since the daemon is root, but a build that sets up a sandbox of its own
+inside Nix's fails with `bwrap: setting up uid map: Permission denied`
+(`vmware-workstation` does this). `ops/sysctl/99-homelab.conf` sets it to `0`,
+the default on other distributions; install it at
+`/etc/sysctl.d/99-homelab.conf` on a rebuilt node.
