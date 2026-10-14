@@ -17,10 +17,20 @@ packages="nix openssh harmonia bashInteractive coreutils gnugrep gnused findutil
 # local-path creates the volume directory world-writable, and Nix refuses a
 # store whose parent anyone can write to.
 chmod 0755 "$root/nix"
+roots="$root/nix/var/nix/gcroots/builder-tools"
 
-if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$NIXPKGS_REV" ]; then
-  echo "tools already seeded from nixpkgs $NIXPKGS_REV"
-  exit 0
+# Seeded already, and the garbage collector has not taken anything: nothing to
+# do, which also lets the pod start without network.
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$NIXPKGS_REV" ] && [ -d "$roots" ]; then
+  intact=true
+  for link in "$roots"/*; do
+    [ -e "$root$(readlink "$link")" ] || intact=false
+  done
+  if $intact; then
+    echo "tools already seeded from nixpkgs $NIXPKGS_REV"
+    exit 0
+  fi
+  echo "some tools are gone from the store; seeding again"
 fi
 
 installables=""
@@ -36,10 +46,14 @@ paths=$(nix build \
   --store "local?root=$root" \
   --max-jobs 0 --no-link --print-out-paths $installables)
 
-rm -rf "$state/bin.new" "$state/roots.new"
-mkdir -p "$state/bin.new" "$state/roots.new" "$root/nix/var/nix/gcroots"
+# Each tool is rooted by its own symlink directly inside gcroots. Nix follows a
+# root symlink only to a store path; on 2026-10-14 the roots were one level
+# further down, behind a symlink to a directory, and a garbage collection
+# deleted nix and harmonia out from under the running pod.
+rm -rf "$state/bin.new" "$roots.new"
+mkdir -p "$state/bin.new" "$roots.new"
 for path in $paths; do
-  ln -s "$path" "$state/roots.new/$(basename "$path")"
+  ln -s "$path" "$roots.new/$(basename "$path")"
   if [ -d "$root$path/bin" ]; then
     for binary in "$root$path"/bin/*; do
       ln -sfn "$path/bin/$(basename "$binary")" "$state/bin.new/$(basename "$binary")"
@@ -50,12 +64,9 @@ for path in $paths; do
   fi
 done
 
-rm -rf "$state/bin" "$state/roots"
+rm -rf "$state/bin" "$state/roots" "$roots"
 mv "$state/bin.new" "$state/bin"
-mv "$state/roots.new" "$state/roots"
-# One indirection keeps the garbage collector away from the tools: every entry
-# in roots/ is a symlink to a store path.
-ln -sfn /nix/var/builder/roots "$root/nix/var/nix/gcroots/builder-tools"
+mv "$roots.new" "$roots"
 
 echo "$NIXPKGS_REV" > "$stamp"
 echo "seeded tools from nixpkgs $NIXPKGS_REV"
