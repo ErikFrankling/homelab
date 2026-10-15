@@ -91,7 +91,7 @@ spec:
                 # The DuckDNS subdomain label on its own, not the FQDN.
                 - name: DUCKDNS_DOMAIN
                   value: "erikfrankling"
-                # The VIP homelab-vip.service puts on VM 200, which is what
+                # The VIP netplan puts on VM 200, which is what
                 # every route behind Traefik expects to be reachable at.
                 - name: DUCKDNS_IP
                   value: "192.168.50.100"

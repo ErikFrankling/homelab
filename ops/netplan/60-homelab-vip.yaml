@@ -1,0 +1,13 @@
+# Install as /etc/netplan/60-homelab-vip.yaml (mode 600) on naiaclaw.
+#
+# The homelab service VIP. Netplan merges this address into eth0 alongside
+# 50-cloud-init.yaml, so systemd-networkd owns it. It used to be added by a
+# separate `ip address replace` unit, which networkd treats as foreign and
+# deletes whenever it restarts; an unattended systemd upgrade on 2026-10-15
+# did exactly that and took every DuckDNS route down.
+network:
+  version: 2
+  ethernets:
+    eth0:
+      addresses:
+        - "192.168.50.100/24"

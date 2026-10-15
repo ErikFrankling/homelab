@@ -7,14 +7,14 @@
 | Proxmox | `192.168.50.169` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
 | k3s VM (`naiaclaw`) | `192.168.50.200` | Single Kubernetes node, 8 vCPU (all host threads), 58 GiB RAM, GTX 1060 passed through |
-| Homelab service VIP | `192.168.50.100` | Active on k3s through systemd |
+| Homelab service VIP | `192.168.50.100` | Active on k3s through netplan |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |
 
 DuckDNS resolves the apex and wildcard to `192.168.50.100`. The address is
-installed by `homelab-vip.service` before k3s starts and is advertised as the
-node external IP through `ops/k3s/config.yaml`. This makes K3s ServiceLB use its
-source-preserving path for the VIP. The VIP systemd unit must never be active
-while VM 100 is running.
+declared in `ops/netplan/60-homelab-vip.yaml`, so systemd-networkd owns it and
+keeps it across restarts, and is advertised as the node external IP through
+`ops/k3s/config.yaml`. This makes K3s ServiceLB use its source-preserving path
+for the VIP. VM 200 must never hold the VIP while VM 100 is running.
 
 K3s ServiceLB owns host port 53 for AdGuard. That host-port rule also intercepts
 the systemd-resolved stub address, so `/etc/resolv.conf` on `naiaclaw` points to

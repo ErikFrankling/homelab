@@ -8,7 +8,7 @@ Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
 - This public repo and GitHub `main` are the active homelab source. Check Flux
   and the live k3s host before assuming a local checkout is current.
 - The Docker VM is a powered-off rollback artifact. Never start it while
-  `homelab-vip.service` is active on VM 200.
+  VM 200 holds the `.100` VIP (`/etc/netplan/60-homelab-vip.yaml`).
 - The frozen Docker checkout is `/home/debian/homelab` at commit `e16ee23`.
   It is reachable by SSH only during an intentional rollback.
 - Do not edit live host config, restart services, resize VMs, or change Kubernetes workloads unless the user explicitly asks.
@@ -51,7 +51,9 @@ The Docker-to-k3s migration completed on 2026-07-24:
   `kube-system`. DuckDNS ACME state is persistent. The active Let's Encrypt
   apex/wildcard certificate was verified with a valid trust chain and expires
   2026-10-22.
-- `ops/systemd/homelab-vip.service` installs `.100` before k3s starts;
+- `ops/netplan/60-homelab-vip.yaml` adds `.100` to eth0, so systemd-networkd
+  owns it and keeps it across its own restarts (a separate `ip address` unit
+  lost it to an unattended systemd upgrade on 2026-10-15);
   `ops/k3s/config.yaml` advertises it as the node external IP so ServiceLB
   preserves LAN source addresses. Never start VM 100 while the VIP is active.
 - Because ServiceLB owns host port 53, `/etc/resolv.conf` on `naiaclaw` points
@@ -204,7 +206,7 @@ disk, and do not place media on the root-backed storage class.
 ssh proxmox 'free -h; qm list; pvesm status'
 ssh proxmox 'dmidecode -t system -t baseboard -t memory'
 ssh proxmox 'qm config 100; qm config 200'
-ssh naiaclaw 'systemctl status homelab-vip; ip -brief address show eth0'
+ssh naiaclaw 'ip -brief address show eth0'
 ssh naiaclaw 'free -h; df -h /; sudo kubectl top nodes'
 ssh naiaclaw 'sudo kubectl -n homelab get kustomization,pods,pvc'
 ssh naiaclaw 'sudo kubectl get nodes -o wide; sudo kubectl get pods -A'

@@ -76,7 +76,7 @@ logs.
 ## Rollback
 
 1. Suspend the Flux Kustomization, then scale homelab Deployments to zero.
-2. Stop and disable `homelab-vip.service`; verify `.100` is absent from VM 200.
+2. Remove `/etc/netplan/60-homelab-vip.yaml` and run `netplan apply`; verify `.100` is absent from VM 200.
 3. Start VM 100 and run its Compose project.
 4. Verify `.100`, wildcard TLS, registry, DNS, and application routes.
 5. Do not copy Kubernetes data back without a deliberate conflict-free restore
