@@ -10,7 +10,9 @@
 #   tailnet and back out through the Proxmox subnet router. That is the path
 #   Erik's phone takes when he is away, so it fails when the VPN path breaks,
 #   not only when the service does.
-# - group "lan": straight from the cluster, the way the LAN sees it.
+# - group "lan": from the k3s node's own network. Routes behind the
+#   lan-only middleware are checked from "phone" only: from the node itself
+#   the request reaches Traefik with an internal source address and gets 403.
 storage:
   type: memory
 concurrency: 0
@@ -59,8 +61,35 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  - name: executor
+    group: phone
+    url: https://executor.erikfrankling.duckdns.org/
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: time
+    group: phone
+    url: https://time.erikfrankling.duckdns.org/
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: nix-cache
+    group: phone
+    url: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
+    interval: 5m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
 
-  # ---- lan (straight from the cluster) -------------------------------------
+  # ---- lan (from the node) -------------------------------------------------
   - name: t3code
     group: lan
     url: http://192.168.50.232:3773/
@@ -78,34 +107,9 @@ endpoints:
   - name: open-webui
     group: lan
     url: https://chat.erikfrankling.duckdns.org/
-    interval: 1m
-    conditions:
-      - "[STATUS] == 200"
-  - name: openclaw
-    group: lan
-    url: https://claw.erikfrankling.duckdns.org/
     interval: 2m
     conditions:
       - "[STATUS] == 200"
-  - name: executor
-    group: lan
-    url: https://executor.erikfrankling.duckdns.org/
-    interval: 2m
-    conditions:
-      - "[STATUS] == 200"
-  - name: time
-    group: lan
-    url: https://time.erikfrankling.duckdns.org/
-    interval: 2m
-    conditions:
-      - "[STATUS] == 200"
-  - name: nix-cache
-    group: lan
-    url: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
-    interval: 2m
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY] == pat(*StoreDir: /nix/store*)"
   - name: nix-builder-ssh
     group: lan
     url: tcp://192.168.50.100:2222
@@ -122,6 +126,17 @@ endpoints:
     conditions:
       - "[DNS_RCODE] == NOERROR"
       - "[BODY] == 192.168.50.100"
+  # The ad blocking itself, not just DNS answering: a known ad domain must
+  # come back as the 0.0.0.0 block answer.
+  - name: adguard-blocking
+    group: lan
+    url: 192.168.50.100
+    interval: 5m
+    dns:
+      query-name: doubleclick.net
+      query-type: A
+    conditions:
+      - "[BODY] == 0.0.0.0"
   # DuckDNS itself, asked from outside: every *.erikfrankling.duckdns.org
   # name must point at the service VIP.
   - name: duckdns
