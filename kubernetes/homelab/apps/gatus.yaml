@@ -25,6 +25,13 @@ spec:
         app.kubernetes.io/name: gatus
     spec:
       automountServiceAccountToken: false
+      # The node's own network, so checks leave from 192.168.50.200 like any
+      # LAN machine. From a pod address the lan-only routes answer 403, and
+      # widening them to cluster pods would expose Executor and the time
+      # tracker to every tenant workload. Gatus's page is then also on the
+      # node at :18080 (LAN only; it is read-only).
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: gatus
           image: twinproduction/gatus:v5.37.0@sha256:094eb186e55235db367e90e9d56140e5897b7044c41de23cde4cc18e6da1242e
@@ -33,7 +40,7 @@ spec:
             - name: GATUS_CONFIG_PATH
               value: /config/config.yaml
           ports:
-            - containerPort: 8080
+            - containerPort: 18080
               name: http
               protocol: TCP
           readinessProbe:
@@ -79,12 +86,13 @@ spec:
               value: gatus-probe
             - name: TS_USERSPACE
               value: "true"
-            # State in an emptyDir, not the default Kubernetes secret: the
-            # node is ephemeral and the pod has no API access.
+            # State in the emptyDir, not the default Kubernetes secret: the
+            # node is ephemeral and the pod has no API access. A directory
+            # tailscaled creates itself, since it must own it to chmod it.
             - name: TS_KUBE_SECRET
               value: ""
             - name: TS_STATE_DIR
-              value: /var/lib/tailscale
+              value: /tmp/state
             - name: TS_SOCKET
               value: /tmp/tailscaled.sock
             - name: TS_OUTBOUND_HTTP_PROXY_LISTEN
@@ -109,8 +117,6 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           volumeMounts:
-            - mountPath: /var/lib/tailscale
-              name: tailscale-state
             - mountPath: /tmp
               name: tmp
       terminationGracePeriodSeconds: 10
@@ -118,8 +124,6 @@ spec:
         - name: config
           configMap:
             name: gatus-config
-        - name: tailscale-state
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
 ---
