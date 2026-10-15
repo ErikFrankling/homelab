@@ -1,0 +1,153 @@
+# Health checks for everything Erik uses (config/gatus/config.yaml). Results
+# live in memory only; the PC polls the API and starts a repair session when a
+# check keeps failing, so history beyond the last results is not needed.
+#
+# The tailscale sidecar joins the tailnet as an ephemeral node (removed when
+# the pod goes away) and offers an HTTP proxy on 127.0.0.1:1055. Checks in the
+# "phone" group go through it, so they take the same path as the phone when it
+# is away from home. The auth key is the tag:client OAuth client secret the
+# NixOS laptops use (dotfiles repo, modules/nixos/tailscale.nix).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatus
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gatus
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gatus
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: gatus
+          image: twinproduction/gatus:v5.37.0@sha256:094eb186e55235db367e90e9d56140e5897b7044c41de23cde4cc18e6da1242e
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GATUS_CONFIG_PATH
+              value: /config/config.yaml
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /config
+              name: config
+              readOnly: true
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.104.1@sha256:87c55d6be56ad85b3d8bceca5f87f73de288c609131460dd1be1874c250cc41d
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: gatus-tailscale
+                  key: TS_AUTHKEY
+            - name: TS_HOSTNAME
+              value: gatus-probe
+            - name: TS_USERSPACE
+              value: "true"
+            # State in an emptyDir, not the default Kubernetes secret: the
+            # node is ephemeral and the pod has no API access.
+            - name: TS_KUBE_SECRET
+              value: ""
+            - name: TS_STATE_DIR
+              value: /var/lib/tailscale
+            - name: TS_SOCKET
+              value: /tmp/tailscaled.sock
+            - name: TS_OUTBOUND_HTTP_PROXY_LISTEN
+              value: 127.0.0.1:1055
+            # --accept-routes: reach the LAN through the Proxmox subnet
+            # router, like the phone. An OAuth key needs the tag.
+            - name: TS_EXTRA_ARGS
+              value: --advertise-tags=tag:client --accept-routes
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              memory: 48Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /var/lib/tailscale
+              name: tailscale-state
+            - mountPath: /tmp
+              name: tmp
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: gatus-config
+        - name: tailscale-state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatus
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: gatus
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gatus
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`health.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: gatus
+          port: 80

@@ -1,0 +1,147 @@
+# What Gatus checks (apps/gatus.yaml). This list is the definition of "Erik's
+# setup works". The PC reads the results every two minutes and starts an agent
+# session to repair any check that keeps failing (dotfiles repo,
+# modules/home-manager/auto-update, `health-watch`). So: only add checks for
+# things Erik really uses, and when something broke that no check caught, add
+# the check that would have.
+#
+# Two vantage points:
+# - group "phone": through the Tailscale sidecar's proxy, i.e. into the
+#   tailnet and back out through the Proxmox subnet router. That is the path
+#   Erik's phone takes when he is away, so it fails when the VPN path breaks,
+#   not only when the service does.
+# - group "lan": straight from the cluster, the way the LAN sees it.
+storage:
+  type: memory
+concurrency: 0
+ui:
+  title: Homelab health
+  header: Homelab health
+
+endpoints:
+  # ---- phone (through the tailnet) -----------------------------------------
+  - name: t3code
+    group: phone
+    url: http://192.168.50.232:3773/
+    interval: 1m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: vaultwarden
+    group: phone
+    url: https://vault.erikfrankling.duckdns.org/alive
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: open-webui
+    group: phone
+    url: https://chat.erikfrankling.duckdns.org/
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: openclaw
+    group: phone
+    url: https://claw.erikfrankling.duckdns.org/
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+
+  # ---- lan (straight from the cluster) -------------------------------------
+  - name: t3code
+    group: lan
+    url: http://192.168.50.232:3773/
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+  - name: vaultwarden
+    group: lan
+    url: https://vault.erikfrankling.duckdns.org/alive
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      # Traefik renews at 30 days left; under 20 means renewal is failing.
+      - "[CERTIFICATE_EXPIRATION] > 480h"
+  - name: open-webui
+    group: lan
+    url: https://chat.erikfrankling.duckdns.org/
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+  - name: openclaw
+    group: lan
+    url: https://claw.erikfrankling.duckdns.org/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+  - name: executor
+    group: lan
+    url: https://executor.erikfrankling.duckdns.org/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+  - name: time
+    group: lan
+    url: https://time.erikfrankling.duckdns.org/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+  - name: nix-cache
+    group: lan
+    url: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == pat(*StoreDir: /nix/store*)"
+  - name: nix-builder-ssh
+    group: lan
+    url: tcp://192.168.50.100:2222
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
+  - name: adguard-dns
+    group: lan
+    url: 192.168.50.100
+    interval: 2m
+    dns:
+      query-name: vault.erikfrankling.duckdns.org
+      query-type: A
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+      - "[BODY] == 192.168.50.100"
+  # DuckDNS itself, asked from outside: every *.erikfrankling.duckdns.org
+  # name must point at the service VIP.
+  - name: duckdns
+    group: lan
+    url: 1.1.1.1
+    interval: 5m
+    dns:
+      query-name: vault.erikfrankling.duckdns.org
+      query-type: A
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+      - "[BODY] == 192.168.50.100"
+  - name: pc-ssh
+    group: lan
+    url: tcp://192.168.50.232:22
+    interval: 2m
+    conditions:
+      - "[CONNECTED] == true"
+  - name: proxmox
+    group: lan
+    url: https://192.168.50.169:8006/
+    interval: 2m
+    client:
+      insecure: true
+    conditions:
+      - "[STATUS] == 200"

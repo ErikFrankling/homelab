@@ -17,6 +17,7 @@ resources:
   - apps/time.yaml
   - apps/executor.yaml
   - apps/nix-builder.yaml
+  - apps/gatus.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
@@ -24,6 +25,7 @@ resources:
   - secrets/duckdns.enc.yaml
   - secrets/executor.enc.yaml
   - secrets/nix-builder.enc.yaml
+  - secrets/gatus.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
@@ -40,6 +42,10 @@ configMapGenerator:
       - config/nix-builder/nix.conf
       - config/nix-builder/harmonia.toml
       - config/nix-builder/authorized_keys
+  # And the health checks: editing the list restarts Gatus.
+  - name: gatus-config
+    files:
+      - config.yaml=config/gatus/config.yaml
 labels:
   - includeSelectors: false
     pairs:
