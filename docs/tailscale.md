@@ -187,6 +187,17 @@ From a remote client (off Wi-Fi, e.g. phone on mobile data, Tailscale on):
 
 ## Failure modes and recovery
 
+- **Monitoring can be green while a phone on mobile data cannot connect.**
+  Gatus's `phone` group uses a Tailscale HTTP proxy on the k3s node. It
+  checks subnet routing through Proxmox, but its encrypted peer connection
+  can stay entirely on the home LAN. It does not check the phone's mobile
+  internet path or the phone's DNS resolver. Since 2026-10-16, the T3
+  checks cover its real HTTPS hostname, certificate and `/ws` upgrade;
+  previously both T3 checks only fetched the PC's HTTP homepage by IP.
+  Do not call a mobile-only incident repaired based on these checks alone.
+  Capture the failing attempt on Proxmox's `tailscale0` interface and compare
+  with T3's HTTP traces on the PC to distinguish DNS/routing/TLS failures
+  from backend failures. Capture headers only; do not retain user payloads.
 - **Proxmox reboots**: everything comes back automatically (`tailscaled`
   enabled, sysctl and offload unit persist, Tailscale state in
   `/var/lib/tailscale`).
