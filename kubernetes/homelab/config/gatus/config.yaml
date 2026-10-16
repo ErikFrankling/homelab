@@ -8,8 +8,9 @@
 # Two vantage points:
 # - group "phone": through the Tailscale sidecar's proxy, i.e. into the
 #   tailnet and back out through the Proxmox subnet router. That is the path
-#   Erik's phone takes when he is away, so it fails when the VPN path breaks,
-#   not only when the service does.
+#   subnet routing path. The probe is still inside the house: it cannot prove
+#   that a phone on mobile data can reach the router over the internet, or
+#   that the phone's DNS resolver is working.
 # - group "lan": from the k3s node's own network. Routes behind the
 #   lan-only middleware are checked from "phone" only: from the node itself
 #   the request reaches Traefik with an internal source address and gets 403.
@@ -27,13 +28,32 @@ endpoints:
   # ---- phone (through the tailnet) -----------------------------------------
   - name: t3code
     group: phone
-    url: http://192.168.50.232:3773/
+    url: https://t3code.erikfrankling.duckdns.org/
     interval: 1m
     client:
       proxy-url: http://127.0.0.1:1055
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > 480h"
+  # Check the actual live-connection route, not just the static HTML page.
+  # HTTP Upgrade keeps this on Gatus's HTTP client, which honors proxy-url;
+  # its native ws/wss client in v5.37.0 ignores that setting.
+  - name: t3code-websocket
+    group: phone
+    url: https://t3code.erikfrankling.duckdns.org/ws
+    interval: 1m
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      Origin: https://t3code.erikfrankling.duckdns.org
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 101"
   - name: vaultwarden
     group: phone
     url: https://vault.erikfrankling.duckdns.org/alive
