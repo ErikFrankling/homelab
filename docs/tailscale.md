@@ -189,11 +189,14 @@ From a remote client (off Wi-Fi, e.g. phone on mobile data, Tailscale on):
 
 - **Monitoring can be green while a phone on mobile data cannot connect.**
   Gatus's `phone` group uses a Tailscale HTTP proxy on the k3s node. It
-  checks subnet routing through Proxmox, but its encrypted peer connection
-  can stay entirely on the home LAN. It does not check the phone's mobile
-  internet path or the phone's DNS resolver. Since 2026-10-16, the T3
+  checks subnet routing through Proxmox. Since 2026-10-16, the probe forces
+  its encrypted peer connection through an internet DERP relay, so it cannot
+  pass solely over the home LAN. It still does not check the phone's mobile
+  internet path or the phone's DNS resolver. Since that date, the T3
   checks cover its real HTTPS hostname, certificate and `/ws` upgrade;
   previously both T3 checks only fetched the PC's HTTP homepage by IP.
+  SSH dial checks also cover both the PC's LAN address and Proxmox's tailnet
+  address through the same relay and proxy, without attempting authentication.
   Do not call a mobile-only incident repaired based on these checks alone.
   Capture the failing attempt on Proxmox's `tailscale0` interface and compare
   with T3's HTTP traces on the PC to distinguish DNS/routing/TLS failures

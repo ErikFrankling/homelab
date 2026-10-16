@@ -4,8 +4,10 @@
 #
 # The tailscale sidecar joins the tailnet as an ephemeral node (removed when
 # the pod goes away) and offers an HTTP proxy on 127.0.0.1:1055. Checks in the
-# "phone" group go through it, so they take the same path as the phone when it
-# is away from home. The auth key is the tag:client OAuth client secret the
+# "phone" group go through it. Force the probe through an internet DERP relay
+# so it cannot pass solely over a direct connection inside the home LAN.
+# This still cannot test the phone's own mobile network or DNS resolver.
+# The auth key is the tag:client OAuth client secret the
 # NixOS laptops use (dotfiles repo, modules/nixos/tailscale.nix).
 apiVersion: apps/v1
 kind: Deployment
@@ -85,6 +87,10 @@ spec:
             - name: TS_HOSTNAME
               value: gatus-probe
             - name: TS_USERSPACE
+              value: "true"
+            # Supported by this pinned tailscaled version (magicsock/debugknobs.go).
+            # Only the monitoring client uses this; actual clients keep direct UDP.
+            - name: TS_DEBUG_ALWAYS_USE_DERP
               value: "true"
             # State in the emptyDir, not the default Kubernetes secret: the
             # node is ephemeral and the pod has no API access. A directory

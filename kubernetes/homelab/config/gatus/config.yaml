@@ -8,9 +8,8 @@
 # Two vantage points:
 # - group "phone": through the Tailscale sidecar's proxy, i.e. into the
 #   tailnet and back out through the Proxmox subnet router. That is the path
-#   subnet routing path. The probe is still inside the house: it cannot prove
-#   that a phone on mobile data can reach the router over the internet, or
-#   that the phone's DNS resolver is working.
+#   subnet routing path, forced through an internet DERP relay. The probe is
+#   still inside the house: it cannot test the phone's mobile network or DNS.
 # - group "lan": from the k3s node's own network. Routes behind the
 #   lan-only middleware are checked from "phone" only: from the node itself
 #   the request reaches Traefik with an internal source address and gets 403.
@@ -26,6 +25,28 @@ ui:
 
 endpoints:
   # ---- phone (through the tailnet) -----------------------------------------
+  # CONNECT checks the proxy can dial SSH through the tailnet, without
+  # attempting authentication. Native Gatus tcp/ssh checks ignore proxy-url.
+  - name: pc-ssh
+    group: phone
+    url: http://192.168.50.232:22
+    method: CONNECT
+    interval: 1m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: proxmox-ssh
+    group: phone
+    url: http://100.71.229.53:22
+    method: CONNECT
+    interval: 1m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   - name: t3code
     group: phone
     url: https://t3code.erikfrankling.duckdns.org/
