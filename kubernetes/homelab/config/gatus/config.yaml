@@ -25,28 +25,6 @@ ui:
 
 endpoints:
   # ---- phone (through the tailnet) -----------------------------------------
-  # CONNECT checks the proxy can dial SSH through the tailnet, without
-  # attempting authentication. Native Gatus tcp/ssh checks ignore proxy-url.
-  - name: pc-ssh
-    group: phone
-    url: http://192.168.50.232:22
-    method: CONNECT
-    interval: 1m
-    client:
-      proxy-url: http://127.0.0.1:1055
-      timeout: 20s
-    conditions:
-      - "[STATUS] == 200"
-  - name: proxmox-ssh
-    group: phone
-    url: http://100.71.229.53:22
-    method: CONNECT
-    interval: 1m
-    client:
-      proxy-url: http://127.0.0.1:1055
-      timeout: 20s
-    conditions:
-      - "[STATUS] == 200"
   - name: t3code
     group: phone
     url: https://t3code.erikfrankling.duckdns.org/

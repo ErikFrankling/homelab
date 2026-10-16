@@ -195,8 +195,9 @@ From a remote client (off Wi-Fi, e.g. phone on mobile data, Tailscale on):
   internet path or the phone's DNS resolver. Since that date, the T3
   checks cover its real HTTPS hostname, certificate and `/ws` upgrade;
   previously both T3 checks only fetched the PC's HTTP homepage by IP.
-  SSH dial checks also cover both the PC's LAN address and Proxmox's tailnet
-  address through the same relay and proxy, without attempting authentication.
+  Native Gatus TCP/SSH checks do not use the HTTP proxy. Its HTTP CONNECT
+  requests also use an absolute URL that the Tailscale proxy rejects; do not
+  use either as a test of SSH through the tailnet.
   Do not call a mobile-only incident repaired based on these checks alone.
   Capture the failing attempt on Proxmox's `tailscale0` interface and compare
   with T3's HTTP traces on the PC to distinguish DNS/routing/TLS failures
