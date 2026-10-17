@@ -46,6 +46,17 @@ The Docker-to-k3s migration completed on 2026-07-24:
 - AdGuard, Vaultwarden, Hermes, Open WebUI, SearXNG, and OpenClaw run with one
   replica in namespace `homelab`. Their five application PVs have live reclaim
   policy `Retain` and their PVCs are excluded from Flux pruning.
+- Executor 2 (`apps/executor.yaml`, https://executor.erikfrankling.duckdns.org,
+  lan-only) is the one MCP endpoint every agent harness on the PCs gets at
+  launch. Owner login is the `executor-bootstrap` secret; organization "Erik"
+  (slug `executor`). Its data is on the `executor-v2-data` PVC. Executor 1.6's
+  SQLite data is kept, unmounted, on `executor-data` and cannot be read by v2.
+  App code may reach the LAN (`EXECUTOR_APPS_ALLOW_PRIVATE_FETCH=true`).
+- The company brain (`apps/brain.yaml`, https://brain.erikfrankling.duckdns.org,
+  `lan-and-cluster`) is reached by agents through the Executor app `brain`. Its
+  image is built from the private agent-company repo and imported straight into
+  k3s's containerd (`imagePullPolicy: Never`); after a node rebuild rerun
+  `apps/brain/deploy/homelab-image.sh` there.
 - Shared Traefik configuration is tracked under
   `kubernetes/bootstrap/traefik` and applied separately because it lives in
   `kube-system`. DuckDNS ACME state is persistent. The active Let's Encrypt
