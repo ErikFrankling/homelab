@@ -42,7 +42,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: brain
-          image: docker.io/library/brain:96f04c64fe78
+          image: docker.io/library/brain:c3f3c93fb628
           imagePullPolicy: Never
           env:
             - name: BRAIN_BASE_URL
