@@ -1,8 +1,14 @@
-# Executor (https://executor.sh): one MCP endpoint in front of every
-# integration, shared by all agents. Web UI and MCP (/mcp) are served from the
-# same process over a SQLite file in /data, which also holds the generated
-# session secret and the master key that encrypts stored credentials -- losing
-# the PV loses every connected account.
+# Executor 2 (https://executor.sh): one MCP endpoint in front of every app,
+# shared by all agents. Integrations are Executor "apps" (TypeScript, or an MCP
+# server by URL); each app can also ship Agent Skills, which agents read with
+# the endpoint's `skills` tool. The dashboard, API and MCP (/mcp) are one
+# process over an embedded PGlite database in /app/data, which also holds the
+# generated session secret and the encryption key for stored credentials --
+# losing the PV loses every connected account.
+#
+# Executor 1 kept its SQLite data on the executor-data PV. That PV is left in
+# place (not mounted) so 1.6 can be restored by reverting this file; Executor 2
+# cannot read it.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -15,6 +21,20 @@ spec:
   resources:
     requests:
       storage: 2Gi
+  storageClassName: local-path
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: executor-v2-data
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
   storageClassName: local-path
 ---
 apiVersion: apps/v1
@@ -37,69 +57,80 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: executor
-          image: ghcr.io/rhyssullivan/executor-selfhost:1.6.10@sha256:b9e001775d3eb7d662d347c8f7054333c78c1a4fd97cb5a86dc1d1d1406093b9
+          image: ghcr.io/usefulsoftwareco/executor-selfhost:2.0.0-beta.24@sha256:39d8ce360adf86df46e953f43551dad4440d04d7246d30fc7b0d6f3f5cfed3f7
           imagePullPolicy: IfNotPresent
           env:
-            # Must match the URL browsers load exactly, or logins fail with
+            # Must match the URL browsers load exactly, or sign-in fails with
             # an invalid-origin error.
-            - name: EXECUTOR_WEB_BASE_URL
+            - name: BETTER_AUTH_URL
               value: https://executor.erikfrankling.duckdns.org
-            # Upstream integrations on the LAN (the PC's computer-use MCP at
-            # 192.168.50.232) are refused by the SSRF guard without this.
-            # It also lets sandboxed tool code reach the LAN; acceptable
-            # because the only account is the owner's and the route is
-            # lan-only.
-            - name: EXECUTOR_ALLOW_LOCAL_NETWORK
+            # App code may only fetch public addresses by default. The brain
+            # app (brain.erikfrankling.duckdns.org) and the PC's computer-use
+            # MCP (192.168.50.232) are on the LAN. This lets every app reach
+            # the LAN; acceptable because the only account is the owner's and
+            # the route is lan-only.
+            - name: EXECUTOR_APPS_ALLOW_PRIVATE_FETCH
               value: "true"
-          envFrom:
-            # EXECUTOR_BOOTSTRAP_ADMIN_{EMAIL,PASSWORD}: creates the owner on
-            # first boot so there is no open first-run signup window.
-            - secretRef:
-                name: executor-bootstrap
+            - name: DO_NOT_TRACK
+              value: "1"
           ports:
-            - containerPort: 4788
+            - containerPort: 4400
               name: http
               protocol: TCP
+          startupProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
           livenessProbe:
             failureThreshold: 5
             httpGet:
-              path: /api/health
+              path: /health
               port: http
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            failureThreshold: 12
+            failureThreshold: 3
             httpGet:
-              path: /api/health
+              path: /health
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
           resources:
             limits:
-              memory: 1Gi
+              memory: 3Gi
             requests:
-              memory: 256Mi
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
             runAsNonRoot: true
-            runAsUser: 65532
-            runAsGroup: 65532
+            # The image's `executor` user; its entrypoint skips the root-only
+            # volume preparation when started as this user.
+            runAsUser: 1000
+            runAsGroup: 1000
             seccompProfile:
               type: RuntimeDefault
           volumeMounts:
-            - mountPath: /data
+            - mountPath: /app/data
               name: data
+            # Traces from the bundled Motel collector; disposable.
+            - mountPath: /app/motel-data
+              name: motel
       securityContext:
-        fsGroup: 65532
+        fsGroup: 1000
         fsGroupChangePolicy: OnRootMismatch
       terminationGracePeriodSeconds: 30
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: executor-data
+            claimName: executor-v2-data
+        - name: motel
+          emptyDir:
+            sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service

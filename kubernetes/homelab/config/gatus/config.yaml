@@ -83,7 +83,16 @@ endpoints:
       - "[STATUS] == 200"
   - name: executor
     group: phone
-    url: https://executor.erikfrankling.duckdns.org/
+    url: https://executor.erikfrankling.duckdns.org/health
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: brain
+    group: phone
+    url: https://brain.erikfrankling.duckdns.org/health
     interval: 2m
     client:
       proxy-url: http://127.0.0.1:1055

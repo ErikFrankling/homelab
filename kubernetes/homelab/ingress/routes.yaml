@@ -46,6 +46,16 @@ spec:
       services:
         - name: executor
           port: 80
+    # The company brain: how things are done on these machines. Not secret by
+    # design, but internal. lan-and-cluster because Executor's brain app
+    # reaches it from inside the cluster by this name.
+    - kind: Rule
+      match: Host(`brain.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-and-cluster
+      services:
+        - name: brain
+          port: 80
     # This endpoint receives screenshots of whatever is on screen. lan-only is
     # load-bearing here, not defence in depth -- it must never be reachable
     # from the internet.

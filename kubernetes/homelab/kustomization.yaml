@@ -16,6 +16,7 @@ resources:
   - apps/openclaw.yaml
   - apps/time.yaml
   - apps/executor.yaml
+  - apps/brain.yaml
   - apps/nix-builder.yaml
   - apps/gatus.yaml
   - dns/duckdns.yaml
@@ -24,6 +25,7 @@ resources:
   - secrets/adguard.enc.yaml
   - secrets/duckdns.enc.yaml
   - secrets/executor.enc.yaml
+  - secrets/brain.enc.yaml
   - secrets/nix-builder.enc.yaml
   - secrets/gatus.enc.yaml
   - backup/backup.yaml
