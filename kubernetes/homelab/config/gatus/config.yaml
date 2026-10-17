@@ -38,9 +38,10 @@ endpoints:
   # Check the actual live-connection route, not just the static HTML page.
   # HTTP Upgrade keeps this on Gatus's HTTP client, which honors proxy-url;
   # its native ws/wss client in v5.37.0 ignores that setting.
+  # The query matters: the server answers 426 to clients without it.
   - name: t3code-websocket
     group: phone
-    url: https://t3code.erikfrankling.duckdns.org/ws
+    url: https://t3code.erikfrankling.duckdns.org/ws?orchestrationProtocol=2
     interval: 1m
     headers:
       Connection: Upgrade
