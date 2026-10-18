@@ -77,6 +77,11 @@ The Docker-to-k3s migration completed on 2026-07-24:
 - `kubernetes/optional/media` is not reconciled. It requires a separate
   Retain-backed media disk and Mullvad WireGuard secret before activation.
 
+## Router
+
+TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
+`192.168.0.x`; restore it with `docs/router.md`.
+
 ## SSH Targets
 
 - `ssh proxmox`: Proxmox VE host, IP `192.168.50.169/24` on `vmbr0`.
