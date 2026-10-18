@@ -28,7 +28,7 @@ The router only accepts reservations inside the pool.
 | Reservation | MAC | IP |
 |---|---|---|
 | pc | `E8-9C-25-46-5C-84` | `192.168.50.232` |
-| framework (KVM ethernet) | `34-1B-22-83-55-87` | `192.168.50.137` |
+| framework (KVM ethernet) | `34-1B-22-83-55-87` | `192.168.50.133` |
 
 The framework reservation uses the USB ethernet adapter in the KVM. The laptop
 keeps its real MAC on wired links (dotfiles, `hosts/framework`); a random MAC
