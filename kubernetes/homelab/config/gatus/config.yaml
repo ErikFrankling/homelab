@@ -139,6 +139,13 @@ endpoints:
     interval: 2m
     conditions:
       - "[STATUS] == 200"
+  # T3 Code's read-aloud voice while dictation holds the PC's GPU.
+  - name: kokoro-tts
+    group: lan
+    url: http://192.168.50.100:8880/v1/audio/voices
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
   - name: nix-builder-ssh
     group: lan
     url: tcp://192.168.50.100:2222

@@ -1,0 +1,79 @@
+# Kokoro TTS (Kokoro-FastAPI): the small read-aloud voice for T3 Code on the
+# PC, used while dictation holds the PC's GPU (see ~/.dotfiles
+# research/read-aloud). OpenAI-style POST /v1/audio/speech on the LAN at
+# 192.168.50.100:8880.
+#
+# CPU image for now: the GTX 1060's kernel module (580.173) no longer matches
+# the driver unattended-upgrades installed (580.178), and reloading it needs a
+# k3s restart. Afterwards the GPU image is ghcr.io/remsky/kokoro-fastapi-gpu:
+# v0.9.0-cu126 (cu128+ builds no longer support Pascal) with
+# `nvidia.com/gpu: 1` and `runtimeClassName: nvidia`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kokoro-tts
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kokoro-tts
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kokoro-tts
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: kokoro-tts
+          image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0@sha256:ee3111d6a2c903ed62f3b4fa19543c6901205ed39fce3c177e895b34a8386b9c
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8880
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /v1/audio/voices
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /v1/audio/voices
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            limits:
+              memory: 3Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kokoro-tts
+spec:
+  externalTrafficPolicy: Local
+  ports:
+    - name: http
+      port: 8880
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: kokoro-tts
+  type: LoadBalancer

@@ -19,6 +19,7 @@ resources:
   - apps/brain.yaml
   - apps/nix-builder.yaml
   - apps/gatus.yaml
+  - apps/kokoro-tts.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
