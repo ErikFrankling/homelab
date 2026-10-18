@@ -269,3 +269,18 @@ The i7-6700K's integrated HD 530 is currently disabled in BIOS; there is no
 *Init Display First* to IGFX would give the host a permanent console and make the
 1060 a pure passthrough device. This is the recommended configuration and needs
 only physical access and one host reboot.
+
+## Driver upgrades: never automatic
+
+The loaded `nvidia` kernel module must match the installed driver. On
+2026-10-09 unattended-upgrades moved the driver from 580.173 to 580.178 while
+the old module stayed loaded, and NVML failed with "Driver/library version
+mismatch" until 2026-10-18. NVIDIA packages are therefore blacklisted in
+`/etc/apt/apt.conf.d/52-nvidia-no-auto-upgrade` on naiaclaw.
+
+To upgrade deliberately without rebooting: open a health-watch maintenance
+window, `apt upgrade` the `nvidia-*-580-server` packages, then
+`sudo systemctl stop k3s`, stop the `nvidia-device-plugin` process (the only
+other holder of `/dev/nvidia*`), `sudo rmmod nvidia_uvm nvidia`,
+`sudo modprobe nvidia nvidia_uvm`, check `nvidia-smi`, and
+`sudo systemctl start k3s`. Running pods keep running while k3s is stopped.

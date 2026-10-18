@@ -1,13 +1,9 @@
-# Kokoro TTS (Kokoro-FastAPI): the small read-aloud voice for T3 Code on the
-# PC, used while dictation holds the PC's GPU (see ~/.dotfiles
+# Kokoro TTS (Kokoro-FastAPI) on the GTX 1060: the small read-aloud voice for
+# T3 Code on the PC, used while dictation holds the PC's GPU (see ~/.dotfiles
 # research/read-aloud). OpenAI-style POST /v1/audio/speech on the LAN at
-# 192.168.50.100:8880.
+# 192.168.50.100:8880. On this node's CPU it was slower than real time.
 #
-# CPU image for now: the GTX 1060's kernel module (580.173) no longer matches
-# the driver unattended-upgrades installed (580.178), and reloading it needs a
-# k3s restart. Afterwards the GPU image is ghcr.io/remsky/kokoro-fastapi-gpu:
-# v0.9.0-cu126 (cu128+ builds no longer support Pascal) with
-# `nvidia.com/gpu: 1` and `runtimeClassName: nvidia`.
+# cu126 image: cu128+ builds of PyTorch no longer support Pascal (sm_61).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,9 +22,10 @@ spec:
         app.kubernetes.io/name: kokoro-tts
     spec:
       automountServiceAccountToken: false
+      runtimeClassName: nvidia
       containers:
         - name: kokoro-tts
-          image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0@sha256:ee3111d6a2c903ed62f3b4fa19543c6901205ed39fce3c177e895b34a8386b9c
+          image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.9.0-cu126@sha256:9ba150465c6b8f5d6b1c62b54de83eb9aa0a1444aad8a1a9c8948eed60564b76
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8880
@@ -52,8 +49,9 @@ spec:
           resources:
             limits:
               memory: 3Gi
+              nvidia.com/gpu: 1
             requests:
-              cpu: 500m
+              cpu: 250m
               memory: 1Gi
           securityContext:
             allowPrivilegeEscalation: false
