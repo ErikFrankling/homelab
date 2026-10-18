@@ -28,14 +28,19 @@ The router only accepts reservations inside the pool.
 | Reservation | MAC | IP |
 |---|---|---|
 | pc | `E8-9C-25-46-5C-84` | `192.168.50.232` |
-| proxmox | `1C-1B-0D-A4-40-C0` | `192.168.50.169` |
+| framework (KVM ethernet) | `34-1B-22-83-55-87` | `192.168.50.137` |
 
-Proxmox is static on the machine and never asks for a lease; its reservation
-only stops the router from giving `.169` to another device.
+The framework reservation uses the USB ethernet adapter in the KVM. The laptop
+keeps its real MAC on wired links (dotfiles, `hosts/framework`); a random MAC
+would miss the reservation.
 
-**Never put `.100` in the pool.** It is the static address of VM 200 (naiaclaw,
-MAC `BC-24-11-37-6C-2C`): Traefik, AdGuard DNS, nix-builder and the binary
-cache. It sits below the pool, so it needs no reservation.
+Static addresses sit below the pool and need no reservation. **Never move the
+pool below `.110`.**
+
+| Static | Address | MAC |
+|---|---|---|
+| Proxmox host | `192.168.50.10` | `1C-1B-0D-A4-40-C0` |
+| naiaclaw (VM 200): Traefik, AdGuard DNS, nix-builder, binary cache | `192.168.50.100` | `BC-24-11-37-6C-2C` |
 
 No port forwards are needed. `*.erikfrankling.duckdns.org` points at the private
 `192.168.50.100` and is only reachable at home or over Tailscale. Do not recreate
@@ -53,7 +58,7 @@ the old OpenVPN UDP 1194 forward.
    ```bash
    nmcli connection up "$(nmcli -g GENERAL.CONNECTION device show eno1)"
    ip -br a show eno1          # 192.168.50.232
-   ping -c1 192.168.50.169
+   ping -c1 192.168.50.10
    curl -I https://t3code.erikfrankling.duckdns.org
    ```
 

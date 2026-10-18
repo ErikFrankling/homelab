@@ -17,14 +17,14 @@ tailnet policy if adopted later) stays in Git.
 
 ## How it works
 
-- The Proxmox host (`192.168.50.169`) runs `tailscaled` and advertises
+- The Proxmox host (`192.168.50.10`) runs `tailscaled` and advertises
   `192.168.50.0/24` as a subnet route.
 - Remote devices (phone, laptop) join the same tailnet with "use subnet
   routes" enabled. They can then reach every LAN IP, including the homelab address
   `192.168.50.100`. DuckDNS already resolves `*.erikfrankling.duckdns.org` to
   that private IP, so all HTTPS routes work unchanged when remote.
 - The subnet router SNATs forwarded traffic by default, so requests arrive on
-  the LAN appearing to come from `192.168.50.169` — the Traefik `lan-only`
+  the LAN appearing to come from `192.168.50.10` — the Traefik `lan-only`
   allowlist passes without depending on the Tailscale range. The Tailscale
   CGNAT range `100.64.0.0/10` is also in the allowlists (replacing the old
   `10.8.0.0/24`) so nothing breaks if SNAT is ever disabled to preserve
@@ -32,11 +32,11 @@ tailnet policy if adopted later) stays in Git.
 - **The router needs no configuration at all.** Tailscale only makes outbound
   connections. (Optional: if `tailscale ping <device>` shows traffic relayed
   via DERP instead of "direct", enable UPnP/NAT-PMP on the router or forward
-  UDP 41641 to `192.168.50.169`.)
+  UDP 41641 to `192.168.50.10`.)
 
 ## Full setup from scratch (Proxmox host, Debian 13)
 
-All as root on the Proxmox host (`ssh root@192.168.50.169`).
+All as root on the Proxmox host (`ssh root@192.168.50.10`).
 
 1. Install Tailscale from the official apt repo:
 

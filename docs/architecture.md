@@ -4,7 +4,7 @@
 
 | Role | Address | Notes |
 |---|---|---|
-| Proxmox | `192.168.50.169` | Physical host |
+| Proxmox | `192.168.50.10` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
 | k3s VM (`naiaclaw`) | `192.168.50.100` | Single Kubernetes node, 8 vCPU (all host threads), 58 GiB RAM, GTX 1060 passed through |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |

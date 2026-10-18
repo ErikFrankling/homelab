@@ -84,7 +84,7 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 
 ## SSH Targets
 
-- `ssh proxmox`: Proxmox VE host, IP `192.168.50.169/24` on `vmbr0`.
+- `ssh proxmox`: Proxmox VE host, IP `192.168.50.10/24` on `vmbr0`.
 - `ssh docker`: Debian Docker VM, IP configured in Proxmox as `192.168.50.100/24`.
 - `ssh naiaclaw`: Ubuntu k3s VM, IP configured in Proxmox as `192.168.50.100/24`.
 

@@ -186,7 +186,7 @@ endpoints:
       - "[CONNECTED] == true"
   - name: proxmox
     group: lan
-    url: https://192.168.50.169:8006/
+    url: https://192.168.50.10:8006/
     interval: 2m
     client:
       insecure: true
