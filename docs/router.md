@@ -64,5 +64,9 @@ the old OpenVPN UDP 1194 forward.
 
    `nmcli device reapply` keeps the old lease; bringing the connection up again
    gets the reservation. On 2026-08-05 Proxmox only answered after a reboot.
-5. Save a config backup: **Advanced → System → Backup & Restore**. Keep the file
-   outside this public repo.
+5. Save a config backup: **Advanced → System → Backup & Restore → Back Up**.
+   Keep the file outside this public repo; it holds the Wi-Fi and admin
+   passwords. The current one is `~/Documents/router/` on the pc (2026-10-18).
+
+With a backup, steps 2-3 become **Backup & Restore → Upload → Restore** after
+the admin password is set.
