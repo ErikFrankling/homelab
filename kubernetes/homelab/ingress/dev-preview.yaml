@@ -3,7 +3,7 @@
 # (192.168.50.232:3999), which reads the port out of the hostname, checks it
 # against an allowlist of dev-server ports and proxies to localhost:<port>
 # (dotfiles repo, modules/nixos/dev-preview.nix). Dev servers stay on
-# loopback, and the PC firewall admits :3999 only from the k3s node and VIP.
+# loopback, and the PC firewall admits :3999 only from the k3s node (192.168.50.100).
 #
 # Traefik cannot turn a hostname into a backend port, hence the one catch-all
 # route plus the proxy. `pc-<port>` is a single label on purpose: the existing

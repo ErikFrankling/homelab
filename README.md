@@ -21,7 +21,7 @@ remote access via the Tailscale subnet router on the Proxmox host.
   GTX 1060 is passed through for TTS; RAM dropped from 13 GiB to 12 GiB because
   passthrough pins the whole guest allocation. See
   [docs/gpu-passthrough.md](docs/gpu-passthrough.md).
-- `192.168.50.100` is a persistent VIP on VM 200, so DuckDNS names and LAN DNS
+- `192.168.50.100` is VM 200's address (it took over from the Docker VM), so DuckDNS names and LAN DNS
   clients did not change.
 - All six migrated workloads run in namespace `homelab`; Flux reconciles public
   `main` within one minute.

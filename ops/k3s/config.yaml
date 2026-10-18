@@ -1,15 +1,10 @@
-# Advertise the stable homelab VIP through K3s ServiceLB. Traffic addressed to
-# this IP then follows the source-preserving LoadBalancer path instead of the
-# host-port NAT path.
-node-external-ip: 192.168.50.100
-
-# advertise-address defaults to node-external-ip, which put the VIP in the
-# kubernetes Service endpoint. Pods reaching the apiserver through 10.43.0.1
-# were then DNATed to the VIP and hairpinned back into the node, which fails --
-# it took out every pod that talks to the API (Flux, Kyverno) while leaving
-# everything that does not looking healthy. Pin this to the node IP so in-cluster
-# API traffic stays off the VIP; ServiceLB keeps using node-external-ip.
-advertise-address: 192.168.50.200
+# The VM has a single address, 192.168.50.100, which DuckDNS points at. With it
+# as the node IP, ServiceLB publishes it as every LoadBalancer ingress IP, so
+# kube-proxy delivers LAN traffic on the source-preserving LoadBalancer path and
+# Traefik's lan-only allowlist sees real client addresses. The apiserver
+# advertises the same address. Until 2026-10-18 the node IP was .200 with .100
+# as a second "VIP", which needed node-external-ip and an advertise-address pin.
+node-ip: 192.168.50.100
 
 # The kubelet never enforces CPU limits on this node; see docs/architecture.md.
 kubelet-arg:

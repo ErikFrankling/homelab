@@ -6,15 +6,16 @@
 |---|---|---|
 | Proxmox | `192.168.50.169` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
-| k3s VM (`naiaclaw`) | `192.168.50.200` | Single Kubernetes node, 8 vCPU (all host threads), 58 GiB RAM, GTX 1060 passed through |
-| Homelab service VIP | `192.168.50.100` | Active on k3s through netplan |
+| k3s VM (`naiaclaw`) | `192.168.50.100` | Single Kubernetes node, 8 vCPU (all host threads), 58 GiB RAM, GTX 1060 passed through |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |
 
-DuckDNS resolves the apex and wildcard to `192.168.50.100`. The address is
-declared in `ops/netplan/60-homelab-vip.yaml`, so systemd-networkd owns it and
-keeps it across restarts, and is advertised as the node external IP through
-`ops/k3s/config.yaml`. This makes K3s ServiceLB use its source-preserving path
-for the VIP. VM 200 must never hold the VIP while VM 100 is running.
+DuckDNS resolves the apex and wildcard to `192.168.50.100`, the VM's only
+address. It is the k3s node IP (`ops/k3s/config.yaml`), so ServiceLB publishes
+it as every LoadBalancer ingress IP and kube-proxy delivers LAN traffic on the
+source-preserving path; Traefik's `lan-only` allowlist depends on that. Until
+2026-10-18 the node IP was `.200` with `.100` as a second address, which needed
+`node-external-ip` and an `advertise-address` pin. VM 100 is also configured
+with `.100` and must never run.
 
 K3s ServiceLB owns host port 53 for AdGuard. That host-port rule also intercepts
 the systemd-resolved stub address, so `/etc/resolv.conf` on `naiaclaw` points to
@@ -51,7 +52,7 @@ through DuckDNS DNS-01.
 
 The Traefik dashboard, AdGuard, OpenClaw, and experiment passthrough routes use
 `lan-only`. The registry alone uses `lan-and-cluster`, adding pod/service CIDRs
-so containerd can pull through the VIP hairpin. Vaultwarden and Open WebUI
+so containerd can pull through the node-IP hairpin. Vaultwarden and Open WebUI
 preserve their previous non-LAN-restricted behavior.
 
 External experiment routes remain in Kubernetes as selectorless Services plus

@@ -20,7 +20,7 @@ tailnet policy if adopted later) stays in Git.
 - The Proxmox host (`192.168.50.169`) runs `tailscaled` and advertises
   `192.168.50.0/24` as a subnet route.
 - Remote devices (phone, laptop) join the same tailnet with "use subnet
-  routes" enabled. They can then reach every LAN IP, including the service VIP
+  routes" enabled. They can then reach every LAN IP, including the homelab address
   `192.168.50.100`. DuckDNS already resolves `*.erikfrankling.duckdns.org` to
   that private IP, so all HTTPS routes work unchanged when remote.
 - The subnet router SNATs forwarded traffic by default, so requests arrive on
@@ -177,7 +177,7 @@ tailscale ip -4           # the node's 100.x.y.z address
 From a remote client (off Wi-Fi, e.g. phone on mobile data, Tailscale on):
 
 1. `https://vault.erikfrankling.duckdns.org` loads (route through subnet
-   router to the VIP works; certificate is the normal wildcard).
+   router to `.100` works; certificate is the normal wildcard).
 2. A `lan-only` route such as `https://adguard.erikfrankling.duckdns.org`
    loads (SNAT makes the request LAN-sourced).
 3. `tailscale ping proxmox` reports `direct` (relayed via DERP also works but

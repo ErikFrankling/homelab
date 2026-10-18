@@ -91,7 +91,7 @@ spec:
                 # The DuckDNS subdomain label on its own, not the FQDN.
                 - name: DUCKDNS_DOMAIN
                   value: "erikfrankling"
-                # The VIP netplan puts on VM 200, which is what
+                # VM 200's address, which is what
                 # every route behind Traefik expects to be reachable at.
                 - name: DUCKDNS_IP
                   value: "192.168.50.100"

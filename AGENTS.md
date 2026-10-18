@@ -8,7 +8,7 @@ Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
 - This public repo and GitHub `main` are the active homelab source. Check Flux
   and the live k3s host before assuming a local checkout is current.
 - The Docker VM is a powered-off rollback artifact. Never start it while
-  VM 200 holds the `.100` VIP (`/etc/netplan/60-homelab-vip.yaml`).
+  VM 200 owns its address, `192.168.50.100`.
 - The frozen Docker checkout is `/home/debian/homelab` at commit `e16ee23`.
   It is reachable by SSH only during an intentional rollback.
 - Do not edit live host config, restart services, resize VMs, or change Kubernetes workloads unless the user explicitly asks.
@@ -30,7 +30,7 @@ The Docker-to-k3s migration completed on 2026-07-24:
   Vaultwarden/Open WebUI SQLite integrity checks and selected row counts matched
   the stopped sources.
 - VM 100 is stopped with `onboot=0`; its containers, data, and 150 GiB disk are
-  intact. VM 200 owns the active `192.168.50.100` VIP.
+  intact. VM 200 now owns `192.168.50.100`.
 - The obsolete `husk` Helm release and namespace were removed on 2026-07-24.
   A verified logical PostgreSQL dump is retained privately under
   `/home/ubuntu/retired-husk` on `naiaclaw`.
@@ -62,11 +62,11 @@ The Docker-to-k3s migration completed on 2026-07-24:
   `kube-system`. DuckDNS ACME state is persistent. The active Let's Encrypt
   apex/wildcard certificate was verified with a valid trust chain and expires
   2026-10-22.
-- `ops/netplan/60-homelab-vip.yaml` adds `.100` to eth0, so systemd-networkd
-  owns it and keeps it across its own restarts (a separate `ip address` unit
-  lost it to an unattended systemd upgrade on 2026-10-15);
-  `ops/k3s/config.yaml` advertises it as the node external IP so ServiceLB
-  preserves LAN source addresses. Never start VM 100 while the VIP is active.
+- Since 2026-10-18 VM 200 has a single address, `192.168.50.100`, set by
+  Proxmox cloud-init. It is the k3s node IP (`ops/k3s/config.yaml`), so
+  ServiceLB publishes it for every LoadBalancer and Traefik sees real LAN
+  client addresses. It used to be `.200` plus a `.100` VIP, which needed
+  `node-external-ip` and an `advertise-address` pin. Never start VM 100.
 - Because ServiceLB owns host port 53, `/etc/resolv.conf` on `naiaclaw` points
   to `/run/systemd/resolve/resolv.conf` instead of the intercepted local stub.
   `ops/sysctl/99-homelab.conf` raises inotify capacity for cluster workloads.
@@ -86,7 +86,7 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 
 - `ssh proxmox`: Proxmox VE host, IP `192.168.50.169/24` on `vmbr0`.
 - `ssh docker`: Debian Docker VM, IP configured in Proxmox as `192.168.50.100/24`.
-- `ssh naiaclaw`: Ubuntu k3s VM, IP configured in Proxmox as `192.168.50.200/24`.
+- `ssh naiaclaw`: Ubuntu k3s VM, IP configured in Proxmox as `192.168.50.100/24`.
 
 ## Physical Host
 
@@ -177,12 +177,11 @@ totals about 3.8 GiB.
 - Hostname: `naiaclaw`.
 - OS: Ubuntu 24.04.4 LTS, kernel `6.8.0-136-generic`.
 - Proxmox config: 4 vCPUs, 13312 MB RAM, 160 GB disk, IP
-  `192.168.50.200/24`, gateway `192.168.50.1`.
+  `192.168.50.100/24`, gateway `192.168.50.1`.
 - k3s: `v1.35.5+k3s1`.
 - Kubernetes node: single node `naiaclaw`, role `control-plane`, container runtime `containerd://2.2.3-k3s1`.
 - `kubectl` needs sudo for `/etc/rancher/k3s/k3s.yaml` on this VM.
-- Node addresses are internal `192.168.50.200` and external/VIP
-  `192.168.50.100`.
+- Node address: internal `192.168.50.100`, no external IP.
 - Root is about 154 GiB total with about 76 GiB available after migration.
 - Final `kubectl top node` observed about 10190 MiB (78%). `free` reported about
   5 GiB available, no swap, and Kubernetes reported no memory pressure.
@@ -214,7 +213,7 @@ disk, and do not place media on the root-backed storage class.
   encrypted-secret, and suspended-backup manifests.
 - `kubernetes/optional/media/`: inactive Mullvad/qBittorrent/Servarr/Jellyfin
   design.
-- `ops/`: migration helper plus tracked VIP, k3s, and sysctl host configuration.
+- `ops/`: migration helper plus tracked k3s and sysctl host configuration.
 
 ## Useful Commands
 

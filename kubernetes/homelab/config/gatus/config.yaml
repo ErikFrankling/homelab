@@ -167,7 +167,7 @@ endpoints:
     conditions:
       - "[BODY] == 0.0.0.0"
   # DuckDNS itself, asked from outside: every *.erikfrankling.duckdns.org
-  # name must point at the service VIP.
+  # name must point at the homelab address (192.168.50.100).
   - name: duckdns
     group: lan
     url: 1.1.1.1

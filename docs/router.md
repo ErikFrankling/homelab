@@ -5,9 +5,9 @@ TP-Link **Archer AX12** (AX1500), LAN MAC `20:e1:5d:e4:2e:e0`, firmware
 Wi-Fi name are not recorded here.
 
 The homelab uses static addresses on `192.168.50.0/24`. A factory-reset router
-comes back on `192.168.0.1/24`, which strands Proxmox, naiaclaw and the `.100`
-VIP until the settings below are restored. This happened on 2026-08-05 and
-again on 2026-10-17.
+comes back on `192.168.0.1/24`, which strands Proxmox and naiaclaw (`.100`)
+until the settings below are restored. This happened on 2026-08-05
+and again on 2026-10-17.
 
 ## Settings
 
@@ -29,13 +29,13 @@ The router only accepts reservations inside the pool.
 |---|---|---|
 | pc | `E8-9C-25-46-5C-84` | `192.168.50.232` |
 | proxmox | `1C-1B-0D-A4-40-C0` | `192.168.50.169` |
-| naiaclaw (VM 200) | `BC-24-11-37-6C-2C` | `192.168.50.200` |
 
-Proxmox and naiaclaw are static on the machines and never ask for a lease; their
-reservations only stop the router from giving those addresses to another device.
+Proxmox is static on the machine and never asks for a lease; its reservation
+only stops the router from giving `.169` to another device.
 
-**Never put `.100` in the pool or reserve it.** It is the extra address on VM 200
-for Traefik, AdGuard DNS, nix-builder and the binary cache.
+**Never put `.100` in the pool.** It is the static address of VM 200 (naiaclaw,
+MAC `BC-24-11-37-6C-2C`): Traefik, AdGuard DNS, nix-builder and the binary
+cache. It sits below the pool, so it needs no reservation.
 
 No port forwards are needed. `*.erikfrankling.duckdns.org` points at the private
 `192.168.50.100` and is only reachable at home or over Tailscale. Do not recreate
