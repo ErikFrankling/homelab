@@ -180,11 +180,27 @@ single 400-day metrics retention covers Time's "at least a year".
   embedding. Loki is behind `lan-only` like Time itself, on the same node.
   Open question for Erik: window titles in the 5-year Loki copy (it is the
   rebuild source, so they are kept unless he says otherwise).
-- **Alerts (low priority, ntfy only, no session):** Time server down (Gatus
-  check, plus the exporter's queue growing); "no events from device X for
-  2 h while it is online", where online means that device's Alloy reported
-  in the last 10 minutes (pc, laptop). The phone has no Alloy: alert if it
-  sent nothing for 24 h.
+- **Health check:** Gatus probes the Time service's `GET /healthz` on port
+  7373 (database writable). Data freshness is **not** part of the Gatus
+  check: a failing Gatus check starts a repair session, and "no event for
+  an hour" is normal every night. Freshness is the alert below instead.
+- **Alerts (low priority, ntfy only, no session):**
+  - Time server down: the Gatus check, plus the exporter's queue growing.
+  - Device silent: every emitter sends `time.heartbeat` (attributes
+    `spool.pending`, `app.version`) on each sync; the phone every 15 min
+    on Wi-Fi. The Time server, which receives every event anyway, exposes
+    `time_device_last_heartbeat_timestamp_seconds{device}` and
+    `time_device_spool_pending{device}` on `/metrics`, scraped by the
+    gateway Alloy. Alloy cannot turn a log attribute into a gauge cleanly.
+    - pc, laptop: no heartbeat for 2 h while that device's Alloy reported
+      in the last 10 min.
+    - phone: no heartbeat for 2 h, only 08:00–23:00 Europe/Stockholm
+      (Android Doze holds syncs overnight). Done with an Alertmanager
+      `time_intervals` entry with `location: Europe/Stockholm` as the
+      route's `active_time_intervals`, not with PromQL `hour()`, which is
+      UTC and breaks at daylight-saving changes.
+  - Phone spool growing: `spool.pending` rising for 6 h, so a broken token
+    or route shows up before the spool fills.
 
 ### OTel conventions for every emitter
 
