@@ -103,6 +103,16 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  # How the T3 Code Android app gets JS updates (apps/t3-updates.yaml).
+  - name: t3-updates
+    group: phone
+    url: https://t3-updates.erikfrankling.duckdns.org/healthz
+    interval: 5m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   - name: time
     group: phone
     url: https://time.erikfrankling.duckdns.org/

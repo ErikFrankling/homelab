@@ -1,0 +1,75 @@
+# Update server for Erik's T3 Code Android app (the fork's docs/erik-updates.md).
+# Stateless: it reads index.json from the fork's rolling `android-ota` GitHub
+# release, where CI publishes signed JS updates, and answers expo-updates'
+# manifest requests from it. Holds no secrets; the app rejects any manifest
+# not signed by the fork's key. Code: config/t3-updates/server.mjs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: t3-updates
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: t3-updates
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: t3-updates
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: t3-updates
+          image: docker.io/library/node:24-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/app/server.mjs"]
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 15
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 48Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: code
+          configMap:
+            name: t3-updates-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: t3-updates
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: t3-updates

@@ -76,3 +76,12 @@ spec:
       services:
         - name: nix-builder
           port: 5000
+    # Signed JS updates for the T3 Code Android app (apps/t3-updates.yaml).
+    # Public data, but the phone reaches it over the tailnet like T3 Code.
+    - kind: Rule
+      match: Host(`t3-updates.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: t3-updates
+          port: 80

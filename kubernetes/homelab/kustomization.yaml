@@ -20,6 +20,7 @@ resources:
   - apps/nix-builder.yaml
   - apps/gatus.yaml
   - apps/kokoro-tts.yaml
+  - apps/t3-updates.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
@@ -45,6 +46,10 @@ configMapGenerator:
       - config/nix-builder/nix.conf
       - config/nix-builder/harmonia.toml
       - config/nix-builder/authorized_keys
+  # The T3 Code update server: editing it restarts the pod.
+  - name: t3-updates-code
+    files:
+      - config/t3-updates/server.mjs
   # And the health checks: editing the list restarts Gatus.
   - name: gatus-config
     files:
