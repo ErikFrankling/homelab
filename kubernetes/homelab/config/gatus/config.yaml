@@ -16,6 +16,10 @@
 storage:
   type: memory
 concurrency: 0
+# Prometheus metrics at :18080/metrics (gatus_results_*), so the planned
+# alerting stack reads the same results health-watch does
+# (docs/observability.md).
+metrics: true
 web:
   # The pod runs on the host network (apps/gatus.yaml); keep off 8080.
   port: 18080
@@ -185,6 +189,14 @@ endpoints:
     conditions:
       - "[DNS_RCODE] == NOERROR"
       - "[BODY] == 192.168.50.100"
+  # The PC's local model server: dictation's final pass, read-aloud summaries
+  # and the big voice all go through it.
+  - name: llama-swap
+    group: lan
+    url: http://192.168.50.232:8000/health
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
   - name: pc-ssh
     group: lan
     url: tcp://192.168.50.232:22
