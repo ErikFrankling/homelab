@@ -130,44 +130,56 @@ PVC sizes, so retention is the only real limit.
 | Data | Store | Retention | Size budget |
 |---|---|---|---|
 | Metrics, infra and activity counters | Prometheus TSDB | 400 d, capped at 25 GB (`retention.size`) | 25 GB |
-| Logs, ops and activity events | Loki | 30 d | 20 GB |
-| Activity events, forever | Time's own database (Time server) | forever, deduped by `event.id` | Time's PVC |
+| Ops logs | Loki | 30 d | 20 GB |
+| Activity events, raw copy | Loki, stream `{service_namespace="time"}` | `retention_stream` 5 y | ~1–2 GB over 5 y (screen embeddings dominate) |
+| Activity events, classified | Time's own database (Time server) | forever, deduped by `event.id` | Time's PVC |
 | Traces | Tempo, only once the T3 fork emits spans | 7 d | 5 GB |
 
 `time_*` and `gen_ai.client.token.usage` are a handful of series, so the
 single 400-day metrics retention covers Time's "at least a year".
 
 - Time's database is the **source of truth** for activity (Time proposal,
-  `~/projects/personal/time/PROPOSAL.md`). This stack is the transport and
-  the 30-day window for Grafana and alerts.
+  `~/projects/personal/time/PROPOSAL.md`). The Loki `time` stream is the
+  raw copy Time can rebuild from, so it keeps every attribute, including
+  the screen embedding: pixels are discarded on the pc, so a dropped
+  embedding could never be recomputed.
+- Loki 3 indexes `service.namespace` as the label `service_namespace` by
+  default, so the 5-year rule needs no extra label config.
 - **Backups are not operational** (docs/backups.md). Activity data is the
-  first thing here that cannot be regenerated, so the B2 backup has to work
-  before Time depends on this stack.
+  first thing here that cannot be regenerated. Time v2 does not go live
+  until the Time database and the Loki volume are backed up off the node
+  (B2 CronJobs in `backup/backup.yaml`, plus a restore test).
 
 ### The Time pipeline (requirements from the Time redesign, 2026-10-21)
 
 - **Emitters:** T3 Code server (its existing `OTEL_EXPORTER_OTLP_*` export,
   set in the dotfiles `hosts/pc/home.nix`), the local-stt gateway, a voxtype
   hook, the time agent (pc, laptop), the Time Android app, `time collect`.
-  pc/laptop processes send to the local Alloy (`127.0.0.1:4318`) once it
-  exists, and straight to `https://otlp.erikfrankling.duckdns.org` until
-  then; the phone always sends straight there.
-- **Routing in the gateway Alloy:**
+  pc/laptop processes send to the local Alloy (`127.0.0.1:4318`); in-cluster
+  ones to `http://alloy.homelab:4318`.
+- **Phone ingest:** the Android app has no local Alloy and keeps its own
+  spool. It sends OTLP/HTTP to `https://otlp.erikfrankling.duckdns.org`:
+  Traefik route with the `lan-only` middleware (LAN and tailnet), and a
+  bearer token checked by the gateway's receiver (`otelcol.auth.bearer`,
+  which supports server-side auth; verify on build). The token is a SOPS
+  secret here and lives in the app's settings. It is the first
+  device-facing endpoint, so it accepts nothing without the token.
+- **Routing in the gateway Alloy**, on the resource attribute
+  `service.namespace`:
   - metrics → the metrics store.
-  - OTLP log records whose `event.name` is `prompt.sent`, `dictation.done`,
-    `voice_mode.span`, `read_aloud.span`, `llm.usage`, `focus.span`,
-    `screen.minute`, `phone.app.span` or `code.*` go to **both**:
-    - Loki, after `otelcol.processor.attributes` deletes `embedding` and
-      `window.title`;
+  - log records with `service.namespace = "time"` go to **both**:
+    - Loki, stream `{service_namespace="time"}`, kept 5 years, unmodified;
     - `otelcol.exporter.otlphttp` → `http://time.homelab.svc:7373/v1/logs`
       with `sending_queue { storage = otelcol.storage.file... }` on the
-      gateway's PVC, so a Time restart or outage loses nothing.
-      `otelcol.storage.file` is a public-preview component: the gateway runs
-      with `--stability.level=public-preview`.
-  - everything else → Loki only.
+      gateway's PVC, so a Time restart or outage loses nothing; Time
+      dedupes by `event.id`. `otelcol.storage.file` is a public-preview
+      component: the gateway runs with `--stability.level=public-preview`.
+  - everything else → Loki, 30 days.
 - **Privacy:** emitters never send prompt text, transcripts or pixels; only
-  counts, durations, ids, app/window names and browser hosts. Window titles
-  reach Time only, never Loki.
+  counts, durations, ids, app/window names, browser hosts and the screen
+  embedding. Loki is behind `lan-only` like Time itself, on the same node.
+  Open question for Erik: window titles in the 5-year Loki copy (it is the
+  rebuild source, so they are kept unless he says otherwise).
 - **Alerts (low priority, ntfy only, no session):** Time server down (Gatus
   check, plus the exporter's queue growing); "no events from device X for
   2 h while it is online", where online means that device's Alloy reported
@@ -177,9 +189,12 @@ single 400-day metrics retention covers Time's "at least a year".
 ### OTel conventions for every emitter
 
 - Resource: `service.name` (`t3code`, `local-stt`, `time-agent`, ...),
-  `host.name`, `service.version`. Time's events are recognised by
-  `event.name`, so no special namespace is needed.
-- Event names and their attributes are owned by the Time proposal.
+  `host.name`, `service.version`, and `service.namespace = "time"` on
+  activity data (that alone selects the 5-year stream and the Time
+  fan-out).
+- Event names (`t3.prompt.sent`, `stt.dictation.finished`,
+  `time.screen.minute`, `github.commit`, ...) and their attributes are owned
+  by the Time proposal.
 - Metrics: low-cardinality attributes only (`provider`, `model`,
   `input_mode`, `host`). Thread ids, SHAs and similar go on log events.
 
@@ -220,3 +235,6 @@ needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
    hour, six a day, shared with health checks) or a separate budget?
 5. **Which naiaclaw failures count:** the naiaclaw-system jobs are a work
    project. Alert Erik, start sessions in that repo's T3 project, or ignore?
+6. **Window titles in the 5-year Loki copy of Time's events:** keep them
+   (recommended; Loki is the rebuild source and sits behind the tailnet like
+   Time) or strip them there and accept that a rebuild loses them?
