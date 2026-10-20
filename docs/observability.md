@@ -44,10 +44,15 @@ pc:             health-watch polls Gatus + Alertmanager
 
 ### 1. Collection: Alloy everywhere, OTLP in
 
-- **Homelab:** one Alloy, owned by this repo, as the OTLP gateway
-  (`otlp.erikfrankling.duckdns.org`, `lan-only`, plus 4317/4318 on
-  192.168.50.100). It also tails k3s pod logs and scrapes kube-state-metrics,
-  node-exporter and Gatus `/metrics`.
+- **Homelab:** one Alloy, owned by this repo, as the OTLP gateway: a
+  Deployment with a PVC, reached at `https://otlp.erikfrankling.duckdns.org`
+  (OTLP/HTTP, `lan-only`, so LAN and tailnet: pc, laptop, phone) and
+  `http://alloy.homelab:4318` in the cluster. The same Alloy tails k3s pod
+  logs through the Kubernetes API (single node, so no DaemonSet) and scrapes
+  kube-state-metrics, node-exporter and Gatus `/metrics`. The hand-applied Alloy in namespace
+  `alloy` is not the ingest: it runs with `--stability.level=generally-available`
+  and keeps its state in `/tmp`, so it cannot hold the persistent queue
+  Time needs (below).
 - **pc and framework:** `services.alloy` in the dotfiles. It reads journald
   (system and user units, so every service gets central logs without code
   changes), exports node and systemd-unit metrics, and receives OTLP on
@@ -125,32 +130,58 @@ PVC sizes, so retention is the only real limit.
 | Data | Store | Retention | Size budget |
 |---|---|---|---|
 | Metrics, infra and activity counters | Prometheus TSDB | 400 d, capped at 25 GB (`retention.size`) | 25 GB |
-| Ops logs | Loki | 30 d | 20 GB |
-| Activity events (Time) | Loki, stream `{service_namespace="time"}` | `retention_stream` 5 y | small |
+| Logs, ops and activity events | Loki | 30 d | 20 GB |
+| Activity events, forever | Time's own database (Time server) | forever, deduped by `event.id` | Time's PVC |
 | Traces | Tempo, only once the T3 fork emits spans | 7 d | 5 GB |
 
-- Time's own database stays the **source of truth** for classified activity.
-  The observability stack gets the raw signals (prompt sent, dictation
-  started/stopped, read-aloud played, tokens used) as OTel log events and
-  counters. That way Grafana can chart them, and Time can rebuild from them.
+`time_*` and `gen_ai.client.token.usage` are a handful of series, so the
+single 400-day metrics retention covers Time's "at least a year".
+
+- Time's database is the **source of truth** for activity (Time proposal,
+  `~/projects/personal/time/PROPOSAL.md`). This stack is the transport and
+  the 30-day window for Grafana and alerts.
 - **Backups are not operational** (docs/backups.md). Activity data is the
   first thing here that cannot be regenerated, so the B2 backup has to work
   before Time depends on this stack.
 
-### OTel contract for emitters (Time, T3 fork, local-stt)
+### The Time pipeline (requirements from the Time redesign, 2026-10-21)
 
-- Send OTLP/HTTP to `http://127.0.0.1:4318` on the pc/framework (local
-  Alloy). In-cluster pods use `http://alloy.homelab:4318`.
+- **Emitters:** T3 Code server (its existing `OTEL_EXPORTER_OTLP_*` export,
+  set in the dotfiles `hosts/pc/home.nix`), the local-stt gateway, a voxtype
+  hook, the time agent (pc, laptop), the Time Android app, `time collect`.
+  pc/laptop processes send to the local Alloy (`127.0.0.1:4318`) once it
+  exists, and straight to `https://otlp.erikfrankling.duckdns.org` until
+  then; the phone always sends straight there.
+- **Routing in the gateway Alloy:**
+  - metrics → the metrics store.
+  - OTLP log records whose `event.name` is `prompt.sent`, `dictation.done`,
+    `voice_mode.span`, `read_aloud.span`, `llm.usage`, `focus.span`,
+    `screen.minute`, `phone.app.span` or `code.*` go to **both**:
+    - Loki, after `otelcol.processor.attributes` deletes `embedding` and
+      `window.title`;
+    - `otelcol.exporter.otlphttp` → `http://time.homelab.svc:7373/v1/logs`
+      with `sending_queue { storage = otelcol.storage.file... }` on the
+      gateway's PVC, so a Time restart or outage loses nothing.
+      `otelcol.storage.file` is a public-preview component: the gateway runs
+      with `--stability.level=public-preview`.
+  - everything else → Loki only.
+- **Privacy:** emitters never send prompt text, transcripts or pixels; only
+  counts, durations, ids, app/window names and browser hosts. Window titles
+  reach Time only, never Loki.
+- **Alerts (low priority, ntfy only, no session):** Time server down (Gatus
+  check, plus the exporter's queue growing); "no events from device X for
+  2 h while it is online", where online means that device's Alloy reported
+  in the last 10 minutes (pc, laptop). The phone has no Alloy: alert if it
+  sent nothing for 24 h.
+
+### OTel conventions for every emitter
+
 - Resource: `service.name` (`t3code`, `local-stt`, `time-agent`, ...),
-  `service.namespace` = `time` for activity data, anything else for ops,
-  `host.name`, `service.version`.
-- Activity events: OTel **log records** with `event.name`
-  (`t3.prompt.sent`, `t3.voice.recording`, `t3.readaloud.played`,
-  `stt.dictation.finished`, `llm.tokens.used`, ...) and attributes, no
-  free text that is private (prompt bodies stay out).
-- Counters, histograms: OTel metrics with low-cardinality attributes only
-  (`provider`, `model`, `input_mode` = typed|dictated). No thread ids as
-  attributes; those go on log events.
+  `host.name`, `service.version`. Time's events are recognised by
+  `event.name`, so no special namespace is needed.
+- Event names and their attributes are owned by the Time proposal.
+- Metrics: low-cardinality attributes only (`provider`, `model`,
+  `input_mode`, `host`). Thread ids, SHAs and similar go on log events.
 
 ## What happens to the naiaclaw-old stack
 
@@ -171,7 +202,8 @@ needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
    Test cases: duckdns-updater, the naiaclaw sweeps, `brand-push-periodic`.
 4. Dotfiles: Alloy on pc and framework; health-watch reads Alertmanager;
    morning check and incident open/close go to ntfy.
-5. Error-log rules for local-stt and t3code; then the T3 fork and local-stt
+5. Error-log rules for local-stt and t3code; the Time routing above once Erik
+   approves Time; then the T3 fork and local-stt
    emit OTel directly (with the Time project's events).
 6. Phone dashboard; retire the old stack.
 
