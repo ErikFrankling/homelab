@@ -109,7 +109,8 @@ spec:
               cpu: "4"
               memory: 2Gi
             requests:
-              cpu: 250m
+              # The node is 98% requested; this is a background service that may be slow.
+              cpu: 50m
               memory: 768Mi
           volumeMounts:
             - name: models
