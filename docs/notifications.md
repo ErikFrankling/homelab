@@ -1,16 +1,22 @@
-# Phone notifications (ntfy)
+# Phone notifications (ntfy backbone, Discord delivery)
 
-Agents, scripts and alerting reach Erik's phone through a self-hosted
-[ntfy](https://ntfy.sh) server: `apps/ntfy.yaml`, settings in
+**What reaches Erik's phone today is Discord**, not the ntfy app: Erik will
+not install another app. The Executor app `notify` and the `notify-erik` CLI
+(dotfiles, `notify` skill) post to a webhook in #notifications of his private
+Discord server "Agents"; the Discord app he already has pushes it. Every send
+is also mirrored to the ntfy server below, the backbone for native push in
+the T3 Code Android app (in progress). **Senders that publish to ntfy only
+(Time, Alertmanager) do not reach his phone yet**; until the T3 app receives
+push, send what he must see through Executor's `notify` app.
+
+A self-hosted [ntfy](https://ntfy.sh) server: `apps/ntfy.yaml`, settings in
 `config/ntfy/server.yml`, users and tokens in `secrets/ntfy.enc.yaml`.
 
 ```
-agent (any harness) --tools.notify.send--> Executor app `notify` --+
-pc/framework scripts --notify-erik CLI-----------------------------+--> ntfy topic `erik`
-Alertmanager (planned) and Time, from pods: plain HTTP ------+        |
-                                                                            v
-                         ntfy Android app (instant delivery, websocket) on Erik's phone
-                         tap -> t3code-preview://threads/<environment>/<thread> opens the T3 thread
+agent (any harness) --tools.notify.send--> Executor app `notify` --+--> Discord webhook --> Discord app on the phone
+pc/framework scripts --notify-erik CLI-----------------------------+
+                                                                   +--> ntfy topic `erik` (mirror)
+Alertmanager (planned) and Time, from pods: plain HTTP ------------------^
 ```
 
 ## Why ntfy
@@ -44,11 +50,9 @@ To change them: decrypt `secrets/ntfy.enc.yaml`, edit `NTFY_AUTH_USERS`
 
 ## Phone setup
 
-ntfy app (Play Store, F-Droid, or Obtainium from
-`github.com/binwiederhier/ntfy-android` releases, `play` APK) -> Settings ->
-Users -> add `https://ntfy.erikfrankling.duckdns.org`, user `erik`. Then
-subscribe to topic `erik` on that server with **instant delivery** on. In the
-topic's settings, let priority 5 override Do Not Disturb if wanted.
+None. Erik does not use the ntfy app (decided 2026-10-21); delivery is
+Discord, and next the T3 Code app itself. The `erik` user stays for testing
+with the ntfy app on an emulator.
 
 ## Rate limits
 
