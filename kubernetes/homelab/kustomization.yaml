@@ -18,6 +18,7 @@ resources:
   - apps/executor.yaml
   - apps/brain.yaml
   - apps/nix-builder.yaml
+  - apps/agent-worker.yaml
   - apps/gatus.yaml
   - apps/kokoro-tts.yaml
   - apps/t3-updates.yaml
@@ -67,6 +68,19 @@ configMapGenerator:
   - name: ntfy-config
     files:
       - config/ntfy/server.yml
+  # The agents' heavy-work pod; same authorized key as the builder.
+  - name: agent-worker-config
+    files:
+      - config/agent-worker/seed.sh
+      - config/agent-worker/entrypoint.sh
+      - config/agent-worker/sshd_config
+      - config/agent-worker/nix.conf
+      - config/agent-worker/nixpkgs-config.nix
+      - config/agent-worker/android.nix
+      - config/agent-worker/heavy-run.sh
+      - config/agent-worker/heavy-status.sh
+      - config/agent-worker/heavy-emulator.sh
+      - authorized_keys=config/nix-builder/authorized_keys
   # And the health checks: editing the list restarts Gatus.
   - name: gatus-config
     files:

@@ -213,6 +213,12 @@ endpoints:
     interval: 5m
     conditions:
       - "[CONNECTED] == true"
+  - name: agent-worker-ssh
+    group: lan
+    url: tcp://192.168.50.100:2223
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
   - name: adguard-dns
     group: lan
     url: 192.168.50.100

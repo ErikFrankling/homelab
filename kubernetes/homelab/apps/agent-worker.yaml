@@ -1,0 +1,129 @@
+# Heavy-work machine for the agents on Erik's PC (docs/agent-worker.md).
+#
+# Since 2026-10-21 long-running or CPU/IO-heavy agent work runs here instead of
+# on the PC, even though it is slower: builds, test suites, Gradle/APK builds,
+# the one Android emulator, embeddings and batch jobs. The PC's `heavy`
+# command (dotfiles, modules/home-manager/heavy) syncs a repository to /work
+# and runs a command in it over SSH. Same layout as nix-builder: the volume is
+# /nix, the tools come from the seed init container.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-worker-store
+  annotations:
+    # Only caches and workspaces, but the SSH host key the PC pins lives here.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Cosmetic: local-path enforces no quota. min-free in nix.conf and the
+      # janitor in entrypoint.sh are the real bounds.
+      storage: 80Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-worker
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: seed
+          image: nixos/nix:latest@sha256:62c506c32c75395163676006f0c00d75c31578fffaac1167d600289f72477b78
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/config/seed.sh"]
+          env:
+            - name: NIXPKGS_REV
+              value: 608d0cadfed240589a7eea422407a547ad626a14
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              memory: 128Mi
+          volumeMounts:
+            - mountPath: /mnt/nix
+              name: store
+            - mountPath: /config
+              name: config
+              readOnly: true
+      containers:
+        - name: worker
+          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/config/entrypoint.sh"]
+          env:
+            # Also the nixpkgs the emulator's SDK comes from (android.nix).
+            - name: NIXPKGS_REV
+              value: 608d0cadfed240589a7eea422407a547ad626a14
+          ports:
+            - containerPort: 2223
+              name: ssh
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            periodSeconds: 30
+            tcpSocket:
+              port: ssh
+          readinessProbe:
+            failureThreshold: 12
+            periodSeconds: 10
+            tcpSocket:
+              port: ssh
+          resources:
+            # Lowest priority on the node, below nix-builder: the smallest
+            # memory request of any heavy pod (evicted and OOM-killed first),
+            # no CPU request (smallest CPU share), and a hard limit so a
+            # runaway job dies inside this container.
+            limits:
+              memory: 16Gi
+            requests:
+              memory: 256Mi
+          securityContext:
+            # Nix's build sandbox and the emulator's /dev/kvm. Whoever holds
+            # an authorized key has root on the node, as with nix-builder.
+            privileged: true
+          volumeMounts:
+            - mountPath: /nix
+              name: store
+            - mountPath: /config
+              name: config
+              readOnly: true
+      terminationGracePeriodSeconds: 20
+      volumes:
+        - name: store
+          persistentVolumeClaim:
+            claimName: agent-worker-store
+        - name: config
+          configMap:
+            name: agent-worker-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-worker-ssh
+spec:
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 192.168.50.0/24
+  ports:
+    - name: ssh
+      port: 2223
+      protocol: TCP
+      targetPort: ssh
+  selector:
+    app.kubernetes.io/name: agent-worker
+  type: LoadBalancer

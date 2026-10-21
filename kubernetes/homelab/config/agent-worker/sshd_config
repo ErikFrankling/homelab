@@ -1,0 +1,15 @@
+Port 2223
+HostKey /nix/var/worker/ssh/ssh_host_ed25519_key
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+AuthorizedKeysFile /root/.ssh/authorized_keys
+# Jobs get no profile; this is their environment before `nix develop`.
+SetEnv PATH=/root/.nix-profile/bin:/nix/var/worker/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin NIX_SSL_CERT_FILE=/nix/var/worker/ca-bundle.crt SSL_CERT_FILE=/nix/var/worker/ca-bundle.crt NIXPKGS_ALLOW_UNFREE=1 HOME=/root
+# `heavy` jobs and adb tunnels are silent for long stretches.
+ClientAliveInterval 30
+ClientAliveCountMax 10
+AllowTcpForwarding local
+MaxSessions 30
+MaxStartups 30:50:60
