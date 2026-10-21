@@ -50,7 +50,8 @@ scrape_configs:
   - job_name: gatus
     static_configs:
       - targets: [192.168.50.100:18080]
-  # The Time server (v2): device heartbeats and event counts.
+  # The Time server (v2, Service time-v2 during the side-by-side period):
+  # device heartbeats and event counts.
   - job_name: time
     static_configs:
-      - targets: [time:7373]
+      - targets: [time-v2:7373]

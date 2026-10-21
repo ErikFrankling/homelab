@@ -14,139 +14,155 @@
 // From outside the cluster (Traefik route otlp.erikfrankling.duckdns.org,
 // lan-only): bearer token required.
 otelcol.auth.bearer "ingest" {
-  token = sys.env("OTLP_TOKEN")
+	token = sys.env("OTLP_TOKEN")
 }
 
 otelcol.receiver.otlp "external" {
-  http {
-    endpoint = "0.0.0.0:4318"
-    auth     = otelcol.auth.bearer.ingest.handler
-  }
-  output {
-    metrics = [otelcol.processor.batch.default.input]
-    logs    = [otelcol.processor.batch.default.input]
-  }
+	http {
+		endpoint = "0.0.0.0:4318"
+		auth     = otelcol.auth.bearer.ingest.handler
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+	}
 }
 
 // From pods (service alloy:4318 -> 4320, and gRPC on 4317): no token.
 otelcol.receiver.otlp "cluster" {
-  http {
-    endpoint = "0.0.0.0:4320"
-  }
-  grpc {
-    endpoint = "0.0.0.0:4317"
-  }
-  output {
-    metrics = [otelcol.processor.batch.default.input]
-    logs    = [otelcol.processor.batch.default.input]
-  }
+	http {
+		endpoint = "0.0.0.0:4320"
+	}
+
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+	}
 }
 
 otelcol.processor.batch "default" {
-  output {
-    metrics = [otelcol.exporter.otlphttp.prometheus.input]
-    logs    = [
-      otelcol.exporter.otlphttp.loki.input,
-      otelcol.processor.filter.time_only.input,
-    ]
-  }
+	output {
+		metrics = [otelcol.exporter.otlphttp.prometheus.input]
+		logs    = [
+			otelcol.exporter.otlphttp.loki.input,
+			otelcol.processor.filter.time_only.input,
+		]
+	}
 }
 
 // ---- out -------------------------------------------------------------------
 
 otelcol.exporter.otlphttp "prometheus" {
-  client {
-    endpoint = "http://prometheus:9090/api/v1/otlp"
-  }
+	client {
+		endpoint = "http://prometheus:9090/api/v1/otlp"
+	}
 }
 
 otelcol.exporter.otlphttp "loki" {
-  client {
-    endpoint = "http://loki:3100/otlp"
-  }
+	client {
+		endpoint = "http://loki:3100/otlp"
+	}
 }
 
 // Time's activity events also go to the Time server, which keeps them
 // forever and dedupes by event.id. The queue lives on the PVC, so a Time (or
 // Alloy) restart loses nothing; retries never give up.
 otelcol.processor.filter "time_only" {
-  error_mode = "ignore"
-  logs {
-    log_record = [`resource.attributes["service.namespace"] != "time"`]
-  }
-  output {
-    logs = [otelcol.exporter.otlphttp.time.input]
-  }
+	error_mode = "ignore"
+
+	logs {
+		log_record = [`resource.attributes["service.namespace"] != "time"`]
+	}
+
+	output {
+		logs = [otelcol.exporter.otlphttp.time.input]
+	}
 }
 
 otelcol.storage.file "queue" {
-  directory = "/var/lib/alloy/queue"
+	directory = "/var/lib/alloy/queue"
 }
 
 otelcol.exporter.otlphttp "time" {
-  client {
-    endpoint = "http://time:7373"
-  }
-  sending_queue {
-    enabled    = true
-    queue_size = 100000
-    storage    = otelcol.storage.file.queue.handler
-  }
-  retry_on_failure {
-    enabled          = true
-    max_elapsed_time = "0s"
-    max_interval     = "5m"
-  }
+	client {
+		// Service time-v2 while Time v1 and v2 run side by side (Time repo,
+		// PROPOSAL.md go-live runbook). Time v2 accepts OTLP JSON only.
+		endpoint = "http://time-v2:7373"
+		// Plain JSON bodies: inside the cluster gzip saves nothing.
+		compression = "none"
+	}
+	encoding = "json"
+
+	sending_queue {
+		enabled    = true
+		queue_size = 100000
+		storage    = otelcol.storage.file.queue.handler
+	}
+
+	retry_on_failure {
+		enabled          = true
+		max_elapsed_time = "0s"
+		max_interval     = "5m"
+	}
 }
 
 // ---- k3s pod logs ----------------------------------------------------------
 
 discovery.kubernetes "pods" {
-  role = "pod"
+	role = "pod"
 }
 
 discovery.relabel "pods" {
-  targets = discovery.kubernetes.pods.targets
-  rule {
-    source_labels = ["__meta_kubernetes_namespace"]
-    target_label  = "namespace"
-  }
-  rule {
-    source_labels = ["__meta_kubernetes_pod_name"]
-    target_label  = "pod"
-  }
-  rule {
-    source_labels = ["__meta_kubernetes_pod_container_name"]
-    target_label  = "container"
-  }
-  // service_name: the app label, else the container name.
-  rule {
-    source_labels = ["__meta_kubernetes_pod_container_name"]
-    target_label  = "service_name"
-  }
-  rule {
-    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
-    regex         = "(.+)"
-    target_label  = "service_name"
-  }
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+	// service_name: the app label, else the container name.
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "service_name"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		regex         = "(.+)"
+		target_label  = "service_name"
+	}
 }
 
 loki.source.kubernetes "pods" {
-  targets    = discovery.relabel.pods.output
-  forward_to = [loki.process.pods.receiver]
+	targets    = discovery.relabel.pods.output
+	forward_to = [loki.process.pods.receiver]
 }
 
 loki.process "pods" {
-  stage.static_labels {
-    values = {
-      host_name = "naiaclaw",
-    }
-  }
-  forward_to = [loki.write.local.receiver]
+	stage.static_labels {
+		values = {
+			host_name = "naiaclaw",
+		}
+	}
+	forward_to = [loki.write.local.receiver]
 }
 
 loki.write "local" {
-  endpoint {
-    url = "http://loki:3100/loki/api/v1/push"
-  }
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
 }
