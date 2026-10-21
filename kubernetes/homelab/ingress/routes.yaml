@@ -64,6 +64,15 @@ spec:
       middlewares:
         - name: lan-only
       services:
+        # v2 (apps/time-v2.yaml). Rollback: change back to `time`.
+        - name: time-v2
+          port: 80
+    # v1, kept running for rollback and comparison.
+    - kind: Rule
+      match: Host(`time-v1.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
         - name: time
           port: 80
     # Nix binary cache (apps/nix-builder.yaml).

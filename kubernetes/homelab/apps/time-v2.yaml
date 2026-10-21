@@ -1,0 +1,194 @@
+# Time v2 (github.com/ErikFrankling/time, crates/time-server).
+#
+# Runs beside v1 on the same PVC: v1 keeps /data/time.db, v2 keeps /data/v2.
+# On first start v2 imports v1's history (import_v1_from); after that the
+# live route points here and v2 also accepts v1 clients' /v1/frame(s), so the
+# v1 phone app and agents keep working until they update.
+#
+# Rollback: point the `time.erikfrankling.duckdns.org` route in
+# ingress/routes.yaml back to Service `time` (v1, still running and still
+# reachable at time-v1.erikfrankling.duckdns.org). v1's database is untouched.
+#
+# The gateway Alloy already forwards service.namespace=time to
+# time-v2:7373/v1/logs and Prometheus scrapes time-v2:7373/metrics (job time):
+# keep the Service name.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: time-v2-config
+data:
+  config.toml: |
+    data_dir = "/data/v2"
+    listen = "0.0.0.0:7373"
+    import_v1_from = "/data/time.db"
+    timezone = "Europe/Stockholm"
+    public_url = "https://time.erikfrankling.duckdns.org/"
+    apk_repo = "ErikFrankling/time"
+
+    [devices.pc]
+    kind = "desktop"
+    [devices.framework]
+    kind = "laptop"
+    [devices.phone]
+    kind = "phone"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: time-v2
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: time-v2
+  strategy:
+    # SQLite: never two writers on one database.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: time-v2
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: time
+          # Pinned per commit (image-v2.yml publishes :v2-<sha>).
+          image: ghcr.io/erikfrankling/time:v2-4caf19a
+          args: ["serve", "/config/config.toml"]
+          env:
+            - name: TZ
+              value: Europe/Stockholm
+          # Focus nudges to Erik's phone (ntfy user `time`).
+          envFrom:
+            - secretRef:
+                name: time-ntfy
+                optional: true
+          ports:
+            - containerPort: 7373
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            # First start imports v1's history before listening.
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: 25m
+              memory: 64Mi
+          securityContext:
+            # The PVC's files belong to root (v1 ran as root on it).
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /config
+              name: config
+              readOnly: true
+            - mountPath: /tmp
+              name: tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: time-data
+        - name: config
+          configMap:
+            name: time-v2-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: time-v2
+spec:
+  selector:
+    app.kubernetes.io/name: time-v2
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    # Alloy and Prometheus address the server on its own port.
+    - name: direct
+      port: 7373
+      targetPort: http
+---
+# A consistent copy of the database every night into /data/v2/backups, kept
+# for 14 days. The off-cluster copy is pulled from there to the pc by the
+# dotfiles' time-backup timer, which also restore-tests it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: time-backup
+spec:
+  schedule: "30 3 * * *"
+  timeZone: Europe/Stockholm
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          affinity:
+            # Same node as the server: the PVC is local-path.
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: time-v2
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: backup
+              image: ghcr.io/erikfrankling/time:v2-4caf19a
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  mkdir -p /data/v2/backups
+                  out=/data/v2/backups/time-$(date +%F).db
+                  time-server backup /config/config.toml "$out"
+                  find /data/v2/backups -name 'time-*.db' -mtime +14 -delete
+                  ls -la /data/v2/backups
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - mountPath: /data
+                  name: data
+                - mountPath: /config
+                  name: config
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: time-data
+            - name: config
+              configMap:
+                name: time-v2-config
