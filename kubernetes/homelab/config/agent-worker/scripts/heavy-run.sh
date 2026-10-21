@@ -3,25 +3,52 @@
 # <develop> is auto (the flake's default devShell if it has one), no, or a
 # devShell name.
 #
-# Scheduling: two slots, "big" and "small" (see below); the rest wait in a
-# FIFO queue per class (/work/.queue, one ticket each). Slots are flock(1)s
-# on /work/.slots/{big,small}, held for the job's lifetime. HEAVY_LIGHT=1
-# (servers from `heavy bg --light`) skips the queue and runs in the small light/ cgroup.
+# Classes (HEAVY_CLASS, from `heavy --big/--small`, else guessed):
+#   big      Gradle/Expo/APK builds, anything that drives the emulator: one at
+#            a time in the "big" slot, up to /nix/var/worker/memory-big.
+#   small    typechecks, tests, scripts: the "small" slot, or the big one
+#            while no big job waits; up to memory-small.
+#   service  long-running servers from `heavy bg` (HEAVY_LIGHT=1 is the old
+#            name): no slot, a small capped cgroup, low CPU weight.
+# Big and small jobs wait in a FIFO queue per class (/work/.queue, one ticket
+# each); slots are flock(1)s on /work/.slots/{big,small}.
+#
+# Secrets: HEAVY_ENVFILE names a 0600 file of NUL-separated VAR=value pairs
+# (`heavy -e`). They go into the job's environment only, and the file is
+# deleted at once. Commands shown in the queue are redacted.
 #
 # The job gets its own process group and cgroup (cgroups.sh). This script's
 # stdin is the SSH channel, which the PC keeps open for the job's lifetime:
 # when it closes (Ctrl-C, the agent stopped, the connection dropped) the job
 # is killed, or leaves the queue if it was still waiting.
 set -u
+umask 077
 ws=$1 sub=$2 develop=$3
 shift 3
 cd "$ws/$sub" || { echo "heavy: no directory $ws/$sub on the worker" >&2; exit 97; }
 touch "$ws"
-class=light
 bash /scripts/cgroups.sh 2> /dev/null || true
 cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
 run=$(mktemp -d /tmp/heavy-run.XXXXXX)
 trap 'rm -rf "$run"' EXIT
+
+if [ -n "${HEAVY_ENVFILE:-}" ] && [ -f "$HEAVY_ENVFILE" ]; then
+  while IFS= read -r -d '' pair; do
+    [[ $pair == [A-Za-z_]*=* ]] && export "${pair?}"
+  done < "$HEAVY_ENVFILE"
+  rm -f "$HEAVY_ENVFILE"
+fi
+unset HEAVY_ENVFILE
+
+# What the queue and `heavy status` show: no values of VAR=value words, and
+# nothing after --password/--token/--secret/--key style flags.
+redact() {
+  printf '%s' "$*" | tr '\n\t' '  ' | sed -E \
+    -e 's/(^|[[:space:]"'\''])([A-Za-z_][A-Za-z0-9_]*)=[^[:space:]]*/\1\2=***/g' \
+    -e 's/(--?[A-Za-z0-9-]*(password|passwd|token|secret|key|auth)[A-Za-z0-9-]*)([= ])[^[:space:]]+/\1\3***/Ig' \
+    | cut -c1-300
+}
+display=$(redact "$@")
 
 # Background jobs get /dev/null as stdin in a non-interactive shell, so the
 # watcher reads the channel through fd 3.
@@ -36,36 +63,41 @@ exec 3<&0
 ) > /dev/null 2>&1 &
 watcher=$!
 
-if [ "${HEAVY_LIGHT:-0}" != 1 ]; then
-  # Big jobs (Gradle/Expo/APK builds, anything that drives the emulator) run
-  # one at a time in the "big" slot with up to WORKER_BIG_MEMORY; small jobs
-  # (typechecks, tests, scripts) take the "small" slot with up to
-  # WORKER_SMALL_MEMORY, or the big one while no big job waits. HEAVY_CLASS
-  # (from `heavy --big/--small`) overrides the guess.
-  class=${HEAVY_CLASS:-auto}
-  if [ "$class" = auto ]; then
-    class=small
-    big='gradle|gradlew|assemble(release|debug)|bundlerelease|expo (run|prebuild|export)|eas build|emulator'
-    if printf '%s ' "$@" | grep -qiE "$big" \
-      || { [ -f "$1" ] && grep -qiE "$big" "$1"; }; then
-      class=big
-    fi
+class=${HEAVY_CLASS:-auto}
+[ "${HEAVY_LIGHT:-0}" != 1 ] || class=service
+if [ "$class" = auto ]; then
+  class=small
+  big='\b(gradle|gradlew|assemble(release|debug)|bundlerelease|expo (run|prebuild|export)|eas build|emulator)\b'
+  if printf '%s ' "$@" | grep -qiE "$big" \
+    || { [ -f "$1" ] && grep -qiE "$big" "$1"; }; then
+    class=big
   fi
+fi
+
+mkdir -p /work/.stats
+# Minutes a job of this class usually takes: the median of the last 10.
+typical() {
+  local f=/work/.stats/$1
+  [ -s "$f" ] || { echo 15; return; }
+  tail -10 "$f" | sort -n | awk '{a[NR]=$1} END {m=a[int((NR+1)/2)]; v=int((m+59)/60); if (v < 1) v = 1; printf "%d", v}'
+}
+
+if [ "$class" = big ] || [ "$class" = small ]; then
   mkdir -p /work/.queue /work/.slots
   ticket="/work/.queue/$(date +%s%N)-$class-$$"
-  printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$*" > "$ticket"
+  printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$display" > "$ticket"
   trap 'rm -rf "$run" "$ticket"' EXIT
-  last=""
   take() {
     exec 9> "/work/.slots/$1"
     if flock -n 9; then
       slot=$1
-      printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$*" > "/work/.slots/$slot.job"
+      printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$display" > "/work/.slots/$slot.job"
       return 0
     fi
     exec 9>&-
     return 1
   }
+  last="" last_at=0
   while :; do
     [ ! -e "$run/closed" ] || exit 130
     # Forget tickets of jobs that went away while waiting.
@@ -81,14 +113,28 @@ if [ "${HEAVY_LIGHT:-0}" != 1 ]; then
     done
     if [ "$ahead" = 0 ]; then
       if [ "$class" = big ]; then
-        take big "$@" && break
+        take big && break
       else
-        take small "$@" && break
-        [ "$bigs" != 0 ] || { take big "$@" && break; }
+        take small && break
+        [ "$bigs" != 0 ] || { take big && break; }
       fi
     fi
-    state="waiting for the $class-job slot ($ahead $class jobs ahead of you)"
-    [ "$state" = "$last" ] || { echo "heavy: $state" >&2; last=$state; }
+    # Estimate: what is left of the running job plus a typical job per ticket
+    # ahead of this one.
+    usual=$(typical "$class")
+    left=$usual
+    if [ -f "/work/.slots/$class.job" ]; then
+      ran=$((($(date +%s) - $(stat -c %Y "/work/.slots/$class.job")) / 60))
+      left=$((usual - ran))
+      [ "$left" -ge 1 ] || left=1
+    fi
+    eta=$((left + ahead * usual))
+    state="waiting for the $class-job slot: $ahead $class job(s) ahead of you, about $eta min (a $class job usually takes $usual min). Too long? when-idle runs it on the PC while Erik is away."
+    now=$(date +%s)
+    if [ "$state" != "$last" ] && [ $((now - last_at)) -ge 60 ] || [ $((now - last_at)) -ge 300 ]; then
+      echo "heavy: $state" >&2
+      last=$state last_at=$now
+    fi
     sleep 3
   done
   rm -f "$ticket"
@@ -108,22 +154,21 @@ fi
 target=""
 jobcg=""
 if [ -n "$cgroot" ]; then
-  if [ "${HEAVY_LIGHT:-0}" = 1 ]; then
-    target="$cgroot/light"
+  pool="jobs"
+  [ "$class" != service ] || pool=service
+  jobcg="$cgroot/$pool/job-$$"
+  cap=$(cat "/nix/var/worker/memory-$class" 2> /dev/null || echo max)
+  if { mkdir -p "$jobcg" && echo "$cap" > "$jobcg/memory.max" \
+    && echo 1 > "$jobcg/memory.oom.group"; } 2> /dev/null; then
+    target=$jobcg
   else
-    jobcg="$cgroot/jobs/job-$$"
-    cap=$(cat "/nix/var/worker/memory-$class" 2> /dev/null || echo max)
-    if { mkdir -p "$jobcg" && echo "$cap" > "$jobcg/memory.max" \
-      && echo 1 > "$jobcg/memory.oom.group"; } 2> /dev/null; then
-      target=$jobcg
-    else
-      jobcg=""
-    fi
+    jobcg=""
   fi
 fi
 
 # The job moves itself into its cgroup before exec, so nothing of it runs
 # outside even for a moment.
+started=$(date +%s)
 setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null; shift; exec nice -n 19 "$@"' \
   heavy-job "$target" "$@" < /dev/null 3<&- 9>&- &
 job=$!
@@ -133,8 +178,11 @@ echo "$job" > "$run/job"
 [ ! -e "$run/closed" ] || kill -TERM -- "-$job" 2> /dev/null
 wait "$job"
 rc=$?
+if [ "$class" = big ] || [ "$class" = small ]; then
+  echo $(($(date +%s) - started)) >> "/work/.stats/$class"
+fi
 if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events" 2> /dev/null; then
-  echo "heavy: the job ran out of memory ($class jobs get up to $(numfmt --to=iec < "$jobcg/memory.max"), all jobs together $(numfmt --to=iec < "$cgroot/jobs/memory.max")); use --big for builds, or run less at once" >&2
+  echo "heavy: the job ran out of memory ($class jobs get up to $(numfmt --to=iec < "$jobcg/memory.max")); use --big for builds, or run less at once" >&2
 fi
 pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null

@@ -95,3 +95,18 @@ are fixed shims. Changing anything else in `config/agent-worker/` (entrypoint,
 cgroups, sshd, nix.conf, seed) or the Deployment restarts the pod and kills
 every job and the emulator. Check `heavy status` first and warn the agents
 using it.
+
+## Services, secrets and the queue estimate
+
+- `heavy bg NAME -- CMD` is a **service** by default: no job slot, its own
+  1 GiB cgroup in the 1.5 GiB `service/` pool (CPU weight 10, 2 cores), at
+  most 3 at once. It stops itself after 3 hours without CPU use, and when the
+  emulator it was started with stops. `heavy bg --big/--small` makes a batch
+  job that takes a slot instead.
+- `heavy -e VAR[=VALUE]` sends values in a one-shot 0600 file
+  (`/work/.envs/`), read into the job's environment and deleted at once, so
+  they are in no command line. The queue, slot files and `heavy status` show
+  commands redacted (`VAR=***`, `--token ***`).
+- A waiting job prints its position and an estimated wait from the median of
+  the last ten job durations per class (`/work/.stats/`), and points at
+  `when-idle` on the PC.
