@@ -7,10 +7,10 @@ Agents, scripts and alerting reach Erik's phone through a self-hosted
 ```
 agent (any harness) --tools.notify.send--> Executor app `notify` --+
 pc/framework scripts --notify-erik CLI-----------------------------+--> ntfy topic `erik`
-Alertmanager (planned, docs/observability.md) --token `alerts`-----+        |
+Alertmanager (planned) and Time, from pods: plain HTTP ------+        |
                                                                             v
                          ntfy Android app (instant delivery, websocket) on Erik's phone
-                         tap -> t3code://threads/<environment>/<thread> opens the T3 thread
+                         tap -> t3code-preview://threads/<environment>/<thread> opens the T3 thread
 ```
 
 ## Why ntfy
@@ -35,7 +35,8 @@ Alertmanager (planned, docs/observability.md) --token `alerts`-----+        |
 | -------- | ---------------- | ----------------------------------------------------- |
 | `erik`   | read-write       | password; dotfiles `secrets/notify.yaml` `ntfy-erik-password` |
 | `agents` | write-only       | tokens `machines` (dotfiles `ntfy-agents-token`) and `executor` (Executor app account) |
-| `alerts` | write-only       | token `alertmanager`, for Alertmanager                |
+| `alerts` | write-only       | token `alertmanager`; k8s secret `alerts-ntfy`         |
+| `time`   | write-only       | token `time`; k8s secret `time-ntfy` (focus nudges)    |
 
 To change them: decrypt `secrets/ntfy.enc.yaml`, edit `NTFY_AUTH_USERS`
 (`name:bcrypt:user`, hash with `ntfy user hash`) or `NTFY_AUTH_TOKENS`
@@ -58,3 +59,37 @@ backstop against a sender gone wrong.
 ## Health
 
 Gatus `phone/ntfy` checks `/v1/health` through the tailnet.
+
+## Sending from a pod (plain HTTP)
+
+Services in the cluster (Time, Alertmanager) publish straight to ntfy with
+their own token; no Executor or CLI needed. Mount the secret
+(`time-ntfy`, `alerts-ntfy`: keys `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN`)
+and POST JSON to the **root** URL:
+
+```sh
+curl -H "Authorization: Bearer $NTFY_TOKEN" "$NTFY_URL/" -d '{
+  "topic": "erik",
+  "title": "45 min on YouTube",
+  "message": "Back to the DA2210 homework?",
+  "priority": 3,
+  "tags": ["time"],
+  "click": "https://time.erikfrankling.duckdns.org/",
+  "sequence_id": "time-focus-nudge"
+}'
+```
+
+- `priority`: 2 low (no sound), 3 normal (sound, no pop-up), 4 high (pops
+  up), 5 urgent (pops up, long vibration). Nudges: 3. Alerts: 4-5. One-time
+  codes use 4 with a `copy` action.
+- `click`: any URL; `t3code-preview://threads/<environment>/<thread>` opens a
+  T3 thread in Erik's app (the fork's preview build registers only that
+  scheme).
+- `sequence_id`: a later message with the same id replaces the earlier
+  notification instead of stacking. `PUT $NTFY_URL/erik/<id>/clear`
+  dismisses it, `DELETE $NTFY_URL/erik/<id>` removes it.
+- `actions`: up to 3, e.g. `[{"action":"copy","label":"Copy code","value":"123456"}]`
+  or `[{"action":"view","label":"Open","url":"https://..."}]`.
+- Each sender limits itself. The server-side `visitor-message-daily-limit`
+  (150 a day) counts per client address, so one pod never eats another's
+  budget.

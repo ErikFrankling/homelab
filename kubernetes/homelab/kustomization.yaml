@@ -32,6 +32,8 @@ resources:
   - secrets/nix-builder.enc.yaml
   - secrets/gatus.enc.yaml
   - secrets/ntfy.enc.yaml
+  - secrets/time-ntfy.enc.yaml
+  - secrets/alerts-ntfy.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
