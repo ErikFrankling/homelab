@@ -1,0 +1,176 @@
+# Alert rules (docs/observability.md, "Alerts and incidents").
+# Every alert carries:
+#   severity: critical | warning | info
+#   project:  homelab | machines | naiaclaw | time
+#   session:  "true"  -> health-watch on the pc starts a repair session; Erik
+#                        is told only if it still fires 3 h later
+#             "false" -> no session; Alertmanager tells Erik directly
+groups:
+  - name: kubernetes
+    rules:
+      # A CronJob whose most recent scheduled run has not succeeded: the last
+      # schedule is more than 10 minutes after the last success. Works for any
+      # schedule, and clears on the next good run.
+      - alert: CronJobFailing
+        expr: |
+          (kube_cronjob_status_last_schedule_time{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"}
+            - on (namespace, cronjob) kube_cronjob_status_last_successful_time > 600)
+          unless on (namespace, cronjob) kube_cronjob_spec_suspend == 1
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }}: latest run failed"
+          description: "Its last scheduled run has not succeeded. Logs: kubectl -n {{ $labels.namespace }} logs job/<latest {{ $labels.cronjob }} job>."
+      - alert: NaiaclawCronJobFailing
+        expr: |
+          (kube_cronjob_status_last_schedule_time{namespace=~"naiaclaw-system|nc-.*|p9|openshell|openclaw"}
+            - on (namespace, cronjob) kube_cronjob_status_last_successful_time > 600)
+          unless on (namespace, cronjob) kube_cronjob_spec_suspend == 1
+        for: 30m
+        labels: {severity: info, project: naiaclaw, session: "false"}
+        annotations:
+          summary: "naiaclaw: CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} failing"
+          description: "Work project; alert only, no repair session."
+      # Never succeeded at all (no last_successful_time) but has been scheduled.
+      - alert: CronJobNeverSucceeded
+        expr: |
+          (kube_cronjob_status_last_schedule_time{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"} > 0)
+          unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
+          unless on (namespace, cronjob) kube_cronjob_spec_suspend == 1
+        for: 1h
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has never succeeded"
+      - alert: PodNotStarting
+        expr: |
+          max by (namespace, pod, container, reason) (
+            kube_pod_container_status_waiting_reason{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw",
+              reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|CreateContainerError"}) == 1
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}): {{ $labels.reason }}"
+      - alert: NaiaclawPodNotStarting
+        expr: |
+          max by (namespace, pod, container, reason) (
+            kube_pod_container_status_waiting_reason{namespace=~"naiaclaw-system|nc-.*|p9|openshell|openclaw",
+              reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|CreateContainerError"}) == 1
+        for: 1h
+        labels: {severity: info, project: naiaclaw, session: "false"}
+        annotations:
+          summary: "naiaclaw: {{ $labels.namespace }}/{{ $labels.pod }}: {{ $labels.reason }}"
+          description: "Work project; alert only, no repair session."
+      - alert: DeploymentUnavailable
+        expr: |
+          kube_deployment_spec_replicas{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"}
+            > kube_deployment_status_replicas_available
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas"
+      - alert: PersistentVolumeClaimPending
+        expr: kube_persistentvolumeclaim_status_phase{phase="Pending"} == 1
+        for: 30m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} stuck Pending"
+
+  - name: hosts
+    rules:
+      - alert: DiskAlmostFull
+        expr: |
+          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint=~"/|/home|/nix"}
+            / node_filesystem_size_bytes) < 0.10
+        for: 15m
+        labels: {severity: critical, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} free"
+      - alert: DiskFillingUp
+        expr: |
+          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint=~"/|/home|/nix"}
+            / node_filesystem_size_bytes) < 0.20
+        for: 1h
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} under 20% free"
+      # The pc's Alloy sends node metrics every minute while it runs.
+      - alert: MachineSilent
+        expr: |
+          absent_over_time(node_load1{host_name="pc"}[30m])
+        labels: {severity: critical, project: machines, session: "false", host_name: pc}
+        annotations:
+          summary: "pc: no metrics for 30 min (down, off the network, or Alloy stopped)"
+      # The laptop sleeps; only a long silence is worth a look.
+      - alert: LaptopSilent
+        expr: |
+          absent_over_time(node_load1{host_name="framework"}[3d])
+        labels: {severity: info, project: machines, session: "false", host_name: framework}
+        annotations:
+          summary: "framework: no metrics for 3 days"
+      # localhost-only services on the pc/framework, probed by their Alloy.
+      - alert: LocalServiceDown
+        expr: probe_success{probe!=""} == 0
+        for: 5m
+        labels: {severity: warning, project: machines, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: {{ $labels.probe }} health check failing"
+
+  - name: health-checks
+    rules:
+      # health-watch already starts sessions for failing Gatus checks. This
+      # only tells Erik when one is still failing after 3 hours of that.
+      - alert: HealthCheckStillFailing
+        expr: gatus_results_endpoint_success == 0
+        for: 3h
+        labels: {severity: warning, project: homelab, session: "false"}
+        annotations:
+          summary: "{{ $labels.group }}/{{ $labels.name }} failing for 3 h; repair sessions did not fix it"
+          description: "Gatus: http://192.168.50.100:18080"
+      - alert: CertificateExpiring
+        expr: min by (key) (gatus_results_certificate_expiration_seconds) < 20 * 86400
+        for: 1h
+        labels: {severity: critical, project: homelab, session: "true"}
+        annotations:
+          summary: "Wildcard certificate expires in {{ $value | humanizeDuration }} (renewal failing)"
+
+  - name: stack
+    rules:
+      - alert: ScrapeTargetDown
+        expr: up{job!="time"} == 0
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "Prometheus cannot scrape {{ $labels.job }} ({{ $labels.instance }})"
+      - alert: TimeExportQueueGrowing
+        expr: max by (exporter) (otelcol_exporter_queue_size{exporter=~".*time.*"}) > 1000
+        for: 30m
+        labels: {severity: info, project: time, session: "false"}
+        annotations:
+          summary: "Alloy is queueing events for the Time server ({{ $value }} batches); is Time down?"
+
+  - name: time
+    rules:
+      # Device silence (Time v2 heartbeats). pc/laptop: only while that
+      # machine's Alloy is reporting, i.e. it is on.
+      - alert: TimeDeviceSilent
+        expr: |
+          (time() - time_device_last_heartbeat_timestamp_seconds{device=~"pc|framework"} > 7200)
+          and on (device)
+          label_replace(max by (host_name) (node_load1{host_name=~"pc|framework"}),
+                        "device", "$1", "host_name", "(.*)")
+        labels: {severity: info, project: time, session: "false"}
+        annotations:
+          summary: "Time: no events from {{ $labels.device }} for 2 h while it is on"
+      # The phone: Doze holds syncs overnight, so Alertmanager only lets this
+      # through 08:00-23:00 Stockholm time (route with window="daytime").
+      - alert: TimePhoneSilent
+        expr: time() - time_device_last_heartbeat_timestamp_seconds{device="phone"} > 7200
+        labels: {severity: info, project: time, session: "false", window: daytime}
+        annotations:
+          summary: "Time: no events from the phone for 2 h"
+      - alert: TimeSpoolGrowing
+        expr: time_device_spool_pending > 0 and delta(time_device_spool_pending[6h]) > 0
+        for: 1h
+        labels: {severity: info, project: time, session: "false"}
+        annotations:
+          summary: "Time: {{ $labels.device }} has {{ $value }} unsent events and the backlog keeps growing"

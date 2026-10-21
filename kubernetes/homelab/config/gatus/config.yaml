@@ -143,6 +143,41 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  # Observability (docs/observability.md). health-watch reads Alertmanager,
+  # and the phone opens Grafana.
+  - name: grafana
+    group: phone
+    url: https://grafana.erikfrankling.duckdns.org/api/health
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  - name: alertmanager
+    group: phone
+    url: https://alertmanager.erikfrankling.duckdns.org/-/healthy
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+  # The OTLP ingest the pc, laptop and phone send to. Without the token it
+  # must answer 401: up, and still refusing strangers.
+  - name: otlp-ingest
+    group: phone
+    url: https://otlp.erikfrankling.duckdns.org/v1/logs
+    method: POST
+    body: "{}"
+    headers:
+      Content-Type: application/json
+    interval: 5m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 401"
 
   # ---- lan (from the node) -------------------------------------------------
   - name: t3code

@@ -1,0 +1,56 @@
+# Prometheus (apps/prometheus.yaml, docs/observability.md). Metrics arrive two
+# ways: scraped here (cluster, node, Gatus, the stack itself) and pushed over
+# OTLP by the Alloy gateway (pc, framework, apps).
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+rule_files:
+  - /etc/prometheus/*.rules.yml
+
+# OTLP metrics: keep the host as a label, so every PC metric carries
+# host_name="pc" / "framework" like the scraped ones below.
+otlp:
+  promote_resource_attributes: [host.name, service.namespace]
+
+storage:
+  tsdb:
+    # The laptop's Alloy queues on disk while it is away and sends late.
+    out_of_order_time_window: 2d
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager:9093]
+  - job_name: loki
+    static_configs:
+      - targets: [loki:3100]
+  - job_name: alloy
+    static_configs:
+      - targets: [alloy:12345]
+  - job_name: kube-state-metrics
+    honor_labels: true
+    static_configs:
+      - targets: [kube-state-metrics:8080]
+  # node-exporter runs on the host network (apps/node-exporter.yaml).
+  - job_name: node
+    static_configs:
+      - targets: [192.168.50.100:9101]
+        labels:
+          host_name: naiaclaw
+  # Gatus on the host network: gatus_results_* for every check.
+  - job_name: gatus
+    static_configs:
+      - targets: [192.168.50.100:18080]
+  # The Time server (v2): device heartbeats and event counts.
+  - job_name: time
+    static_configs:
+      - targets: [time:7373]

@@ -1,0 +1,87 @@
+# Alertmanager (apps/alertmanager.yaml, docs/observability.md).
+# Erik's policy (2026-10-21): he hears only about what a repair session could
+# not fix. So:
+#   session="true"  alerts: health-watch on the pc polls this Alertmanager and
+#                   starts the repair session. Erik's notification waits
+#                   3 h (group_wait); Alertmanager sends nothing for a group
+#                   that resolved before its first flush, so a fixed incident
+#                   never reaches him.
+#   session="false" alerts: no session can act, so Erik hears directly.
+#   project="naiaclaw": a work project, alert only, quietly, once a day.
+# Delivery: ntfy (docs/notifications.md) with ntfy's own templating of the
+# webhook JSON (template=yes); user `alerts`, write-only token.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: none
+  # One group per alert: one incident, one notification.
+  group_by: ['...']
+  group_wait: 1m
+  group_interval: 10m
+  repeat_interval: 24h
+  routes:
+    - matchers: ['project="naiaclaw"']
+      receiver: ntfy-quiet
+      group_wait: 10m
+    - matchers: ['window="daytime"']
+      receiver: ntfy-normal
+      active_time_intervals: [daytime]
+    - matchers: ['session="true"']
+      receiver: ntfy-unfixed
+      group_wait: 3h
+    - matchers: ['severity="critical"']
+      receiver: ntfy-urgent
+      group_wait: 2m
+      repeat_interval: 6h
+    - matchers: ['severity="warning"']
+      receiver: ntfy-unfixed
+    - matchers: ['severity="info"']
+      receiver: ntfy-normal
+
+time_intervals:
+  - name: daytime
+    time_intervals:
+      - times:
+          - start_time: "08:00"
+            end_time: "23:00"
+        location: Europe/Stockholm
+
+receivers:
+  - name: none
+  - name: ntfy-quiet
+    webhook_configs:
+      - url: "http://ntfy.homelab.svc/erik?template=yes&priority=2&tags=briefcase&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
+        send_resolved: false
+        max_alerts: 5
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
+  - name: ntfy-normal
+    webhook_configs:
+      - url: "http://ntfy.homelab.svc/erik?template=yes&priority=3&tags=information_source&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
+        send_resolved: true
+        max_alerts: 5
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
+  - name: ntfy-unfixed
+    webhook_configs:
+      - url: "http://ntfy.homelab.svc/erik?template=yes&priority=4&tags=warning&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
+        send_resolved: true
+        max_alerts: 5
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
+  - name: ntfy-urgent
+    webhook_configs:
+      - url: "http://ntfy.homelab.svc/erik?template=yes&priority=5&tags=rotating_light&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
+        send_resolved: true
+        max_alerts: 5
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN

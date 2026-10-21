@@ -96,3 +96,36 @@ spec:
       services:
         - name: ntfy
           port: 80
+    # Observability (docs/observability.md). Grafana: read-only without a
+    # login for the phone. Prometheus and Alertmanager: health-watch on the pc
+    # polls Alertmanager's API.
+    - kind: Rule
+      match: Host(`grafana.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: grafana
+          port: 80
+    - kind: Rule
+      match: Host(`prometheus.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: prometheus
+          port: 9090
+    - kind: Rule
+      match: Host(`alertmanager.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: alertmanager
+          port: 9093
+    # The OTLP ingest for the pc, the laptop and the phone (OTLP/HTTP only).
+    # Alloy checks a bearer token on this port (secrets/otlp-ingest.enc.yaml).
+    - kind: Rule
+      match: Host(`otlp.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: alloy
+          port: 14318

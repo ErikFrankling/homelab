@@ -32,6 +32,10 @@ Apply in this order:
    Never taint the node: it is the only node. See
    [docs/gpu-passthrough.md](../../docs/gpu-passthrough.md).
 
+7. Observability: `kubectl apply -f observability-rbac.yaml` (cluster-wide
+   read access for Alloy pod logs and kube-state-metrics; the Flux reconciler
+   cannot create cluster roles). See [docs/observability.md](../../docs/observability.md).
+
 The Flux Kustomization initially uses `wait: false` so local-path PVCs can
 exist before the migration helper binds them. Set it to `true` in the final
 cutover commit after all workloads are enabled and healthy.

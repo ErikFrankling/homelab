@@ -1,0 +1,66 @@
+# Loki, single binary on the local-path volume (apps/loki.yaml,
+# docs/observability.md). Logs arrive from the Alloy gateway: OTLP from the
+# pc/framework and apps, and every k3s pod's output.
+auth_enabled: false
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: warn
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules-unused
+schema_config:
+  configs:
+    - from: "2026-10-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+limits_config:
+  # Ops logs: 30 days. Time's activity events (service.namespace="time"):
+  # 5 years, the raw copy the Time server can rebuild from.
+  retention_period: 720h
+  retention_stream:
+    - selector: '{service_namespace="time"}'
+      priority: 1
+      period: 43800h
+  allow_structured_metadata: true
+  volume_enabled: true
+  # The phone and laptop send late after being offline.
+  reject_old_samples: true
+  reject_old_samples_max_age: 720h
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  otlp_config:
+    resource_attributes:
+      attributes_config:
+        # host_name="pc" / "framework" / "naiaclaw" as a stream label.
+        - action: index_label
+          attributes: [host.name]
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /etc/loki/rules
+  rule_path: /loki/ruler-scratch
+  alertmanager_url: http://alertmanager:9093
+  enable_api: true
+  ring:
+    kvstore:
+      store: inmemory
+analytics:
+  reporting_enabled: false

@@ -22,6 +22,13 @@ resources:
   - apps/kokoro-tts.yaml
   - apps/t3-updates.yaml
   - apps/ntfy.yaml
+  - apps/alloy.yaml
+  - apps/prometheus.yaml
+  - apps/alertmanager.yaml
+  - apps/loki.yaml
+  - apps/grafana.yaml
+  - apps/kube-state-metrics.yaml
+  - apps/node-exporter.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
@@ -34,6 +41,8 @@ resources:
   - secrets/ntfy.enc.yaml
   - secrets/time-ntfy.enc.yaml
   - secrets/alerts-ntfy.enc.yaml
+  - secrets/otlp-ingest.enc.yaml
+  - secrets/grafana.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
@@ -62,6 +71,33 @@ configMapGenerator:
   - name: gatus-config
     files:
       - config.yaml=config/gatus/config.yaml
+  # Observability (docs/observability.md): editing any of these restarts
+  # the component that reads it.
+  - name: prometheus-config
+    files:
+      - config/prometheus/prometheus.yml
+      - config/prometheus/homelab.rules.yml
+  - name: alertmanager-config
+    files:
+      - config/alertmanager/alertmanager.yml
+  - name: loki-config
+    files:
+      - config/loki/loki.yaml
+  - name: loki-rules
+    files:
+      - config/loki/rules.yml
+  - name: alloy-config
+    files:
+      - config/alloy/config.alloy
+  - name: grafana-datasources
+    files:
+      - config/grafana/datasources.yaml
+  - name: grafana-dashboard-providers
+    files:
+      - config/grafana/dashboards.yaml
+  - name: grafana-dashboards
+    files:
+      - config/grafana/dashboards/home.json
 labels:
   - includeSelectors: false
     pairs:

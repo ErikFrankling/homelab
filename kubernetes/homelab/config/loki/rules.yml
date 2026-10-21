@@ -1,0 +1,38 @@
+# Log-based alerts (Loki ruler), same labels as the Prometheus rules
+# (config/prometheus/homelab.rules.yml). Tenant directory: "fake" (no auth).
+groups:
+  - name: errors
+    interval: 1m
+    rules:
+      # Dictation (pc system service local-stt): its JSON events ending in
+      # _failed or .error, and Python tracebacks. preview.interrupted
+      # timeouts are routine and excluded.
+      - alert: DictationErrors
+        expr: |
+          sum by (host_name) (count_over_time({service_name="local-stt"}
+            |~ `"event": "[a-z_.]*(failed|error)"|Traceback|Error handling request` [10m])) > 0
+        labels: {severity: warning, project: machines, session: "true", service_name: local-stt}
+        annotations:
+          summary: "{{ $labels.host_name }}: dictation (local-stt) logged errors"
+          description: "Grafana Explore, Loki: {service_name=\"local-stt\", host_name=\"{{ $labels.host_name }}\"}"
+      # T3 Code server: pino-style lines "[hh:mm:ss.ms] ERROR (#pid): ...".
+      # It logged none in the week before this rule; WARN is normal.
+      - alert: T3CodeErrors
+        expr: |
+          sum by (host_name) (count_over_time({service_name="t3code"}
+            |~ `^\[[0-9:.]+\] (ERROR|FATAL)` [10m])) > 0
+        labels: {severity: warning, project: machines, session: "true", service_name: t3code}
+        annotations:
+          summary: "{{ $labels.host_name }}: T3 Code server logged errors"
+          description: "Grafana Explore, Loki: {service_name=\"t3code\", host_name=\"{{ $labels.host_name }}\"} |~ \"ERROR\""
+      # Any systemd unit (system or user) on the pc/framework that failed,
+      # including timer jobs and transient units started with a name.
+      # Anonymous systemd-run units (run-u123) are agents' scratch work.
+      - alert: SystemdUnitFailed
+        expr: |
+          sum by (host_name, service_name) (count_over_time({host_name=~"pc|framework", service_name!~"run-.*"}
+            |= "Failed with result" [30m])) > 0
+        labels: {severity: warning, project: machines, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: unit {{ $labels.service_name }} failed"
+          description: "journalctl (--user) -u {{ $labels.service_name }} on {{ $labels.host_name }}"
