@@ -18,6 +18,7 @@ shift 3
 cd "$ws/$sub" || { echo "heavy: no directory $ws/$sub on the worker" >&2; exit 97; }
 touch "$ws"
 class=light
+bash /scripts/cgroups.sh 2> /dev/null || true
 cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
 run=$(mktemp -d /tmp/heavy-run.XXXXXX)
 trap 'rm -rf "$run"' EXIT
