@@ -30,6 +30,28 @@ sdk() {
   echo "$(readlink -f "$link")/libexec/android-sdk"
 }
 
+grpc_port=8554
+
+# PulseAudio (null sink "heavy") and python with grpc, from the pod's pinned
+# nixpkgs, rooted under $state so garbage collection keeps them. Prints the
+# env's path; starts the sound server if it is not running.
+audio() {
+  local env=$state/emu-audio rev
+  if [ ! -e "$env/bin/pulseaudio" ]; then
+    rev=$(cat /nix/var/worker/nixpkgs-rev)
+    nix-build -o "$env" -E "let p = import (builtins.fetchTarball \"https://github.com/NixOS/nixpkgs/archive/$rev.tar.gz\") {}; in p.buildEnv { name = \"emu-audio\"; paths = [ p.pulseaudio (p.python3.withPackages (ps: [ ps.grpcio ps.grpcio-tools ps.protobuf ])) ]; }" >&2 || return 1
+  fi
+  mkdir -p "$state/bin" /run/heavy-pulse
+  ln -sfn "$(readlink -f "$env")/bin/python3" "$state/bin/emulator-python"
+  if ! PULSE_SERVER=unix:/run/heavy-pulse/native "$env/bin/pactl" info > /dev/null 2>&1; then
+    PULSE_RUNTIME_PATH=/run/heavy-pulse HOME=/root "$env/bin/pulseaudio" --daemonize=yes \
+      --exit-idle-time=-1 --disallow-exit -n --load="module-null-sink sink_name=heavy" \
+      --load="module-native-protocol-unix auth-anonymous=1 socket=/run/heavy-pulse/native" \
+      --log-target=file:/run/heavy-pulse/log >&2 || return 1
+  fi
+  echo "$env"
+}
+
 running() { pgrep -f "qemu-system.*-avd $avd" > /dev/null; }
 holder_running() { [ -f "$state/holder.pid" ] && kill -0 "$(cat "$state/holder.pid")" 2> /dev/null; }
 
@@ -105,9 +127,19 @@ INI
     cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
     [ -z "$cgroot" ] || echo $$ > "$cgroot/emulator/cgroup.procs" 2> /dev/null || true
     renice -n 0 -p $$ > /dev/null 2>&1 || true
-    setsid "$root/emulator/emulator" -avd "$avd" -port 5554 -no-window -no-audio \
+    # Audio for measured tests (Read aloud): the emulator plays into a
+    # PulseAudio null sink in this pod (-allow-host-audio needs a host
+    # backend), and its gRPC controller on 8554 streams what it plays
+    # (streamAudio) and feeds the microphone (injectAudio). emulator-python
+    # (on every job's PATH) has grpcio, grpcio-tools and protobuf for
+    # scripts/voice-e2e/android/emulator_audio.py.
+    audio_env=$(audio) || fail "could not set up emulator audio"
+    export PULSE_SERVER=unix:/run/heavy-pulse/native
+    setsid "$root/emulator/emulator" -avd "$avd" -port 5554 -no-window \
+      -allow-host-audio -grpc "$grpc_port" \
       -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on \
       > "$log" 2>&1 < /dev/null &
+    : "$audio_env"
     booted=0
     for _ in $(seq 1 240); do
       if [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ]; then
@@ -118,7 +150,7 @@ INI
       sleep 2
     done
     [ "$booted" = 1 ] || { pkill -f "qemu-system.*-avd $avd" || true; fail "the emulator did not finish booting in 8 minutes"; }
-    echo "booted: emulator-5554 ($avd, $api); it holds the big job slot until heavy emulator stop" > "$state/booted"
+    echo "booted: emulator-5554 ($avd, $api), gRPC on $grpc_port (audio: streamAudio/injectAudio; emulator-python has grpc); it holds the big job slot until heavy emulator stop" > "$state/booted"
     # Hold the slot while it runs; stop it after a while with no heavy job
     # (other than this holder) and no adb client.
     idle=0

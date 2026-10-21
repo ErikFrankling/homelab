@@ -69,3 +69,20 @@ echo "$big_memory" > "$state/memory-big"
 echo "$small_memory" > "$state/memory-small"
 echo "$service_memory" > "$state/memory-service"
 echo "$cg" > "$state/cgroup"
+
+# Caches on the volume, shared by all jobs and kept between runs: Gradle,
+# pnpm store (.local), npm, cargo, pip/uv/bun (.cache, .bun), Android.
+for cache in .gradle .cache .local .npm .android .cargo .bun; do
+  mkdir -p "$state/home/$cache"
+  if [ ! -L "/root/$cache" ]; then
+    rm -rf "/root/${cache:?}"
+    ln -sfn "$state/home/$cache" "/root/$cache"
+  fi
+done
+
+# Housekeeping (housekeeping.sh) at most hourly, in the background.
+stamp=$state/housekeeping.stamp
+if [ ! -f "$stamp" ] || [ -n "$(find "$stamp" -mmin +60)" ]; then
+  touch "$stamp"
+  setsid bash /scripts/housekeeping.sh >> "$state/housekeeping.log" 2>&1 < /dev/null &
+fi

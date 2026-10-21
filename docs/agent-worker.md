@@ -121,3 +121,27 @@ minutes. Big jobs whose command or script mentions adb or the emulator run
 inside that reservation (`/work/.slots/shared/`); other big jobs wait, and
 their queue message says the emulator holds the slot. The emulator runs at
 normal priority in its own cgroup.
+
+## Emulator audio and gRPC
+
+The emulator starts with `-allow-host-audio -grpc 8554`. It plays into a
+PulseAudio null sink in the pod (`/run/heavy-pulse`), and its gRPC
+EmulatorController on `127.0.0.1:8554` streams what it plays (`streamAudio`)
+and feeds the microphone (`injectAudio`; start that only after the app has
+opened its recorder, or the emulator can crash). Jobs get
+`EMULATOR_GRPC_PORT=8554`, `emulator-python` (python with grpcio,
+grpcio-tools, protobuf) on PATH, and `ANDROID_SDK_ROOT` pointing at an SDK
+with `emulator_controller.proto` when they bring none. Read aloud's
+`scripts/voice-e2e/android/emulator_audio.py` (t3code-voice-v2) runs as
+`emulator-python scripts/voice-e2e/android/emulator_audio.py capture 8554 out.wav 10`.
+From the PC, `heavy emulator start` also tunnels 8554.
+
+## Housekeeping and caches
+
+`scripts/housekeeping.sh` runs at most hourly (started by `cgroups.sh`):
+workspaces untouched for 3 days are deleted (never one with a running job),
+the caches in `/nix/var/worker/home` (linked into `/root`: `.gradle`, `.cache`
+for pip/uv, `.local` for the pnpm store, `.npm`, `.cargo`, `.bun`,
+`.android`) are pruned to size budgets by least recent use, old devShell
+profile generations go, and dead store paths are collected while the node has
+under 45 GB free. Log: `/nix/var/worker/housekeeping.log`.

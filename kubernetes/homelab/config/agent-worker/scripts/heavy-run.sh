@@ -40,6 +40,14 @@ if [ -n "${HEAVY_ENVFILE:-}" ] && [ -f "$HEAVY_ENVFILE" ]; then
 fi
 unset HEAVY_ENVFILE
 
+# The shared emulator (heavy-emulator.sh): its gRPC port, emulator-python
+# (python with grpc, appended so a devShell's own python still wins), and an
+# SDK with emulator_controller.proto when the job brings none.
+export EMULATOR_GRPC_PORT=8554 PATH="$PATH:/nix/var/worker/android/bin"
+if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -d /nix/var/worker/android/sdk/libexec/android-sdk ]; then
+  export ANDROID_SDK_ROOT=/nix/var/worker/android/sdk/libexec/android-sdk
+fi
+
 # What the queue and `heavy status` show: no values of VAR=value words, and
 # nothing after --password/--token/--secret/--key style flags.
 redact() {
@@ -156,9 +164,9 @@ if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
       [ "$left" -ge 1 ] || left=1
     fi
     eta=$((left + ahead * usual))
-    state="waiting for the $class-job slot: $ahead $class job(s) ahead of you, about $eta min (a $class job usually takes $usual min). Too long? when-idle runs it on the PC while Erik is away."
+    state="waiting for the $class-job slot: $ahead $class job(s) ahead of you, about $eta min (a $class job usually takes $usual min)."
     if [ "$class" = big ] && emulator_holds; then
-      state="waiting for the big-job slot: the emulator holds it since $(cut -c1-5 /work/.slots/big.job) (freed by heavy emulator stop, or after 30 idle minutes); $ahead big job(s) ahead of you. Jobs that use adb or the emulator run alongside it instead. Too long? when-idle runs it on the PC while Erik is away."
+      state="waiting for the big-job slot: the emulator holds it since $(cut -c1-5 /work/.slots/big.job) (freed by heavy emulator stop, or after 30 idle minutes); $ahead big job(s) ahead of you. Jobs that use adb or the emulator run alongside it instead."
     fi
     now=$(date +%s)
     if [ "$state" != "$last" ] && [ $((now - last_at)) -ge 60 ] || [ $((now - last_at)) -ge 300 ]; then

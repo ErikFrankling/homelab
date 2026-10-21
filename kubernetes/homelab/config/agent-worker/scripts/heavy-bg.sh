@@ -92,6 +92,11 @@ case "$action" in
     ;;
   logs)
     ws=$1 name=$2
+    [ -f "$ws/.heavy/$name.log" ] || { echo "heavy: no log for $name" >&2; exit 1; }
+    if [ "${HEAVY_LOG_FOLLOW:-0}" = 1 ] && running "$ws/.heavy/$name.pid"; then
+      # Follow until the job ends (reattach after the client went away).
+      exec tail -n "${HEAVY_LOG_LINES:-100}" -f --pid="$(cat "$ws/.heavy/$name.pid")" "$ws/.heavy/$name.log"
+    fi
     tail -n "${HEAVY_LOG_LINES:-100}" "$ws/.heavy/$name.log"
     ;;
   list)

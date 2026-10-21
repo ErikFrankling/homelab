@@ -93,6 +93,7 @@ configMapGenerator:
     files:
       - config/agent-worker/scripts/heavy-run.sh
       - config/agent-worker/scripts/cgroups.sh
+      - config/agent-worker/scripts/housekeeping.sh
       - config/agent-worker/scripts/heavy-status.sh
       - config/agent-worker/scripts/heavy-bg.sh
       - config/agent-worker/scripts/heavy-emulator.sh
