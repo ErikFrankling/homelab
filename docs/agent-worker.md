@@ -139,7 +139,8 @@ From the PC, `heavy emulator start` also tunnels 8554.
 ## Housekeeping and caches
 
 `scripts/housekeeping.sh` runs at most hourly (started by `cgroups.sh`):
-workspaces untouched for 3 days are deleted (never one with a running job),
+workspaces untouched for 3 days are deleted, then the least recently used
+while all of them use more than 15 GB (never one with a running job),
 the caches in `/nix/var/worker/home` (linked into `/root`: `.gradle`, `.cache`
 for pip/uv, `.local` for the pnpm store, `.npm`, `.cargo`, `.bun`,
 `.android`) are pruned to size budgets by least recent use, old devShell

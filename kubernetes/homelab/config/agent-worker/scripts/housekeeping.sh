@@ -1,7 +1,8 @@
 #!/bin/bash
 # Hourly, started by cgroups.sh. The node disk is shared with nix-builder and
 # was down to 35 GB free on 2026-10-21, so the worker keeps itself small:
-#   - workspaces untouched for 3 days go (never one with a running job)
+#   - workspaces untouched for 3 days go, and the least recently used ones
+#     while all of them use more than 15 GB (never one with a running job)
 #   - each cache is pruned to a size budget, least recently used files first
 #   - old devShell profile generations go, then dead Nix store paths whenever
 #     the node has less than 45 GB free (nix.conf's min-free does the same
@@ -20,6 +21,16 @@ for ws in /work/*/; do
     echo "removing workspace $ws (untouched for 3 days)"
     rm -rf "$ws"
   fi
+done
+
+# All workspaces together: at most 15 GB, least recently used go first.
+work_budget=15
+for ws in $(ls -1dtr /work/*/ 2> /dev/null); do
+  used=$(du -s -BG /nix/var/worker/work 2> /dev/null | cut -f1 | tr -d G)
+  [ "${used:-0}" -gt "$work_budget" ] || break
+  busy "$ws" && continue
+  echo "removing workspace $ws (workspaces use ${used}G > ${work_budget}G; least recently used)"
+  rm -rf "$ws"
 done
 
 # prune DIR BUDGET_GB: delete files not used for 30, 14, 7, 3, 1 days until
