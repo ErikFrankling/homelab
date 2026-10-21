@@ -18,7 +18,8 @@ common:
       rules_directory: /loki/rules-unused
 schema_config:
   configs:
-    - from: "2026-10-01"
+    # Far enough back that backfilled pod logs always match a schema.
+    - from: "2024-01-01"
       store: tsdb
       object_store: filesystem
       schema: v13

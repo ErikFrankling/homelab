@@ -69,7 +69,7 @@ groups:
         annotations:
           summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas"
       - alert: PersistentVolumeClaimPending
-        expr: kube_persistentvolumeclaim_status_phase{phase="Pending"} == 1
+        expr: kube_persistentvolumeclaim_status_phase{phase="Pending",namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"} == 1
         for: 30m
         labels: {severity: warning, project: homelab, session: "true"}
         annotations:
@@ -97,6 +97,9 @@ groups:
       - alert: MachineSilent
         expr: |
           absent_over_time(node_load1{host_name="pc"}[30m])
+          # Only once Prometheus holds that much history: an empty TSDB (new or
+          # wiped) would otherwise look like a silent machine.
+          and on () (time() - prometheus_tsdb_lowest_timestamp_seconds) > 1800
         labels: {severity: critical, project: machines, session: "false", host_name: pc}
         annotations:
           summary: "pc: no metrics for 30 min (down, off the network, or Alloy stopped)"
@@ -104,6 +107,7 @@ groups:
       - alert: LaptopSilent
         expr: |
           absent_over_time(node_load1{host_name="framework"}[3d])
+          and on () (time() - prometheus_tsdb_lowest_timestamp_seconds) > 3 * 86400
         labels: {severity: info, project: machines, session: "false", host_name: framework}
         annotations:
           summary: "framework: no metrics for 3 days"
