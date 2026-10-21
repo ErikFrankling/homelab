@@ -83,6 +83,11 @@ spec:
             - "8192"
             - --parallel
             - "4"
+            # Embedding models need a whole post in one batch; the default 512 tokens rejects long posts.
+            - -b
+            - "2048"
+            - -ub
+            - "2048"
             # The node is saturated by other pods and the CFS quota is off (ops/k3s/config.yaml),
             # so this pod only gets its cpu.weight share. Four threads that busy-wait at each
             # barrier turn that into seconds per request (2026-10-21: 3-7 s for "hello world",
