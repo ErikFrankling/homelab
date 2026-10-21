@@ -11,9 +11,8 @@ if [ -n "$cgroot" ]; then
 fi
 echo "disk: $(df -h --output=avail /nix | tail -1 | tr -d ' ') free on the node"
 echo "emulator: $(pgrep -f 'qemu-system.*-avd' > /dev/null && echo running || echo stopped)"
-slots=$(cat /nix/var/worker/slots 2> /dev/null || echo 2)
-echo "running jobs ($slots slots):"
-for i in $(seq 1 "$slots"); do
+echo "running jobs (one big slot, one small slot):"
+for i in big small; do
   if [ -f "/work/.slots/$i.job" ] && ! flock -n "/work/.slots/$i" true 2> /dev/null; then
     echo "  [$i] $(tr '\t' ' ' < "/work/.slots/$i.job" | cut -c1-150)"
   fi

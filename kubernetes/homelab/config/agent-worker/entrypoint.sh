@@ -25,7 +25,8 @@ mkdir -p /etc/nix /root/.ssh /root/.config/nixpkgs /var/empty /run/sshd \
 cp /config/nix.conf /etc/nix/nix.conf
 # Jobs over SSH do not see the container environment.
 echo "$NIXPKGS_REV" > "$state/nixpkgs-rev"
-echo "${HEAVY_SLOTS:-2}" > "$state/slots"
+echo "$WORKER_BIG_MEMORY" > "$state/memory-big"
+echo "$WORKER_SMALL_MEMORY" > "$state/memory-small"
 cp /config/nixpkgs-config.nix /root/.config/nixpkgs/config.nix
 # Workspaces are synced with the PC user's files; let git and nix use them.
 git config --global safe.directory "*"

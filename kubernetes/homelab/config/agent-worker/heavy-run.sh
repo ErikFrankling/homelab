@@ -3,10 +3,10 @@
 # <develop> is auto (the flake's default devShell if it has one), no, or a
 # devShell name.
 #
-# Scheduling: at most /nix/var/worker/slots jobs run at once; the rest wait
-# in a FIFO queue (/work/.queue, one ticket each). Slots are flock(1)s on
-# /work/.slots/N, held for the job's lifetime. HEAVY_LIGHT=1 (servers from
-# `heavy bg --light`) skips the queue and runs in the small light/ cgroup.
+# Scheduling: two slots, "big" and "small" (see below); the rest wait in a
+# FIFO queue per class (/work/.queue, one ticket each). Slots are flock(1)s
+# on /work/.slots/{big,small}, held for the job's lifetime. HEAVY_LIGHT=1
+# (servers from `heavy bg --light`) skips the queue and runs in the small light/ cgroup.
 #
 # The job gets its own process group and cgroup (cgroups.sh). This script's
 # stdin is the SSH channel, which the PC keeps open for the job's lifetime:
@@ -17,7 +17,7 @@ ws=$1 sub=$2 develop=$3
 shift 3
 cd "$ws/$sub" || { echo "heavy: no directory $ws/$sub on the worker" >&2; exit 97; }
 touch "$ws"
-slots=$(cat /nix/var/worker/slots 2> /dev/null || echo 2)
+class=light
 cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
 run=$(mktemp -d /tmp/heavy-run.XXXXXX)
 trap 'rm -rf "$run"' EXIT
@@ -36,11 +36,35 @@ exec 3<&0
 watcher=$!
 
 if [ "${HEAVY_LIGHT:-0}" != 1 ]; then
+  # Big jobs (Gradle/Expo/APK builds, anything that drives the emulator) run
+  # one at a time in the "big" slot with up to WORKER_BIG_MEMORY; small jobs
+  # (typechecks, tests, scripts) take the "small" slot with up to
+  # WORKER_SMALL_MEMORY, or the big one while no big job waits. HEAVY_CLASS
+  # (from `heavy --big/--small`) overrides the guess.
+  class=${HEAVY_CLASS:-auto}
+  if [ "$class" = auto ]; then
+    class=small
+    big='gradle|gradlew|assemble(release|debug)|bundlerelease|expo (run|prebuild|export)|eas build|emulator'
+    if printf '%s ' "$@" | grep -qiE "$big" \
+      || { [ -f "$1" ] && grep -qiE "$big" "$1"; }; then
+      class=big
+    fi
+  fi
   mkdir -p /work/.queue /work/.slots
-  ticket="/work/.queue/$(date +%s%N)-$$"
-  printf '%s\t%s\t%s\n' "$(date +%T)" "$(basename "$ws")" "$*" > "$ticket"
+  ticket="/work/.queue/$(date +%s%N)-$class-$$"
+  printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$*" > "$ticket"
   trap 'rm -rf "$run" "$ticket"' EXIT
   last=""
+  take() {
+    exec 9> "/work/.slots/$1"
+    if flock -n 9; then
+      slot=$1
+      printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$*" > "/work/.slots/$slot.job"
+      return 0
+    fi
+    exec 9>&-
+    return 1
+  }
   while :; do
     [ ! -e "$run/closed" ] || exit 130
     # Forget tickets of jobs that went away while waiting.
@@ -48,22 +72,21 @@ if [ "${HEAVY_LIGHT:-0}" != 1 ]; then
       [ -e "$t" ] || continue
       kill -0 "${t##*-}" 2> /dev/null || rm -f "$t"
     done
-    ahead=0
+    ahead=0 bigs=0
     for t in /work/.queue/*; do
-      [ -e "$t" ] && [ "$t" \< "$ticket" ] && ahead=$((ahead + 1))
+      [ -e "$t" ] || continue
+      case "$t" in *-big-*) bigs=$((bigs + 1)) ;; esac
+      case "$t" in *"-$class-"*) [ "$t" \< "$ticket" ] && ahead=$((ahead + 1)) ;; esac
     done
     if [ "$ahead" = 0 ]; then
-      for i in $(seq 1 "$slots"); do
-        exec 9> "/work/.slots/$i"
-        if flock -n 9; then
-          slot=$i
-          printf '%s\t%s\t%s\n' "$(date +%T)" "$(basename "$ws")" "$*" > "/work/.slots/$slot.job"
-          break 2
-        fi
-        exec 9>&-
-      done
+      if [ "$class" = big ]; then
+        take big "$@" && break
+      else
+        take small "$@" && break
+        [ "$bigs" != 0 ] || { take big "$@" && break; }
+      fi
     fi
-    state="waiting for a slot ($ahead ahead of you, $slots jobs running)"
+    state="waiting for the $class-job slot ($ahead $class jobs ahead of you)"
     [ "$state" = "$last" ] || { echo "heavy: $state" >&2; last=$state; }
     sleep 3
   done
@@ -87,7 +110,9 @@ if [ -n "$cgroot" ]; then
     echo $$ > "$cgroot/light/cgroup.procs" 2> /dev/null || true
   else
     jobcg="$cgroot/jobs/job-$$"
-    { mkdir -p "$jobcg" && echo 1 > "$jobcg/memory.oom.group" && echo $$ > "$jobcg/cgroup.procs"; } 2> /dev/null || jobcg=""
+    cap=$(cat "/nix/var/worker/memory-$class" 2> /dev/null || echo max)
+    { mkdir -p "$jobcg" && echo "$cap" > "$jobcg/memory.max" && echo 1 > "$jobcg/memory.oom.group" \
+      && echo $$ > "$jobcg/cgroup.procs"; } 2> /dev/null || jobcg=""
   fi
 fi
 
@@ -100,7 +125,7 @@ echo "$job" > "$run/job"
 wait "$job"
 rc=$?
 if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events"; then
-  echo "heavy: the job ran out of memory (the worker's job pool is $(numfmt --to=iec < "$cgroot/jobs/memory.max")); run less at once" >&2
+  echo "heavy: the job ran out of memory ($class jobs get up to $(numfmt --to=iec < "$jobcg/memory.max"), all jobs together $(numfmt --to=iec < "$cgroot/jobs/memory.max")); use --big for builds, or run less at once" >&2
 fi
 pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
