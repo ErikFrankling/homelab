@@ -11,6 +11,9 @@ state=/nix/var/worker
 exec 8> /run/heavy-cgroups.lock
 flock 8
 
+# Job cgroups whose processes are gone (rmdir fails on busy ones).
+[ ! -s "$state/cgroup" ] || rmdir "$(cat "$state/cgroup")"/jobs/job-* 2> /dev/null
+
 if [ -s "$state/cgroup" ] && [ -d "$(cat "$state/cgroup")/jobs" ] \
   && grep -q memory "$(cat "$state/cgroup")/cgroup.subtree_control" 2> /dev/null; then
   exit 0

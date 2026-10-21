@@ -103,21 +103,29 @@ if [ "$develop" != no ] && [ -f "$ws/flake.nix" ] && grep -q devShell "$ws/flake
   set -- nix develop --profile "$ws/.heavy/shell-$shell" "$ws#$shell" -c "$@"
 fi
 
-# Own cgroup: if the jobs/ pool runs out of memory, the whole job (and only
-# it) is killed.
+# Own cgroup for the job, not for this script: if the job runs out of memory,
+# the whole job (and only it) is killed, and this script survives to say so.
+target=""
 jobcg=""
 if [ -n "$cgroot" ]; then
   if [ "${HEAVY_LIGHT:-0}" = 1 ]; then
-    echo $$ > "$cgroot/light/cgroup.procs" 2> /dev/null || true
+    target="$cgroot/light"
   else
     jobcg="$cgroot/jobs/job-$$"
     cap=$(cat "/nix/var/worker/memory-$class" 2> /dev/null || echo max)
-    { mkdir -p "$jobcg" && echo "$cap" > "$jobcg/memory.max" && echo 1 > "$jobcg/memory.oom.group" \
-      && echo $$ > "$jobcg/cgroup.procs"; } 2> /dev/null || jobcg=""
+    if { mkdir -p "$jobcg" && echo "$cap" > "$jobcg/memory.max" \
+      && echo 1 > "$jobcg/memory.oom.group"; } 2> /dev/null; then
+      target=$jobcg
+    else
+      jobcg=""
+    fi
   fi
 fi
 
-setsid nice -n 19 "$@" < /dev/null 3<&- 9>&- &
+# The job moves itself into its cgroup before exec, so nothing of it runs
+# outside even for a moment.
+setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null; shift; exec nice -n 19 "$@"' \
+  heavy-job "$target" "$@" < /dev/null 3<&- 9>&- &
 job=$!
 echo "$job" > "$run/job"
 [ -z "${HEAVY_JOB_PIDFILE:-}" ] || echo "$job" > "$HEAVY_JOB_PIDFILE"
@@ -125,15 +133,11 @@ echo "$job" > "$run/job"
 [ ! -e "$run/closed" ] || kill -TERM -- "-$job" 2> /dev/null
 wait "$job"
 rc=$?
-if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events"; then
+if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events" 2> /dev/null; then
   echo "heavy: the job ran out of memory ($class jobs get up to $(numfmt --to=iec < "$jobcg/memory.max"), all jobs together $(numfmt --to=iec < "$cgroot/jobs/memory.max")); use --big for builds, or run less at once" >&2
 fi
 pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
 [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
-if [ -n "$jobcg" ]; then
-  # Leave the job's cgroup so it can go once its processes are gone.
-  echo $$ > "$cgroot/system/cgroup.procs" 2> /dev/null
-  rmdir "$jobcg" 2> /dev/null || true
-fi
+[ -z "$jobcg" ] || rmdir "$jobcg" 2> /dev/null || true
 exit "$rc"
