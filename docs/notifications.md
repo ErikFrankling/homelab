@@ -6,8 +6,10 @@ not install another app. The Executor app `notify` and the `notify-erik` CLI
 Discord server "Agents"; the Discord app he already has pushes it. Every send
 is also mirrored to the ntfy server below, the backbone for native push in
 the T3 Code Android app (in progress). **Senders that publish to ntfy only
-(Time, Alertmanager) do not reach his phone yet**; until the T3 app receives
-push, send what he must see through Executor's `notify` app.
+(Time) do not reach his phone yet**; until the T3 app receives
+push, send what he must see through Executor's `notify` app. Alertmanager
+posts to the same Discord webhook itself (secret `alerts-discord`, see
+docs/observability.md) and mirrors to ntfy.
 
 A self-hosted [ntfy](https://ntfy.sh) server: `apps/ntfy.yaml`, settings in
 `config/ntfy/server.yml`, users and tokens in `secrets/ntfy.enc.yaml`.
@@ -16,7 +18,7 @@ A self-hosted [ntfy](https://ntfy.sh) server: `apps/ntfy.yaml`, settings in
 agent (any harness) --tools.notify.send--> Executor app `notify` --+--> Discord webhook --> Discord app on the phone
 pc/framework scripts --notify-erik CLI-----------------------------+
                                                                    +--> ntfy topic `erik` (mirror)
-Alertmanager (planned) and Time, from pods: plain HTTP ------------------^
+Alertmanager (Discord itself + ntfy mirror), Time: plain HTTP ------------^
 ```
 
 ## Why ntfy

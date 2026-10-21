@@ -8,7 +8,7 @@
 #                   never reaches him.
 #   session="false" alerts: no session can act, so Erik hears directly.
 #   project="naiaclaw": a work project, alert only, quietly, once a day.
-# Delivery: ntfy (docs/notifications.md) with ntfy's own templating of the
+# Delivery: Discord (receivers below) and an ntfy mirror with ntfy's own templating of the
 # webhook JSON (template=yes); user `alerts`, write-only token.
 global:
   resolve_timeout: 5m
@@ -22,22 +22,22 @@ route:
   repeat_interval: 24h
   routes:
     - matchers: ['project="naiaclaw"']
-      receiver: ntfy-quiet
+      receiver: quiet
       group_wait: 10m
     - matchers: ['window="daytime"']
-      receiver: ntfy-normal
+      receiver: normal
       active_time_intervals: [daytime]
     - matchers: ['session="true"']
-      receiver: ntfy-unfixed
+      receiver: unfixed
       group_wait: 3h
     - matchers: ['severity="critical"']
-      receiver: ntfy-urgent
+      receiver: urgent
       group_wait: 2m
       repeat_interval: 6h
     - matchers: ['severity="warning"']
-      receiver: ntfy-unfixed
+      receiver: unfixed
     - matchers: ['severity="info"']
-      receiver: ntfy-normal
+      receiver: normal
 
 time_intervals:
   - name: daytime
@@ -47,9 +47,17 @@ time_intervals:
             end_time: "23:00"
         location: Europe/Stockholm
 
+# Erik reads these in Discord (#notifications on his server "Agents", the same
+# webhook as notify-erik; docs/notifications.md). Only critical alerts
+# @mention him. ntfy keeps a mirror copy for the future T3 app push.
+templates:
+  # Defines discord.mention as <@Erik>, from secret alerts-discord, so his
+  # Discord user id stays out of this public repo.
+  - /etc/alertmanager/discord/mention.tmpl
+
 receivers:
   - name: none
-  - name: ntfy-quiet
+  - name: quiet
     webhook_configs:
       - url: "http://ntfy.homelab.svc/erik?template=yes&priority=2&tags=briefcase&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
         send_resolved: false
@@ -58,7 +66,13 @@ receivers:
           authorization:
             type: Bearer
             credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
-  - name: ntfy-normal
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/discord/webhook-url
+        send_resolved: false
+        username: Alerts
+        title: '{{ if eq .Status "resolved" }}Resolved: {{ end }}{{ .CommonAnnotations.summary }}'
+        message: '{{ range .Alerts }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}{{ "\n" }}{{ end }}[Grafana](https://grafana.erikfrankling.duckdns.org/)'
+  - name: normal
     webhook_configs:
       - url: "http://ntfy.homelab.svc/erik?template=yes&priority=3&tags=information_source&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
         send_resolved: true
@@ -67,7 +81,13 @@ receivers:
           authorization:
             type: Bearer
             credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
-  - name: ntfy-unfixed
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/discord/webhook-url
+        send_resolved: true
+        username: Alerts
+        title: '{{ if eq .Status "resolved" }}Resolved: {{ end }}{{ .CommonAnnotations.summary }}'
+        message: '{{ range .Alerts }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}{{ "\n" }}{{ end }}[Grafana](https://grafana.erikfrankling.duckdns.org/)'
+  - name: unfixed
     webhook_configs:
       - url: "http://ntfy.homelab.svc/erik?template=yes&priority=4&tags=warning&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
         send_resolved: true
@@ -76,7 +96,13 @@ receivers:
           authorization:
             type: Bearer
             credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
-  - name: ntfy-urgent
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/discord/webhook-url
+        send_resolved: true
+        username: Alerts
+        title: '{{ if eq .Status "resolved" }}Resolved: {{ end }}{{ .CommonAnnotations.summary }}'
+        message: '{{ range .Alerts }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}{{ "\n" }}{{ end }}[Grafana](https://grafana.erikfrankling.duckdns.org/)'
+  - name: urgent
     webhook_configs:
       - url: "http://ntfy.homelab.svc/erik?template=yes&priority=5&tags=rotating_light&click=https%3A%2F%2Fgrafana.erikfrankling.duckdns.org%2F&title=%7B%7Bif%20eq%20.status%20%22resolved%22%7D%7DResolved%3A%20%7B%7Bend%7D%7D%7B%7B.commonAnnotations.summary%7D%7D&message=%7B%7Brange%20.alerts%7D%7D%7B%7Bif%20.annotations.description%7D%7D%7B%7B.annotations.description%7D%7D%7B%7Belse%7D%7D%7B%7B.annotations.summary%7D%7D%7B%7Bend%7D%7D%7B%7B%22%5Cn%22%7D%7D%7B%7Bend%7D%7D"
         send_resolved: true
@@ -85,3 +111,10 @@ receivers:
           authorization:
             type: Bearer
             credentials_file: /etc/alertmanager/ntfy/NTFY_TOKEN
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/discord/webhook-url
+        send_resolved: true
+        username: Alerts
+        content: '{{ if eq .Status "firing" }}{{ template "discord.mention" . }} 🚨{{ end }}'
+        title: '{{ if eq .Status "resolved" }}Resolved: {{ end }}{{ .CommonAnnotations.summary }}'
+        message: '{{ range .Alerts }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}{{ "\n" }}{{ end }}[Grafana](https://grafana.erikfrankling.duckdns.org/)'

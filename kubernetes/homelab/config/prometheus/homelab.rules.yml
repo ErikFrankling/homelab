@@ -147,8 +147,8 @@ groups:
         expr: max by (namespace, job_name) (kube_job_status_failed{namespace="homelab", job_name=~"alert-e2e-test-.*"}) > 0
         labels: {severity: info, project: homelab, session: "false"}
         annotations:
-          summary: "Alert pipeline test: {{ $labels.job_name }} failed on purpose"
-          description: "If you see this on the phone, failure -> Prometheus -> Alertmanager -> ntfy works. It resolves when the test Job is deleted."
+          summary: "[TEST] Alert pipeline test: {{ $labels.job_name }} failed on purpose"
+          description: "If you see this in Discord, failure -> Prometheus -> Alertmanager -> Discord works. It resolves when the test Job is deleted."
       - alert: ScrapeTargetDown
         expr: up{job!="time"} == 0
         for: 15m

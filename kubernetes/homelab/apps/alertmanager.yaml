@@ -1,4 +1,4 @@
-# Alertmanager: routes alerts to Erik's phone through ntfy
+# Alertmanager: routes alerts to Erik's phone through Discord (ntfy mirror)
 # (config/alertmanager/alertmanager.yml for the policy). health-watch on the
 # pc polls its API to start repair sessions (docs/observability.md).
 apiVersion: v1
@@ -76,6 +76,7 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/alertmanager, readOnly: true}
             - {name: ntfy, mountPath: /etc/alertmanager/ntfy, readOnly: true}
+            - {name: discord, mountPath: /etc/alertmanager/discord, readOnly: true}
             - {name: data, mountPath: /alertmanager}
       volumes:
         - name: config
@@ -87,6 +88,11 @@ spec:
             secretName: alerts-ntfy
             items:
               - {key: NTFY_TOKEN, path: NTFY_TOKEN}
+        # Discord webhook of #notifications and the @mention template
+        # (docs/notifications.md); same webhook as notify-erik.
+        - name: discord
+          secret:
+            secretName: alerts-discord
         - name: data
           persistentVolumeClaim:
             claimName: alertmanager-data

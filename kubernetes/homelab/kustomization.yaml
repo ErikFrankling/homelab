@@ -45,6 +45,7 @@ resources:
   - secrets/alerts-ntfy.enc.yaml
   - secrets/otlp-ingest.enc.yaml
   - secrets/grafana.enc.yaml
+  - secrets/alerts-discord.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard

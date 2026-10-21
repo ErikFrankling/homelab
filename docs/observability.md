@@ -39,8 +39,9 @@ All routes are `lan-only` (LAN and tailnet).
    still firing after 3 hours (priority 4); a group resolved before its
    first send never notifies.
 4. `session="false"`: no session can act (the pc itself silent, a check
-   still failing after 3 h, Time heartbeats). Erik hears directly: priority
-   5 for critical, 4 warning, 3 info.
+   still failing after 3 h, Time heartbeats). Erik hears directly in Discord
+   (#notifications); only critical alerts @mention him. The ntfy mirror
+   keeps the priorities 5 critical, 4 warning, 3 info.
 5. `project="naiaclaw"`: Erik's work project. Alert only, priority 2, at
    most once a day per alert; never a session.
 
@@ -61,8 +62,8 @@ What is watched today:
 ## Testing the alerts
 
 A real failure end to end (k8s Job -> kube-state-metrics -> Prometheus ->
-Alertmanager -> ntfy), no repair session. Arrives in about 2 minutes as
-"Alert pipeline test"; the "Resolved" message follows when the Job removes
+Alertmanager -> Discord, ntfy mirror), no repair session. Arrives in about 2 minutes as
+"[TEST] Alert pipeline test"; the "Resolved" message follows when the Job removes
 itself after 15 minutes.
 
 ```sh
@@ -103,7 +104,7 @@ Validate before pushing: `promtool check rules`, `amtool check-config`,
     to be old enough.
   - Loki refuses (500) entries older than the first schema `from` date;
     backfilled pod logs need it far in the past (2024-01-01).
-  - Alertmanager 0.34 has no ntfy receiver; it uses a webhook with ntfy's
+  - Alertmanager 0.34 has no ntfy receiver; the ntfy mirror uses a webhook with ntfy's
     own templating (`template=yes&title=...&message=...`).
 
 ## Design (as built)
@@ -112,7 +113,7 @@ Validate before pushing: `promtool check rules`, `amtool check-config`,
 pc, framework:  apps (OTLP) + journald + node/systemd metrics
                   -> local Alloy (disk queue) --OTLP-->
 homelab:        Alloy gateway (+ k3s pod logs, kube-state-metrics, Gatus /metrics)
-                  -> Prometheus (metrics, rules)  -> Alertmanager -> ntfy -> Erik's phone
+                  -> Prometheus (metrics, rules)  -> Alertmanager -> Discord (+ ntfy mirror) -> Erik's phone
                   -> Loki (logs, ruler rules)     ->      ^
 pc:             health-watch polls Gatus + Alertmanager
                   -> one T3 session per incident (cooldown, caps, maintenance = silences)
@@ -160,7 +161,10 @@ pc:             health-watch polls Gatus + Alertmanager
   logs (for example: `level=error` lines from `local-stt` or `t3code` in the
   last 10 minutes). Grouped by `service`, so a burst of errors is one alert.
 - **Alertmanager** groups, dedupes and silences. It sends:
-  - **to Erik: ntfy** (deployed, docs/notifications.md): a webhook POST of
+  - **to Erik: Discord**, #notifications on his server "Agents" (same webhook
+    as notify-erik; secret `alerts-discord`: `webhook-url` and `mention.tmpl`,
+    which defines his @mention so his user id stays out of git). Only critical
+    alerts @mention him. **Mirror: ntfy**, a webhook POST of
     JSON to `http://ntfy.homelab.svc`, topic `erik`, with the write-only
     token from Secret `alerts-ntfy` (`NTFY_URL`, `NTFY_TOPIC`,
     `NTFY_TOKEN`). One message when an incident opens; `sequence_id` = the
@@ -192,7 +196,7 @@ pc:             health-watch polls Gatus + Alertmanager
 
 Grafana stays for digging in. For the phone:
 
-- **ntfy** is the primary phone surface: alerts and the morning summary, with
+- **Discord** (#notifications) is the phone surface: alerts and the morning summary, with
   a tap-through link to the incident's T3 thread.
 - **One "Home" dashboard built for a 400 px screen:** a single column of
   stat panels (every service up/down, failing jobs, disk, open incidents),
@@ -266,7 +270,7 @@ single 400-day metrics retention covers Time's "at least a year".
   7373 (database writable). Data freshness is **not** part of the Gatus
   check: a failing Gatus check starts a repair session, and "no event for
   an hour" is normal every night. Freshness is the alert below instead.
-- **Alerts (low priority, ntfy only, no session):**
+- **Alerts (low priority, Discord without @mention, no session):**
   - Time server down: the Gatus check, plus the exporter's queue growing.
   - Device silent: every emitter sends `time.heartbeat` (attributes
     `spool.pending`, `app.version`) on each sync; the phone every 15 min
@@ -306,7 +310,9 @@ needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
 ## Decisions (Erik, 2026-10-21)
 
 1. A new stack owned by this repo, not the hand-applied naiaclaw one.
-2. Phone alerts through the self-hosted ntfy (docs/notifications.md).
+2. Phone alerts through the self-hosted ntfy (docs/notifications.md); since
+   06:50 delivered through Discord, ntfy kept as a mirror (Erik will not
+   install the ntfy app).
 3. Erik hears only about incidents a session could not fix.
 4. Repair sessions share health-watch's limit (1 an hour, 6 a day) and run
    on Sonnet 5.5, escalating hard parts to Opus.
