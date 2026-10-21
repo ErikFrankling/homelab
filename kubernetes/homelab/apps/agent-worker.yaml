@@ -120,6 +120,10 @@ spec:
             - mountPath: /config
               name: config
               readOnly: true
+            # Not a subPath mount, so ConfigMap edits show up in place.
+            - mountPath: /scripts
+              name: scripts
+              readOnly: true
       terminationGracePeriodSeconds: 20
       volumes:
         - name: store
@@ -128,6 +132,9 @@ spec:
         - name: config
           configMap:
             name: agent-worker-config
+        - name: scripts
+          configMap:
+            name: agent-worker-scripts
 ---
 apiVersion: v1
 kind: Service

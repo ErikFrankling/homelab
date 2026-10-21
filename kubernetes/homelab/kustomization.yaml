@@ -76,14 +76,26 @@ configMapGenerator:
       - config/agent-worker/entrypoint.sh
       - config/agent-worker/sshd_config
       - config/agent-worker/nix.conf
-      - config/agent-worker/nixpkgs-config.nix
-      - config/agent-worker/android.nix
+      - config/agent-worker/cgroups.sh
       - config/agent-worker/heavy-run.sh
       - config/agent-worker/heavy-status.sh
       - config/agent-worker/heavy-bg.sh
-      - config/agent-worker/cgroups.sh
       - config/agent-worker/heavy-emulator.sh
       - authorized_keys=config/nix-builder/authorized_keys
+  # The worker's runtime scripts, without a content hash: an edit reaches the
+  # running pod in about a minute (kubelet syncs the volume) instead of
+  # restarting it and killing every job and the emulator. /config only has
+  # fixed shims that exec these.
+  - name: agent-worker-scripts
+    options:
+      disableNameSuffixHash: true
+    files:
+      - config/agent-worker/scripts/heavy-run.sh
+      - config/agent-worker/scripts/heavy-status.sh
+      - config/agent-worker/scripts/heavy-bg.sh
+      - config/agent-worker/scripts/heavy-emulator.sh
+      - config/agent-worker/scripts/android.nix
+      - config/agent-worker/scripts/nixpkgs-config.nix
   # And the health checks: editing the list restarts Gatus.
   - name: gatus-config
     files:

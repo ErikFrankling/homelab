@@ -27,7 +27,7 @@ cp /config/nix.conf /etc/nix/nix.conf
 echo "$NIXPKGS_REV" > "$state/nixpkgs-rev"
 echo "$WORKER_BIG_MEMORY" > "$state/memory-big"
 echo "$WORKER_SMALL_MEMORY" > "$state/memory-small"
-cp /config/nixpkgs-config.nix /root/.config/nixpkgs/config.nix
+cp /scripts/nixpkgs-config.nix /root/.config/nixpkgs/config.nix
 # Workspaces are synced with the PC user's files; let git and nix use them.
 git config --global safe.directory "*"
 install -m 0600 /config/authorized_keys /root/.ssh/authorized_keys
