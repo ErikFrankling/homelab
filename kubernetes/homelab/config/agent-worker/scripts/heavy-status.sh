@@ -25,7 +25,19 @@ echo "running jobs (one big slot, one small slot; a big job usually takes $(typi
 for i in big small; do
   if [ -f "/work/.slots/$i.job" ] && ! flock -n "/work/.slots/$i" true 2> /dev/null; then
     ran=$((($(date +%s) - $(stat -c %Y "/work/.slots/$i.job")) / 60))
-    echo "  [$i, ${ran} min] $(cut -f2- "/work/.slots/$i.job" | redact)"
+    if [ "$(cut -f3 "/work/.slots/$i.job")" = .emulator ]; then
+      echo "  [$i] held by the emulator since $(cut -c1-5 "/work/.slots/$i.job") (${ran} min; freed by heavy emulator stop or 30 idle minutes)"
+    else
+      echo "  [$i, ${ran} min] $(cut -f2- "/work/.slots/$i.job" | redact)"
+    fi
+  fi
+done
+for s in /work/.slots/shared/*; do
+  [ -e "$s" ] || continue
+  if kill -0 "$(basename "$s")" 2> /dev/null; then
+    echo "  [with the emulator] $(cut -f2- "$s" | redact)"
+  else
+    rm -f "$s"
   fi
 done
 echo "waiting:"

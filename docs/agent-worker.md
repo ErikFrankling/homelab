@@ -110,3 +110,14 @@ using it.
 - A waiting job prints its position and an estimated wait from the median of
   the last ten job durations per class (`/work/.stats/`), and points at
   `when-idle` on the PC.
+
+## The emulator holds the big slot
+
+An emulator next to a Gradle build starved (System UI ANRs, Bluetooth gone,
+failed tests). `heavy emulator start` now queues for the big slot like a big
+job (a holder runs `heavy-emulator.sh boot` through `heavy-run.sh` in
+`/work/.emulator`) and keeps it until `heavy emulator stop` or 30 idle
+minutes. Big jobs whose command or script mentions adb or the emulator run
+inside that reservation (`/work/.slots/shared/`); other big jobs wait, and
+their queue message says the emulator holds the slot. The emulator runs at
+normal priority in its own cgroup.

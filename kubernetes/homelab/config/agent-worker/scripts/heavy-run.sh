@@ -48,7 +48,7 @@ redact() {
     -e 's/(--?[A-Za-z0-9-]*(password|passwd|token|secret|key|auth)[A-Za-z0-9-]*)([= ])[^[:space:]]+/\1\3***/Ig' \
     | cut -c1-300
 }
-display=$(redact "$@")
+display=${HEAVY_DISPLAY:-$(redact "$@")}
 
 # Background jobs get /dev/null as stdin in a non-interactive shell, so the
 # watcher reads the channel through fd 3.
@@ -63,14 +63,41 @@ exec 3<&0
 ) > /dev/null 2>&1 &
 watcher=$!
 
+# mentions REGEX CMD...: the command line, or a script file it names (e.g.
+# `bash scripts/e2e.sh`), matches REGEX.
+mentions() {
+  local re=$1 arg
+  shift
+  printf '%s ' "$@" | grep -qiE "$re" && return 0
+  for arg in "$@"; do
+    [ -f "$arg" ] && [ "$(stat -c %s "$arg")" -lt 1048576 ] && grep -qiE "$re" "$arg" && return 0
+  done
+  return 1
+}
+
 class=${HEAVY_CLASS:-auto}
 [ "${HEAVY_LIGHT:-0}" != 1 ] || class=service
 if [ "$class" = auto ]; then
   class=small
   big='\b(gradle|gradlew|assemble(release|debug)|bundlerelease|expo (run|prebuild|export)|eas build|emulator)\b'
-  if printf '%s ' "$@" | grep -qiE "$big" \
-    || { [ -f "$1" ] && grep -qiE "$big" "$1"; }; then
+  if mentions "$big" "$@"; then
     class=big
+  fi
+fi
+
+# The emulator holds the big slot while it runs (heavy-emulator.sh). A big
+# job that uses adb or the emulator runs inside that reservation instead of
+# queueing behind it; other big jobs wait.
+emulator_holds() { [ -f /work/.slots/big.job ] && cut -f3 /work/.slots/big.job | grep -qx .emulator; }
+shared=""
+if [ "$class" = big ] && [ "$ws" != /work/.emulator ] && emulator_holds; then
+  uses='\b(adb|emulator)\b'
+  if mentions "$uses" "$@"; then
+    mkdir -p /work/.slots/shared
+    shared=/work/.slots/shared/$$
+    printf '%s\t%s\t%s\t%s\n' "$(date +%T)" big "$(basename "$ws")" "$display" > "$shared"
+    trap 'rm -rf "$run" "$shared"' EXIT
+    echo "heavy: running alongside the emulator, inside its big-slot reservation" >&2
   fi
 fi
 
@@ -82,7 +109,7 @@ typical() {
   tail -10 "$f" | sort -n | awk '{a[NR]=$1} END {m=a[int((NR+1)/2)]; v=int((m+59)/60); if (v < 1) v = 1; printf "%d", v}'
 }
 
-if [ "$class" = big ] || [ "$class" = small ]; then
+if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   mkdir -p /work/.queue /work/.slots
   ticket="/work/.queue/$(date +%s%N)-$class-$$"
   printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$display" > "$ticket"
@@ -130,6 +157,9 @@ if [ "$class" = big ] || [ "$class" = small ]; then
     fi
     eta=$((left + ahead * usual))
     state="waiting for the $class-job slot: $ahead $class job(s) ahead of you, about $eta min (a $class job usually takes $usual min). Too long? when-idle runs it on the PC while Erik is away."
+    if [ "$class" = big ] && emulator_holds; then
+      state="waiting for the big-job slot: the emulator holds it since $(cut -c1-5 /work/.slots/big.job) (freed by heavy emulator stop, or after 30 idle minutes); $ahead big job(s) ahead of you. Jobs that use adb or the emulator run alongside it instead. Too long? when-idle runs it on the PC while Erik is away."
+    fi
     now=$(date +%s)
     if [ "$state" != "$last" ] && [ $((now - last_at)) -ge 60 ] || [ $((now - last_at)) -ge 300 ]; then
       echo "heavy: $state" >&2
@@ -178,7 +208,7 @@ echo "$job" > "$run/job"
 [ ! -e "$run/closed" ] || kill -TERM -- "-$job" 2> /dev/null
 wait "$job"
 rc=$?
-if [ "$class" = big ] || [ "$class" = small ]; then
+if [ -z "$shared" ] && [ -z "${HEAVY_NO_STATS:-}" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   echo $(($(date +%s) - started)) >> "/work/.stats/$class"
 fi
 if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events" 2> /dev/null; then
@@ -187,5 +217,6 @@ fi
 pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
 [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
+[ -z "$shared" ] || rm -f "$shared"
 [ -z "$jobcg" ] || rmdir "$jobcg" 2> /dev/null || true
 exit "$rc"
