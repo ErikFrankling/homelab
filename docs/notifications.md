@@ -23,8 +23,10 @@ Alertmanager (planned, docs/observability.md) --token `alerts`-----+        |
   a `copy` action button for one-time codes (Android app 1.23+), a click URL
   that opens the T3 thread, Markdown, per-topic ACLs and tokens declared in
   config.
-- The route is **public** (like Vaultwarden) so urgent alerts reach the phone
-  off the tailnet too. `auth-default-access: deny-all`: nothing works without
+- Route `lan-and-cluster`: the LAN, the tailnet (the phone, like T3 Code) and
+  pods (Executor's `notify` app). DuckDNS points at the private address and
+  the router has no port forwards, so the phone receives only while Tailscale
+  is up. On top of that `auth-default-access: deny-all`: nothing works without
   a login or token, and signup is off.
 
 ## Users

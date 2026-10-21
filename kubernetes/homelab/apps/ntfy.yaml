@@ -3,8 +3,7 @@
 # app on Erik's phone subscribes to it with instant delivery, so messages
 # arrive while every app is closed. Users and tokens are declarative
 # (secrets/ntfy.enc.yaml); everything else is denied, including anonymous
-# reads, because the route is public so that the phone gets alerts off the
-# tailnet too.
+# reads. Reachable on the LAN, the tailnet and from inside the cluster.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
