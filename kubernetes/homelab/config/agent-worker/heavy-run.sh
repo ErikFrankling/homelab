@@ -15,14 +15,18 @@ if [ "$develop" != no ] && [ -f flake.nix ] && grep -q devShell flake.nix; then
   set -- nix develop "$shell" -c "$@"
 fi
 
-setsid "$@" < /dev/null &
+# Background jobs get /dev/null as stdin in a non-interactive shell, so keep
+# the channel on fd 3 for the watcher.
+exec 3<&0
+setsid "$@" < /dev/null 3<&- &
 job=$!
 (
-  cat > /dev/null
+  cat <&3 > /dev/null
   kill -TERM -- "-$job" 2> /dev/null && sleep 10 && kill -KILL -- "-$job" 2> /dev/null
-) &
+) > /dev/null 2>&1 &
 watcher=$!
 wait "$job"
 rc=$?
+pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
 exit "$rc"
