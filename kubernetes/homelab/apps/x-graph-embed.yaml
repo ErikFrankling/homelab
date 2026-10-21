@@ -83,8 +83,14 @@ spec:
             - "8192"
             - --parallel
             - "4"
+            # The node is saturated by other pods and the CFS quota is off (ops/k3s/config.yaml),
+            # so this pod only gets its cpu.weight share. Four threads that busy-wait at each
+            # barrier turn that into seconds per request (2026-10-21: 3-7 s for "hello world",
+            # normally ~20 ms). Fewer threads that sleep instead of polling stay fast.
             - -t
-            - "4"
+            - "2"
+            - --poll
+            - "0"
           ports:
             - containerPort: 8790
               name: http
@@ -109,8 +115,9 @@ spec:
               cpu: "4"
               memory: 2Gi
             requests:
-              # The node is 98% requested; this is a background service that may be slow.
-              cpu: 50m
+              # The node is 99% requested (about 130m free while this pod is replaced), and under
+              # load the request is the pod's cpu.weight share. 100m is what fits; 50m starved it.
+              cpu: 100m
               memory: 768Mi
           volumeMounts:
             - name: models
