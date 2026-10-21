@@ -26,6 +26,8 @@ cp /config/nix.conf /etc/nix/nix.conf
 # Jobs over SSH do not see the container environment.
 echo "$NIXPKGS_REV" > "$state/nixpkgs-rev"
 cp /config/nixpkgs-config.nix /root/.config/nixpkgs/config.nix
+# Workspaces are synced with the PC user's files; let git and nix use them.
+git config --global safe.directory "*"
 install -m 0600 /config/authorized_keys /root/.ssh/authorized_keys
 chmod 0700 /root/.ssh
 ln -sfn "$state/work" /work

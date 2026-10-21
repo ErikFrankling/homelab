@@ -28,7 +28,7 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
 
 ## Keeping it away from everything else
 
-- **Memory:** limit 16 GiB, request 256 MiB. That is the smallest request of
+- **Memory:** limit 20 GiB (one release APK build peaks near 10 GB, the emulator takes 4), request 256 MiB. That is the smallest request of
   any heavy pod, so under node pressure this pod is evicted and OOM-killed
   before nix-builder and the services.
 - **CPU:** no request and no limit, so it gets the smallest share under
@@ -52,9 +52,19 @@ Gatus checks the SSH port (`lan/agent-worker-ssh`).
 
 ## Emulator
 
-`heavy emulator start` on the PC runs `heavy-emulator.sh start` here. The
-first run fetches the SDK and system image into this store (a few GB). It then
-tunnels `127.0.0.1:5555` here to `127.0.0.1:15555` on the PC and runs
-`adb connect 127.0.0.1:15555`. The pod's own adb server is stopped after boot,
-so the PC's adb is the emulator's only client. `adb install`, `adb reverse`
-and Expo work through that.
+`heavy emulator start` on the PC runs `heavy-emulator.sh start` here: one
+pixel_7 AVD (1080x2400, API 36 google_apis x86_64, the T3 Code fork's image),
+headless with KVM. The first run fetches the SDK and system image into this
+store (a few GB). The emulator runs in this pod, so `heavy` commands share its
+network: their `adb` sees it as the only device (`emulator-5554`), and it
+reaches their servers at `10.0.2.2`. This pod's adb server owns it. The PC
+reaches that server through an SSH tunnel to `127.0.0.1:5037`, at
+`ADB_SERVER_SOCKET=tcp:127.0.0.1:15037` (or `heavy adb ...`). It stops itself
+after 30 minutes with no heavy job and no adb client.
+
+## Background jobs
+
+`heavy bg NAME -- CMD` (`config/agent-worker/heavy-bg.sh`) runs a job that
+outlives the SSH connection, e.g. a server for the emulator. Its log and pid
+live in `<workspace>/.heavy/`. `heavy forward PORT` tunnels a worker port to
+the PC.

@@ -89,7 +89,7 @@ spec:
             # no CPU request (smallest CPU share), and a hard limit so a
             # runaway job dies inside this container.
             limits:
-              memory: 16Gi
+              memory: 20Gi
             requests:
               memory: 256Mi
           securityContext:
