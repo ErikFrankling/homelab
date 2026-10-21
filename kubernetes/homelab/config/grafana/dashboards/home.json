@@ -43,7 +43,7 @@
       "options": {
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "justifyMode": "center",
         "reduceOptions": {
           "calcs": [
@@ -154,7 +154,7 @@
       "options": {
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "justifyMode": "center",
         "reduceOptions": {
           "calcs": [
@@ -402,7 +402,7 @@
       "options": {
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "justifyMode": "center",
         "reduceOptions": {
           "calcs": [
