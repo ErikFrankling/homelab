@@ -1,36 +1,112 @@
 # Observability and incident response
 
-Status: **proposal, 2026-10-21.** Only the Gatus metrics and the `lan/llama-swap`
-check are live. Everything else below waits for Erik's decisions (end of file).
+Status: **live since 2026-10-21** on the homelab (this repo). The pc and
+framework side (Alloy, health-watch) is in the dotfiles
+(`modules/nixos/observability*`, `modules/home-manager/auto-update`).
 
-Goal: every service Erik runs (homelab k3s, the pc, the framework laptop) is
-health-checked, logs and metrics land in one place over OpenTelemetry, and
-when something breaks Erik gets one push notification and an agent session
-is already investigating. One incident is one session.
+Every service Erik runs (homelab k3s, the pc, the framework laptop) is
+health-checked, its logs and metrics land in one place over OpenTelemetry,
+and when something breaks a repair session is already investigating. Erik
+hears only about what a session could not fix. One incident is one session.
 
-## What exists today
+## Where things are
 
-| Piece | Where | State |
-|---|---|---|
-| Gatus | `apps/gatus.yaml`, `config/gatus/config.yaml` | In git. Black-box checks from the LAN and through the tailnet. Results in memory only. |
-| health-watch | dotfiles `modules/home-manager/auto-update` | Reads Gatus every 2 min, starts a repair session (systems-check skill, "health incident" T3 project) when a check keeps failing. Cooldown 1 h, 6 a day, maintenance windows, headless `claude` fallback. Never notifies Erik. |
-| Morning check | same module, 07:00 | One summary per day, as a desktop notification (`notify-send`). Never reaches the phone. |
-| Grafana 11.5, Loki 3 (7 d), Mimir 2.16, Alloy, kube-state-metrics, node-exporter | namespaces `grafana`, `loki`, `mimir`, `alloy`, `monitoring` | **Not in this repo.** Applied by hand from the old naiaclaw work project (`naiaclaw-old/monitoring/azure-mirror`). Plaintext admin password, tenant `naiaclaw-local`, Mimir has no retention set, no Alertmanager, no alert rules. Collects k3s pod logs and node syslog only. |
-| Tempo, Prometheus, Alertmanager | — | Not present. |
-| pc / framework | — | No log or metric shipping. journald only. |
+| What | Where |
+|---|---|
+| Grafana (read-only without login; Home is the phone view) | https://grafana.erikfrankling.duckdns.org (admin: `secrets/grafana.enc.yaml`) |
+| Alertmanager (silences, active alerts) | https://alertmanager.erikfrankling.duckdns.org |
+| Prometheus | https://prometheus.erikfrankling.duckdns.org |
+| OTLP ingest (pc, laptop, phone; bearer token) | https://otlp.erikfrankling.duckdns.org, in-cluster `http://alloy.homelab:4318` |
+| Gatus (up/down from LAN and tailnet) | http://192.168.50.100:18080 |
+| Manifests | `apps/{alloy,prometheus,alertmanager,loki,grafana,kube-state-metrics,node-exporter}.yaml` |
+| Config, rules, dashboards | `config/{alloy,prometheus,alertmanager,loki,grafana}/` |
+| Cluster roles (applied by hand) | `kubernetes/bootstrap/observability-rbac.yaml` |
+| Token | `secrets/otlp-ingest.enc.yaml`; same value in dotfiles `secrets/observability.yaml` |
 
-Blind spots, all three of the currently failing things fall in them:
+All routes are `lan-only` (LAN and tailnet).
 
-- **Scheduled jobs.** Gatus only probes endpoints. A failing CronJob
-  (`homelab/duckdns-updater` had three failed runs, `naiaclaw-system/*-sweep`
-  and `*-drain` fail every minute) or systemd timer (pc
-  `brand-push-periodic`, failing every 30 min since midnight) is invisible.
-- **Error logs.** Nothing reads logs, so a dictation error or a T3 Code
-  exception is only found when Erik hits it.
-- **Services bound to localhost on the pc** (local-stt on 8781, executor,
-  time-agent) cannot be probed from the homelab.
+## How an incident flows
 
-## Design
+1. Something fails: a Gatus check, a Prometheus rule
+   (`config/prometheus/homelab.rules.yml`) or a Loki log rule
+   (`config/loki/rules.yml`).
+2. Every alert carries `severity`, `project` and `session`.
+3. `session="true"`: health-watch on the pc polls Alertmanager (and Gatus)
+   every 2 minutes and starts one repair session per incident (Sonnet 5.5;
+   it escalates hard parts to Opus). Limits: one session an hour, six a day,
+   shared with the Gatus checks. If the session gives up it notifies Erik
+   with `notify-erik`. Alertmanager also notifies him itself if the alert is
+   still firing after 3 hours (priority 4); a group resolved before its
+   first send never notifies.
+4. `session="false"`: no session can act (the pc itself silent, a check
+   still failing after 3 h, Time heartbeats). Erik hears directly: priority
+   5 for critical, 4 warning, 3 info.
+5. `project="naiaclaw"`: Erik's work project. Alert only, priority 2, at
+   most once a day per alert; never a session.
+
+What is watched today:
+
+- **Endpoints:** Gatus, from the LAN and through the tailnet.
+- **k3s:** CronJobs whose latest run failed, pods that do not start,
+  Deployments short of replicas, pending PVCs, disk, certificate expiry,
+  scrape targets.
+- **pc / framework:** every systemd unit (system and user) that fails,
+  localhost-only health endpoints (local-stt and others), disk, the pc
+  going silent.
+- **Error logs:** dictation (local-stt `*_failed` / `.error` events,
+  tracebacks) and the T3 Code server (`ERROR`/`FATAL` lines).
+- **Time:** device heartbeats and the export queue (low priority, never a
+  session).
+
+## Testing the alerts
+
+A real failure end to end (k8s Job -> kube-state-metrics -> Prometheus ->
+Alertmanager -> ntfy), no repair session. Arrives in about 2 minutes as
+"Alert pipeline test"; the "Resolved" message follows when the Job removes
+itself after 15 minutes.
+
+```sh
+ssh naiaclaw 'cat <<EOF | sudo kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: alert-e2e-test-$(date +%s)
+  namespace: homelab
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 900
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: fail
+          image: docker.io/library/busybox:1.37
+          command: ["sh", "-c", "exit 1"]
+EOF'
+```
+
+Validate before pushing: `promtool check rules`, `amtool check-config`,
+`amtool config routes test --config.file=... session=true severity=warning`,
+`loki -verify-config`, `alloy fmt` (binaries from the pinned images:
+`crane export <image> - | tar -x bin/promtool`).
+
+## Operating
+
+- **Planned outage:** `health-watch maintenance MINUTES "reason" [regex]`
+  on the pc keeps sessions away; to keep Erik's phone quiet too, add a
+  silence in Alertmanager.
+- **New service:** a Gatus check (endpoint) and, for a scheduled job,
+  nothing more: CronJobs and systemd units are covered by the generic rules.
+- **Pitfalls met while building:**
+  - `absent_over_time` sees a new or wiped Prometheus as a silent
+    machine; the silence alerts wait for `prometheus_tsdb_lowest_timestamp_seconds`
+    to be old enough.
+  - Loki refuses (500) entries older than the first schema `from` date;
+    backfilled pod logs need it far in the past (2024-01-01).
+  - Alertmanager 0.34 has no ntfy receiver; it uses a webhook with ntfy's
+    own templating (`template=yes&title=...&message=...`).
+
+## Design (as built)
 
 ```
 pc, framework:  apps (OTLP) + journald + node/systemd metrics
@@ -227,35 +303,23 @@ OpenClaw/naiaclaw dashboards. After that Erik decides whether naiaclaw still
 needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
 `loki`) and the Mimir StatefulSet go, and their PVCs with them.
 
-## Rollout
+## Decisions (Erik, 2026-10-21)
 
-1. *(done)* Gatus `metrics: true`; `lan/llama-swap` check.
-2. *(ntfy done, docs/notifications.md)* Homelab: Prometheus + Alertmanager +
-   Loki + Grafana + Alloy gateway in namespace `homelab`, all from this repo. Cluster-scoped RBAC for Alloy
-   goes in `kubernetes/bootstrap` (applied once; the Flux reconciler cannot
-   create it). Grafana admin password via SOPS.
-3. Alert rules for: Gatus checks failing, CronJob latest run failed, systemd
-   unit failed, pod crash-looping, disk > 85 %, certificate < 20 d.
-   Test cases: duckdns-updater, the naiaclaw sweeps, `brand-push-periodic`.
-4. Dotfiles: Alloy on pc and framework; health-watch reads Alertmanager;
-   morning check and incident open/close go through `notify-erik`.
-5. Error-log rules for local-stt and t3code; the Time routing above once Erik
-   approves Time; then the T3 fork and local-stt
-   emit OTel directly (with the Time project's events).
-6. Phone dashboard; retire the old stack.
+1. A new stack owned by this repo, not the hand-applied naiaclaw one.
+2. Phone alerts through the self-hosted ntfy (docs/notifications.md).
+3. Erik hears only about incidents a session could not fix.
+4. Repair sessions share health-watch's limit (1 an hour, 6 a day) and run
+   on Sonnet 5.5, escalating hard parts to Opus.
+5. Failing naiaclaw work-project jobs: alert only.
+6. Window titles stay in the 5-year Loki copy of Time's events.
 
-## Decisions for Erik
+## Still to do
 
-1. **Own stack in this repo** (recommended) or adopt the hand-applied naiaclaw
-   one?
-2. ~~Phone push~~: decided, self-hosted ntfy is deployed
-   (docs/notifications.md).
-3. **What reaches Erik:** every incident (open and resolved), or only what a
-   session could not fix?
-4. **Error-log sessions cost tokens:** keep the current cap (one session an
-   hour, six a day, shared with health checks) or a separate budget?
-5. **Which naiaclaw failures count:** the naiaclaw-system jobs are a work
-   project. Alert Erik, start sessions in that repo's T3 project, or ignore?
-6. **Window titles in the 5-year Loki copy of Time's events:** keep them
-   (recommended; Loki is the rebuild source and sits behind the tailnet like
-   Time) or strip them there and accept that a rebuild loses them?
+- Retire the naiaclaw-old stack (namespaces `grafana`, `loki`, `mimir`,
+  `alloy`, `monitoring`) once naiaclaw no longer needs its dashboards.
+- Backups: the Loki volume (`loki-data`, the raw copy of Time's events) and
+  Time's database, off the node, with a restore test. Time v2 does not go
+  live before that (docs/backups.md; the Time session owns it).
+- The T3 Code fork and local-stt emitting OTLP directly (Time's events, and
+  structured error logs instead of matching log lines).
+- Tempo, once something emits traces.
