@@ -21,6 +21,7 @@ resources:
   - apps/gatus.yaml
   - apps/kokoro-tts.yaml
   - apps/t3-updates.yaml
+  - apps/ntfy.yaml
   - dns/duckdns.yaml
   - secrets/openclaw.enc.yaml
   - secrets/searxng.enc.yaml
@@ -30,6 +31,7 @@ resources:
   - secrets/brain.enc.yaml
   - secrets/nix-builder.enc.yaml
   - secrets/gatus.enc.yaml
+  - secrets/ntfy.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
@@ -50,6 +52,10 @@ configMapGenerator:
   - name: t3-updates-code
     files:
       - config/t3-updates/server.mjs
+  # ntfy settings: editing them restarts ntfy.
+  - name: ntfy-config
+    files:
+      - config/ntfy/server.yml
   # And the health checks: editing the list restarts Gatus.
   - name: gatus-config
     files:

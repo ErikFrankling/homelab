@@ -85,3 +85,11 @@ spec:
       services:
         - name: t3-updates
           port: 80
+    # Push notifications to Erik's phone (apps/ntfy.yaml). Public on purpose,
+    # so alerts and one-time codes reach the phone off the tailnet; ntfy
+    # itself denies everything without a login or token.
+    - kind: Rule
+      match: Host(`ntfy.erikfrankling.duckdns.org`)
+      services:
+        - name: ntfy
+          port: 80

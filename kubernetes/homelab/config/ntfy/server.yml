@@ -1,0 +1,27 @@
+# ntfy server settings (apps/ntfy.yaml, docs/notifications.md). Users and
+# tokens come from the ntfy-auth secret as NTFY_AUTH_USERS / NTFY_AUTH_TOKENS.
+base-url: https://ntfy.erikfrankling.duckdns.org
+listen-http: ":8080"
+# Traefik sets X-Forwarded-For, so rate limits apply per client, not to Traefik.
+behind-proxy: true
+
+cache-file: /var/lib/ntfy/cache.db
+cache-duration: 72h
+auth-file: /var/lib/ntfy/auth.db
+auth-default-access: deny-all
+# Erik reads (and may post) on `erik`; senders may only write to it.
+#   agents: the notify-erik CLI on the PCs and the Executor app `notify`
+#   alerts: Alertmanager (docs/observability.md)
+auth-access:
+  - "erik:erik:rw"
+  - "agents:erik:wo"
+  - "alerts:erik:wo"
+enable-signup: false
+enable-login: true
+enable-reservations: false
+
+# A backstop only: the senders rate-limit themselves (a few an hour). This
+# catches a sender gone wrong; counted per client address, reset at 00:00 UTC.
+visitor-message-daily-limit: 150
+
+log-level: info

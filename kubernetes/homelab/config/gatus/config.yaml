@@ -113,6 +113,18 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  # Push notifications to Erik's phone (apps/ntfy.yaml): alerts, one-time
+  # codes, agents asking for his attention.
+  - name: ntfy
+    group: phone
+    url: https://ntfy.erikfrankling.duckdns.org/v1/health
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].healthy == true"
   - name: time
     group: phone
     url: https://time.erikfrankling.duckdns.org/
