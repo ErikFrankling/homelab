@@ -1,16 +1,14 @@
 # Homelab Notes for Agents
 
-Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
-`ssh docker`, and `ssh naiaclaw`.
+Last verified: 2026-09-13 from the local repo, GitHub, `ssh proxmox`, and `ssh naiaclaw`.
 
 ## Working Rules
 
 - This public repo and GitHub `main` are the active homelab source. Check Flux
   and the live k3s host before assuming a local checkout is current.
-- The Docker VM is a powered-off rollback artifact. Never start it while
-  VM 200 owns its address, `192.168.50.100`.
-- The frozen Docker checkout is `/home/debian/homelab` at commit `e16ee23`.
-  It is reachable by SSH only during an intentional rollback.
+- The migration off the Docker VM is complete and that VM is decommissioned. Everything runs on
+  VM 200 (k3s). Do not start VM 100: it is configured with `192.168.50.100`, VM 200's
+  address, so booting it breaks every DuckDNS route.
 - Do not edit live host config, restart services, resize VMs, or change Kubernetes workloads unless the user explicitly asks.
 - This repository is **public**: `https://github.com/ErikFrankling/homelab`.
   Plaintext credentials, kubeconfigs, VPN material, certificates, and application
@@ -18,7 +16,7 @@ Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
 - Kubernetes secrets are encrypted with SOPS/age. The age identity is kept
   outside Git at `/home/erikf/.config/sops/age/homelab-k3s.agekey` and installed
   as `homelab/sops-age`. Only the age recipient is public in `.sops.yaml`.
-- Avoid committing secrets. Live env files are under `/home/debian/.secrets` on the Docker VM and should stay out of git.
+- Avoid committing secrets. Live env material belongs in SOPS-encrypted Secrets and should stay out of git.
 
 ## Current Deployment State
 
@@ -70,6 +68,9 @@ The Docker-to-k3s migration completed on 2026-07-24:
 - Because ServiceLB owns host port 53, `/etc/resolv.conf` on `naiaclaw` points
   to `/run/systemd/resolve/resolv.conf` instead of the intercepted local stub.
   `ops/sysctl/99-homelab.conf` raises inotify capacity for cluster workloads.
+  `ops/ca-trust/distrust.sh` distrusts roots on proxmox and naiaclaw before
+  Debian/Ubuntu ship the removal (emSign ECC Root CA - G3 since 2026-10-21);
+  rerun it after a node rebuild.
 - Backups are not currently operational. The old restic profile contains a
   placeholder repository and has never run. The new CronJobs remain suspended
   until a real B2 repository, scoped credentials, off-cluster password recovery
@@ -85,7 +86,6 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 ## SSH Targets
 
 - `ssh proxmox`: Proxmox VE host, IP `192.168.50.10/24` on `vmbr0`.
-- `ssh docker`: Debian Docker VM, IP configured in Proxmox as `192.168.50.100/24`.
 - `ssh naiaclaw`: Ubuntu k3s VM, IP configured in Proxmox as `192.168.50.100/24`.
 
 ## Physical Host
@@ -145,32 +145,10 @@ Primary spec sources:
 After cutover the Proxmox host reported about 1.6 GiB available and 640 MiB swap
 used. VM 200 reported no Kubernetes memory or disk pressure.
 
-## Docker VM (rollback only)
+## Docker VM (decommissioned)
 
-- Hostname: `docker`.
-- OS: Debian 12 (`bookworm`), kernel `6.1.0-47-cloud-amd64`.
-- Proxmox config: 4 vCPUs, 6144 MB RAM, 150 GB disk, IP
-  `192.168.50.100/24`, gateway `192.168.50.1`.
-- Docker Compose version observed: `v5.0.2`.
-- Live compose checkout: `/home/debian/homelab`.
-- Compose project: `homelab`.
-- Compose config file: `/home/debian/homelab/docker-compose.yml`.
-- Docker network `proxy`: external compose network, subnet `172.19.0.0/16`.
-
-Preserved containers inventoried before shutdown:
-
-- `traefik`: `traefik:v3`, ports 80/443, routes dashboard through Traefik labels.
-- `adguard`: `adguard/adguardhome`, DNS on 53 TCP/UDP, setup/admin port 3000.
-- `vaultwarden`: `vaultwarden/server:latest`.
-- `hermes`: local image `homelab-hermes`.
-- `openwebui`: `ghcr.io/open-webui/open-webui:latest-slim`.
-- `searxng`: `searxng/searxng:latest`.
-- `openclaw`: `ghcr.io/openclaw/openclaw:latest`, port 18789, container name `openclaw`.
-
-The checkout is clean at commit `e16ee23` on `main`. Six application containers
-were stopped cleanly before copying; the VM was then shut down with Traefik.
-Persistent data is frozen at the cutover point under `/home/debian/data` and
-totals about 3.8 GiB.
+VM 100 is retired and must stay powered off; its address collides with VM 200. Its former
+workloads run in namespace `homelab` on VM 200.
 
 ## k3s VM
 
@@ -200,7 +178,7 @@ disk, and do not place media on the root-backed storage class.
 
 ## Repo Contents
 
-- `docker-compose.yml`: Docker VM compose stack for Traefik, AdGuard, Vaultwarden, Hermes, Open WebUI, SearXNG, and OpenClaw.
+- `docker-compose.yml`: retired compose stack from the pre-k3s deployment, kept only as a reference for the migrated services.
 - `config/traefik/traefik.yml`: static Traefik config with DuckDNS DNS challenge and wildcard certs for `erikfrankling.duckdns.org`.
 - `config/traefik/dynamic.yml`: clean legacy dynamic config preserved by commit
   `e16ee23`.
