@@ -13,7 +13,10 @@ touch "$ws"
 if [ "$develop" != no ] && [ -f "$ws/flake.nix" ] && grep -q devShell "$ws/flake.nix"; then
   shell=default
   [ "$develop" = auto ] || shell=${develop#.#}
-  set -- nix develop "$ws#$shell" -c "$@"
+  # --profile roots the shell, so the store's garbage collector (which runs
+  # often on this tight disk) does not throw it away between runs.
+  mkdir -p "$ws/.heavy"
+  set -- nix develop --profile "$ws/.heavy/shell-$shell" "$ws#$shell" -c "$@"
 fi
 
 # Background jobs get /dev/null as stdin in a non-interactive shell, so keep

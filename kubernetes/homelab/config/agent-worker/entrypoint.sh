@@ -45,12 +45,19 @@ fi
 sshd=$!
 
 # Janitor, hourly: workspaces untouched for a week go, and the oldest go first
-# while the node disk is under 50 GiB free (nix-builder collects below 40).
+# while the node disk is under 35 GiB free. A workspace with a running job is
+# never touched.
 (
   while sleep 3600; do
-    find /work/ -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2> /dev/null || true
-    while [ "$(df --output=avail -B1G /nix | tail -1)" -lt 50 ]; do
-      oldest=$(ls -1dtr /work/*/ 2> /dev/null | head -1)
+    busy() { pgrep -f "heavy-run.sh ${1%/} " > /dev/null; }
+    for ws in $(find /work/ -mindepth 1 -maxdepth 1 -type d -mtime +7); do
+      busy "$ws" || rm -rf "$ws"
+    done
+    while [ "$(df --output=avail -B1G /nix | tail -1)" -lt 35 ]; do
+      oldest=""
+      for ws in $(ls -1dtr /work/*/ 2> /dev/null); do
+        busy "$ws" || { oldest=$ws; break; }
+      done
       [ -n "$oldest" ] || break
       echo "janitor: low disk, removing $oldest"
       rm -rf "$oldest"

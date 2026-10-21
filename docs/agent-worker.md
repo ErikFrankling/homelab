@@ -35,7 +35,9 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
   contention. `max-jobs = 2`, `cores = 4` for Nix builds here.
 - **Disk:** same node disk as nix-builder. `min-free` = 45 GiB, so it collects
   before nix-builder (40 GiB). An hourly janitor removes workspaces untouched
-  for 7 days, and then the oldest ones while the disk has under 50 GiB free.
+  for 7 days, then the oldest while the disk has under 35 GiB free; a workspace
+  with a running job is never touched. Devshells are rooted (`nix develop
+  --profile <workspace>/.heavy/shell-NAME`) so collection keeps them.
 - **Emulator:** one at most. It stops itself after 30 minutes with no adb
   client, and when the pod stops.
 
