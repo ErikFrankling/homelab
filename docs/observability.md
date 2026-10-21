@@ -84,9 +84,14 @@ pc:             health-watch polls Gatus + Alertmanager
   logs (for example: `level=error` lines from `local-stt` or `t3code` in the
   last 10 minutes). Grouped by `service`, so a burst of errors is one alert.
 - **Alertmanager** groups, dedupes and silences. It sends:
-  - **to Erik: ntfy** (proposal below), one message when an incident opens
-    and one when it resolves, `priority=high` only for things a session
-    cannot fix (host down, disk full, certificate failing).
+  - **to Erik: ntfy** (deployed, docs/notifications.md): a webhook POST of
+    JSON to `http://ntfy.homelab.svc`, topic `erik`, with the write-only
+    token from Secret `alerts-ntfy` (`NTFY_URL`, `NTFY_TOPIC`,
+    `NTFY_TOKEN`). One message when an incident opens; `sequence_id` = the
+    alert fingerprint, so "resolved" replaces it. Priority 4–5 (pops up)
+    only for things a session cannot fix (host down, disk full, certificate
+    failing), 3 otherwise. `click` opens the incident's T3 thread
+    (`t3code-preview://threads/<env>/<thread>`).
   - **to agents: nothing pushed.** health-watch on the pc **polls**
     Alertmanager's API next to Gatus. It already has everything an incident
     engine needs: one session at a time, cooldown, daily cap, maintenance
@@ -103,8 +108,9 @@ pc:             health-watch polls Gatus + Alertmanager
   still reaches Erik because Alertmanager runs on the homelab, and the
   homelab dying is caught the other way round: health-watch already starts a
   session when Gatus stops answering.
-- **Morning check** sends its one summary through ntfy too, so it reaches the
-  phone.
+- **Morning check, health-watch and incident sessions** notify through the
+  `notify-erik` CLI (pc, framework) or `tools.notify.send` in Executor, so
+  they share the rate limits of the `notify` skill with everything else.
 
 ### 4. Dashboards and the phone
 
@@ -224,15 +230,15 @@ needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
 ## Rollout
 
 1. *(done)* Gatus `metrics: true`; `lan/llama-swap` check.
-2. Homelab: Prometheus + Alertmanager + Loki + Grafana + Alloy gateway + ntfy
-   in namespace `homelab`, all from this repo. Cluster-scoped RBAC for Alloy
+2. *(ntfy done, docs/notifications.md)* Homelab: Prometheus + Alertmanager +
+   Loki + Grafana + Alloy gateway in namespace `homelab`, all from this repo. Cluster-scoped RBAC for Alloy
    goes in `kubernetes/bootstrap` (applied once; the Flux reconciler cannot
    create it). Grafana admin password via SOPS.
 3. Alert rules for: Gatus checks failing, CronJob latest run failed, systemd
    unit failed, pod crash-looping, disk > 85 %, certificate < 20 d.
    Test cases: duckdns-updater, the naiaclaw sweeps, `brand-push-periodic`.
 4. Dotfiles: Alloy on pc and framework; health-watch reads Alertmanager;
-   morning check and incident open/close go to ntfy.
+   morning check and incident open/close go through `notify-erik`.
 5. Error-log rules for local-stt and t3code; the Time routing above once Erik
    approves Time; then the T3 fork and local-stt
    emit OTel directly (with the Time project's events).
@@ -242,9 +248,8 @@ needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
 
 1. **Own stack in this repo** (recommended) or adopt the hand-applied naiaclaw
    one?
-2. **Phone push: self-hosted ntfy** (recommended; on the homelab behind the
-   tailnet, with ntfy.sh only as the wake-up relay, so message text never
-   leaves the house) or email?
+2. ~~Phone push~~: decided, self-hosted ntfy is deployed
+   (docs/notifications.md).
 3. **What reaches Erik:** every incident (open and resolved), or only what a
    session could not fix?
 4. **Error-log sessions cost tokens:** keep the current cap (one session an
