@@ -57,6 +57,10 @@ INI
     log="$state/emulator.log"
     # The adb server must outlive this SSH session.
     setsid adb start-server > /dev/null 2>&1 < /dev/null || true
+    # The emulator gets its own capped cgroup (cgroups.sh), so a job running
+    # out of memory never takes it down, nor it a job.
+    cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
+    [ -z "$cgroot" ] || echo $$ > "$cgroot/emulator/cgroup.procs" 2> /dev/null || true
     setsid "$root/emulator/emulator" -avd "$avd" -port 5554 -no-window -no-audio \
       -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on \
       > "$log" 2>&1 < /dev/null &

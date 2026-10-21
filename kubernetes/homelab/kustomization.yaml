@@ -81,6 +81,7 @@ configMapGenerator:
       - config/agent-worker/heavy-run.sh
       - config/agent-worker/heavy-status.sh
       - config/agent-worker/heavy-bg.sh
+      - config/agent-worker/cgroups.sh
       - config/agent-worker/heavy-emulator.sh
       - authorized_keys=config/nix-builder/authorized_keys
   # And the health checks: editing the list restarts Gatus.

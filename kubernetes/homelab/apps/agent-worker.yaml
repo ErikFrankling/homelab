@@ -69,6 +69,19 @@ spec:
             # Also the nixpkgs the emulator's SDK comes from (android.nix).
             - name: NIXPKGS_REV
               value: 608d0cadfed240589a7eea422407a547ad626a14
+            # Scheduling and the sub-cgroup sizes (cgroups.sh, heavy-run.sh).
+            - name: HEAVY_SLOTS
+              value: "2"
+            - name: WORKER_JOBS_MEMORY
+              value: 11G
+            - name: WORKER_JOBS_CPUS
+              value: "4"
+            - name: WORKER_EMULATOR_MEMORY
+              value: 5632M
+            - name: WORKER_EMULATOR_CPUS
+              value: "2"
+            - name: WORKER_LIGHT_MEMORY
+              value: 768M
           ports:
             - containerPort: 2223
               name: ssh
@@ -84,14 +97,17 @@ spec:
             tcpSocket:
               port: ssh
           resources:
-            # Lowest priority on the node, below nix-builder: the smallest
-            # memory request of any heavy pod (evicted and OOM-killed first),
-            # no CPU request (smallest CPU share), and a hard limit so a
-            # runaway job dies inside this container.
+            # The limit covers the sub-cgroups in cgroups.sh (jobs 11G +
+            # emulator 5.5G + light 0.75G + sshd), so an OOM stays inside the
+            # job that caused it instead of killing the pod (Kubernetes sets
+            # memory.oom.group on the container). The request keeps a running
+            # emulator and build from being the first thing evicted when the
+            # node runs short. No CPU request (smallest share); cgroups.sh
+            # caps jobs and the emulator at 6 of the node's 8 cores.
             limits:
-              memory: 20Gi
+              memory: 18Gi
             requests:
-              memory: 256Mi
+              memory: 8Gi
           securityContext:
             # Nix's build sandbox and the emulator's /dev/kvm. Whoever holds
             # an authorized key has root on the node, as with nix-builder.

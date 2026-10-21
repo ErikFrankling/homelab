@@ -25,6 +25,7 @@ mkdir -p /etc/nix /root/.ssh /root/.config/nixpkgs /var/empty /run/sshd \
 cp /config/nix.conf /etc/nix/nix.conf
 # Jobs over SSH do not see the container environment.
 echo "$NIXPKGS_REV" > "$state/nixpkgs-rev"
+echo "${HEAVY_SLOTS:-2}" > "$state/slots"
 cp /config/nixpkgs-config.nix /root/.config/nixpkgs/config.nix
 # Workspaces are synced with the PC user's files; let git and nix use them.
 git config --global safe.directory "*"
@@ -40,6 +41,12 @@ done
 if [ ! -f "$state/ssh/ssh_host_ed25519_key" ]; then
   ssh-keygen -q -t ed25519 -N "" -f "$state/ssh/ssh_host_ed25519_key"
 fi
+
+mkdir -p /work/.queue /work/.slots
+rm -f /work/.queue/* /work/.slots/*.job
+# A failure here must not keep the pod from starting; jobs then just run
+# without their own limits.
+bash /config/cgroups.sh || { echo "cgroups: setup failed; jobs run without their own limits" >&2; rm -f "$state/cgroup"; }
 
 "$(readlink -f "$state/bin/sshd")" -D -e -f /config/sshd_config &
 sshd=$!
