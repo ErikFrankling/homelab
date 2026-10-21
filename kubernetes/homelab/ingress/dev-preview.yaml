@@ -53,3 +53,32 @@ spec:
       services:
         - name: external-dev-preview-pc
           port: 80
+---
+# x-graph (Erik's X archive and people graph, github.com/ErikFrankling/x-graph) runs on the PC on
+# localhost:3047. A stable name instead of pc-3047: the route rewrites Host to the pc-3047 form so
+# the same Caddy (above) forwards it, and nothing changes on the PC.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: x-graph-host
+spec:
+  headers:
+    customRequestHeaders:
+      Host: pc-3047.erikfrankling.duckdns.org
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: x-graph
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`x.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+        - name: x-graph-host
+      services:
+        - name: external-dev-preview-pc
+          port: 80

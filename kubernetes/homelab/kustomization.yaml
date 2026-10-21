@@ -21,6 +21,7 @@ resources:
   - apps/agent-worker.yaml
   - apps/gatus.yaml
   - apps/kokoro-tts.yaml
+  - apps/x-graph-embed.yaml
   - apps/t3-updates.yaml
   - apps/ntfy.yaml
   - apps/alloy.yaml

@@ -1,0 +1,141 @@
+# Text embeddings for x-graph (Erik's X/Twitter archive, github.com/ErikFrankling/x-graph, runs on
+# the PC): EmbeddingGemma-300M (Q8_0 GGUF) on llama.cpp's CPU server. OpenAI-style
+# POST /v1/embeddings on the LAN at 192.168.50.100:8790. It lives here instead of on the PC so
+# bulk embedding never makes Erik's desktop lag; a short search query takes well under a second.
+#
+# The model (333 MB) is downloaded once into the PVC by the init container.
+# Send one text per request: this llama.cpp is far slower with arrays of inputs.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: x-graph-embed-models
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: x-graph-embed
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: x-graph-embed
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: x-graph-embed
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: fetch-model
+          image: docker.io/curlimages/curl:8.17.0@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              f=/models/embeddinggemma-300M-Q8_0.gguf
+              if [ "$(stat -c %s "$f" 2>/dev/null)" != "333590944" ]; then
+                curl -fsSL --retry 5 -o "$f.part" https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF/resolve/main/embeddinggemma-300M-Q8_0.gguf
+                mv "$f.part" "$f"
+              fi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: llama-server
+          image: ghcr.io/ggml-org/llama.cpp:server@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+          imagePullPolicy: IfNotPresent
+          args:
+            - -m
+            - /models/embeddinggemma-300M-Q8_0.gguf
+            - --embeddings
+            - --pooling
+            - mean
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8790"
+            - -c
+            - "8192"
+            - --parallel
+            - "4"
+            - -t
+            - "4"
+          ports:
+            - containerPort: 8790
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "4"
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 768Mi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: x-graph-embed-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: x-graph-embed
+spec:
+  externalTrafficPolicy: Local
+  ports:
+    - name: http
+      port: 8790
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: x-graph-embed
+  type: LoadBalancer

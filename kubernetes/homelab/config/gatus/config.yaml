@@ -58,6 +58,15 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 101"
+  - name: x-graph
+    group: phone
+    url: https://x.erikfrankling.duckdns.org/api/stats
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   - name: vaultwarden
     group: phone
     url: https://vault.erikfrankling.duckdns.org/alive
@@ -204,6 +213,12 @@ endpoints:
   - name: kokoro-tts
     group: lan
     url: http://192.168.50.100:8880/v1/audio/voices
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+  - name: x-graph-embed
+    group: lan
+    url: http://192.168.50.100:8790/health
     interval: 2m
     conditions:
       - "[STATUS] == 200"
