@@ -55,15 +55,16 @@ spec:
       containers:
         - name: time
           # Pinned per commit (image-v2.yml publishes :v2-<sha>).
-          image: ghcr.io/erikfrankling/time:v2-a5318ce
+          image: ghcr.io/erikfrankling/time:v2-d82eae3
           args: ["serve", "/config/config.toml"]
           env:
             - name: TZ
               value: Europe/Stockholm
-          # Focus nudges to Erik's phone (ntfy user `time`).
+          # Focus nudges to Erik's phone through notify-gateway (source "time",
+          # docs/notifications.md).
           envFrom:
             - secretRef:
-                name: time-ntfy
+                name: time-notify
                 optional: true
           ports:
             - containerPort: 7373
@@ -164,7 +165,7 @@ spec:
                   topologyKey: kubernetes.io/hostname
           containers:
             - name: backup
-              image: ghcr.io/erikfrankling/time:v2-a5318ce
+              image: ghcr.io/erikfrankling/time:v2-d82eae3
               command: ["/bin/sh", "-c"]
               args:
                 - |
