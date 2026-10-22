@@ -24,6 +24,7 @@ resources:
   - apps/kokoro-tts.yaml
   - apps/x-graph-embed.yaml
   - apps/t3-updates.yaml
+  - apps/notify-gateway.yaml
   - apps/ntfy.yaml
   - apps/alloy.yaml
   - apps/prometheus.yaml
@@ -44,6 +45,8 @@ resources:
   - secrets/ntfy.enc.yaml
   - secrets/time-ntfy.enc.yaml
   - secrets/alerts-ntfy.enc.yaml
+  - secrets/notify-gateway.enc.yaml
+  - secrets/time-notify.enc.yaml
   - secrets/otlp-ingest.enc.yaml
   - secrets/grafana.enc.yaml
   - secrets/alerts-discord.enc.yaml
@@ -67,6 +70,10 @@ configMapGenerator:
   - name: t3-updates-code
     files:
       - config/t3-updates/server.mjs
+  # The notify gateway: editing it restarts the pod.
+  - name: notify-gateway-code
+    files:
+      - config/notify-gateway/server.mjs
   # ntfy settings: editing them restarts ntfy.
   - name: ntfy-config
     files:

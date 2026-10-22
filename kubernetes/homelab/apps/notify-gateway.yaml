@@ -1,0 +1,79 @@
+# Plain-HTTP notifications to Erik's phone for services in the cluster (Time's
+# focus nudges, ...). Code: config/notify-gateway/server.mjs; docs:
+# docs/notifications.md. Cluster-internal only (no route): callers use
+# http://notify-gateway.homelab.svc/v1/notify with their own bearer token.
+# Secrets: secrets/notify-gateway.enc.yaml (Discord webhook, sources); each
+# caller's token is also in its own secret (e.g. time-notify).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notify-gateway
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notify-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notify-gateway
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: notify-gateway
+          image: docker.io/library/node:24-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/app/server.mjs"]
+          envFrom:
+            - secretRef:
+                name: notify-gateway
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 48Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: code
+          configMap:
+            name: notify-gateway-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notify-gateway
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: notify-gateway
