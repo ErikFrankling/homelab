@@ -12,7 +12,7 @@ auth-default-access: deny-all
 # Erik reads (and may post) on `erik`; senders may only write to it.
 #   agents: the notify-erik CLI on the PCs and the Executor app `notify`
 #   alerts: Alertmanager (docs/observability.md)
-#   time:   focus nudges from the Time server (secret time-ntfy)
+#   time:   unused; Time sends through notify-gateway (secret time-notify)
 auth-access:
   - "erik:erik:rw"
   - "agents:erik:wo"

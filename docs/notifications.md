@@ -43,7 +43,7 @@ Alertmanager (Discord itself + ntfy mirror), Time: plain HTTP ------------^
 | `erik`   | read-write       | password; dotfiles `secrets/notify.yaml` `ntfy-erik-password` |
 | `agents` | write-only       | tokens `machines` (dotfiles `ntfy-agents-token`) and `executor` (Executor app account) |
 | `alerts` | write-only       | token `alertmanager`; k8s secret `alerts-ntfy`         |
-| `time`   | write-only       | token `time`; k8s secret `time-ntfy` (focus nudges)    |
+| `time`   | write-only       | token `time`; unused (Time sends through notify-gateway) |
 
 To change them: decrypt `secrets/ntfy.enc.yaml`, edit `NTFY_AUTH_USERS`
 (`name:bcrypt:user`, hash with `ntfy user hash`) or `NTFY_AUTH_TOKENS`
@@ -105,7 +105,7 @@ curl -H "Authorization: Bearer $NOTIFY_TOKEN" -H "Content-Type: application/json
 
 Services can also publish straight to ntfy with their own token; that is a
 mirror, not a notification. Mount the secret
-(`time-ntfy`, `alerts-ntfy`: keys `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN`)
+(`alerts-ntfy`: keys `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN`)
 and POST JSON to the **root** URL:
 
 ```sh

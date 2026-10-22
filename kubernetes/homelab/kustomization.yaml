@@ -43,7 +43,6 @@ resources:
   - secrets/nix-builder.enc.yaml
   - secrets/gatus.enc.yaml
   - secrets/ntfy.enc.yaml
-  - secrets/time-ntfy.enc.yaml
   - secrets/alerts-ntfy.enc.yaml
   - secrets/notify-gateway.enc.yaml
   - secrets/time-notify.enc.yaml
