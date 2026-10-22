@@ -1,13 +1,12 @@
-# Phone notifications (ntfy backbone, Discord delivery)
+# Phone notifications (T3 app push, Discord, ntfy backbone)
 
-**What reaches Erik's phone today is Discord**, not the ntfy app: Erik will
-not install another app. The Executor app `notify` and the `notify-erik` CLI
-(dotfiles, `notify` skill) post to a webhook in #notifications of his private
-Discord server "Agents"; the Discord app he already has pushes it. Every send
-is also mirrored to the ntfy server below, the backbone for native push in
-the T3 Code Android app (in progress). **Senders that publish to ntfy only
-(Time) do not reach his phone yet**; until the T3 app receives
-push, send what he must see through Executor's `notify` app. Alertmanager
+Erik's phone gets notifications as **native pushes in his T3 Code app** (FCM,
+sent by the T3 server on his PC) with a copy in #notifications of his private
+Discord server "Agents" (silent when the push went out, loud when it did not).
+He installs nothing else. Agents use the Executor app `notify` or the
+`notify-erik` CLI (dotfiles, `notify` skill). **Services in the cluster use
+notify-gateway** (below). Every agent send is also mirrored to the ntfy server
+below; publishing to ntfy alone does not reach the phone. Alertmanager
 posts to the same Discord webhook itself (secret `alerts-discord`, see
 docs/observability.md) and mirrors to ntfy.
 
@@ -66,10 +65,46 @@ backstop against a sender gone wrong.
 
 Gatus `phone/ntfy` checks `/v1/health` through the tailnet.
 
-## Sending from a pod (plain HTTP)
+## Sending from a pod: notify-gateway (reaches the phone)
 
-Services in the cluster (Time, Alertmanager) publish straight to ntfy with
-their own token; no Executor or CLI needed. Mount the secret
+Services in the cluster notify Erik through `notify-gateway`
+(`apps/notify-gateway.yaml`, code `config/notify-gateway/server.mjs`). It
+delivers like the agents' `notify`: a native push in the T3 Code app (through
+the T3 server on the PC) and a copy in Discord #notifications, silent when the
+push went out. It reaches only Erik: the Discord copy never mentions anyone.
+Cluster-internal, no route.
+
+```sh
+curl -H "Authorization: Bearer $NOTIFY_TOKEN" -H "Content-Type: application/json" "$NOTIFY_URL" -d '{
+  "title": "45 min on YouTube",
+  "message": "Back to the DA2210 homework?",
+  "priority": "normal",
+  "url": "https://time.erikfrankling.duckdns.org/",
+  "tag": "focus-nudge"
+}'
+# 200 {"sent":true,"app":true,"discordMessageId":"..."}
+# 429 {"sent":false,"reason":"3 in the last hour"}  -> do not retry
+```
+
+- `NOTIFY_URL` is `http://notify-gateway.homelab.svc/v1/notify`. Each source
+  has its own token and secret: Time mounts `time-notify` (`NOTIFY_URL`,
+  `NOTIFY_TOKEN`). To add a source, add it to `NOTIFY_SOURCES` in
+  `secrets/notify-gateway.enc.yaml` (`{"name": {"token": "...", "perHour":
+  3, "perDay": 8}}`) and give it a secret like `time-notify`.
+- `priority`: `normal` (sound) or `low` (silent). Sources get no urgent,
+  high or code; those belong to agents and alerts.
+- Tap target: `url` (http(s)) or `thread: {environmentId, threadId}` (opens
+  the T3 thread).
+- `tag`: a later send with the same tag replaces the earlier notification
+  (same push id on the phone; the Discord copy is deleted and reposted).
+- Limits per source (Time: 3 an hour, 8 a day), and the same title and
+  message within 15 minutes is refused. Limits live in memory: a pod restart
+  resets them. A failed delivery (502) does not use budget.
+
+## Publishing to ntfy only (does not reach the phone)
+
+Services can also publish straight to ntfy with their own token; that is a
+mirror, not a notification. Mount the secret
 (`time-ntfy`, `alerts-ntfy`: keys `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN`)
 and POST JSON to the **root** URL:
 
