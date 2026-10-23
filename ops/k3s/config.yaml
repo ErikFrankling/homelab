@@ -9,3 +9,7 @@ node-ip: 192.168.50.100
 # The kubelet never enforces CPU limits on this node; see docs/architecture.md.
 kubelet-arg:
   - cpu-cfs-quota=false
+# 110 (the default) was full by 2026-10-23: the naiaclaw tenant namespaces and
+# their CronJobs alone take ~70, and Gatus, alloy and CronJob runs sat Pending
+# with "Too many pods". The node's /24 pod CIDR has room for 200.
+  - max-pods=200

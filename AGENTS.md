@@ -57,6 +57,14 @@ The Docker-to-k3s migration completed on 2026-07-24:
   image is built from the private agent-company repo and imported straight into
   k3s's containerd (`imagePullPolicy: Never`); after a node rebuild rerun
   `apps/brain/deploy/homelab-image.sh` there.
+- Onyx (`apps/onyx.yaml`, https://search.erikfrankling.duckdns.org,
+  `lan-and-cluster`) is the one search over mail, agent sessions, notes, Canvas,
+  X/Discord and the brain; agents call it through the Executor app `app-search`.
+  Its embeddings run on the GTX 1060 beside kokoro-tts (`onyx-embed`), its LLM
+  is Gemma on the PC's llama-swap, and the PC pushes the data hourly
+  (`search-sync`). See `docs/search.md`.
+- The node allows 200 pods (`max-pods` in `ops/k3s/config.yaml`, 2026-10-23);
+  110 was full.
 - Shared Traefik configuration is tracked under
   `kubernetes/bootstrap/traefik` and applied separately because it lives in
   `kube-system`. DuckDNS ACME state is persistent. The active Let's Encrypt
