@@ -32,3 +32,24 @@ spec:
   targetNamespace: homelab
   timeout: 10m
   wait: true
+---
+# Cluster-scoped policies: the Kyverno rule that zeroes CPU requests and the
+# homelab-core PriorityClass. Separate from `homelab` because that one is
+# bound to the homelab namespace.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: homelab-policies
+  namespace: homelab
+spec:
+  force: false
+  interval: 1m
+  path: ./kubernetes/bootstrap/policies
+  prune: true
+  retryInterval: 30s
+  serviceAccountName: homelab-policy-reconciler
+  sourceRef:
+    kind: GitRepository
+    name: homelab
+  timeout: 5m
+  wait: true

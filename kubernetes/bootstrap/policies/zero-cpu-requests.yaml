@@ -4,8 +4,11 @@
 # can use up the node's allocatable CPU and leave pods Pending. Memory is the
 # real constraint and is left alone.
 #
-# Cluster-scoped, so Flux (namespace-scoped) does not apply it; apply by hand:
-#   sudo kubectl apply -f kubernetes/bootstrap/policies/
+# Cluster-scoped, so the namespace-bound `homelab` Kustomization cannot apply
+# it. The `homelab-policies` Kustomization (flux.yaml) does, as
+# `homelab-policy-reconciler` (namespace-rbac.yaml), which may write only
+# ClusterPolicies and PriorityClasses. After a node rebuild applying flux.yaml
+# and namespace-rbac.yaml is enough.
 # kube-system, kyverno, flux-system and cert-manager are excluded: their small
 # requests are the CPU weight that keeps DNS, ingress and the controllers
 # ahead of everything else under contention (the kubelet runs with

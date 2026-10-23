@@ -18,7 +18,9 @@ Apply in this order:
    `traefik/helmchartconfig.yaml`. Traefik is shared cluster infrastructure and
    is intentionally outside the namespace-scoped Flux boundary.
 4. Wait for Traefik to roll out and for its `data` PVC to bind.
-5. `kubectl apply -f flux.yaml`
+5. `kubectl apply -f flux.yaml` (also creates `homelab-policies`, which keeps
+   `policies/` — the Kyverno zero-CPU-requests rule and the `homelab-core`
+   PriorityClass — applied from Git; needs Kyverno installed)
 6. GPU only: install `nvidia-container-toolkit` on the node and restart k3s,
    then apply the device plugin and label the node. The label is required — the
    chart's default `nodeAffinity` expects Node Feature Discovery, which this

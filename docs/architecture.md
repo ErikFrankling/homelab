@@ -85,16 +85,31 @@ alloy, the naiaclaw sandboxes' 500m init containers) and the rollout of
   creation, in every namespace except `kube-system`, `kyverno`, `flux-system`
   and `cert-manager` (their small requests are the CPU weight that keeps DNS,
   ingress and the controllers ahead of everything else). It covers Helm charts,
-  naiaclaw sandboxes and anything added later. It is cluster-scoped, so apply it
-  by hand after a node rebuild: `sudo kubectl apply -f kubernetes/bootstrap/policies/`.
+  naiaclaw sandboxes and anything added later. It is cluster-scoped, so
+  the `homelab-policies` Flux Kustomization (`kubernetes/bootstrap/flux.yaml`,
+  service account `homelab-policy-reconciler`, which can write only
+  ClusterPolicies and PriorityClasses) applies it from Git; after a node rebuild
+  apply `namespace-rbac.yaml` and `flux.yaml` from `kubernetes/bootstrap`.
 - Manifests in this repository carry no CPU requests and no CPU limits.
 - Running pods can be lowered without a restart:
   `kubectl patch pod P --subresource resize --type=strategic -p '{"spec":{"containers":[{"name":"C","resources":{"requests":{"cpu":"0"}}}]}}'`.
   **Init containers cannot be resized**, and the scheduler still counts a running
   pod's init-container request. Only recreating the pod clears it.
-- Do not recreate a long-running naiaclaw sandbox just to clear its 500m init
-  request: on 2026-10-23 `byoproof` came back in `CrashLoopBackOff` (`Invalid
-  config ... gateway.auth` in its old `/sandbox/.openclaw/openclaw.json`).
+- Recreating a long-running naiaclaw sandbox needs care: its pod template keeps
+  the image it was created with and its ConfigMap the config of that time, so a
+  plain pod delete can pair an old gateway with a newer config (`byoproof` went
+  into `CrashLoopBackOff`, `Invalid config ... gateway.auth`). The safe way is
+  what naiaclaw's own restart does: snapshot the workspace directory
+  (`/var/lib/rancher/k3s/storage/<pv>_<ns>_workspace-<name>`), rewrite the
+  ConfigMaps with the API's own code from inside the API pod that owns the
+  tenant (`rematerializeInstance(account, name)` after
+  `AppDataSource.initialize()`; `naiaclaw-api` for `nc-acme-*`, a different
+  deployment and database for `nc-oc96-*`, `nc-web-*`, `nc-portal-*`), move the
+  image to that API's `OPENCLAW_SANDBOX_IMAGE`, then delete the pod. Never run
+  it with the wrong API for a namespace, and never move a volume already
+  migrated by a newer OpenClaw (state schema 18) back to an older image. The
+  `nc-acme-*` sandboxes were recreated this way on 2026-10-23; every new pod
+  carries `0` CPU requests from the policy.
 - Core services (`time`, `time-v2`, `notify-gateway`, `executor`, `brain`,
   `gatus`, `grafana`) run with `priorityClassName: homelab-core`, so when memory
   is short they preempt batch and search workloads. `low-priority` (-100) is for
