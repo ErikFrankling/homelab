@@ -51,6 +51,10 @@ spec:
             - {name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false"}
             - {name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES, value: "false"}
             - {name: GF_NEWS_NEWS_FEED_ENABLED, value: "false"}
+            # Grafana 13 "updates" bundled plugins in the background; on the
+            # read-only root fs that unloads them (Prometheus gone, 2026-10-23).
+            - {name: GF_PLUGINS_PREINSTALL_DISABLED, value: "true"}
+            - {name: GF_PLUGINS_PREINSTALL_AUTO_UPDATE, value: "false"}
             - {name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH, value: /var/lib/grafana-dashboards/home.json}
           envFrom:
             - secretRef:
