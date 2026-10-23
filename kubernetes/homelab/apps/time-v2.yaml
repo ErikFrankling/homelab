@@ -26,6 +26,13 @@ data:
     public_url = "https://time.erikfrankling.duckdns.org/"
     apk_repo = "ErikFrankling/time"
 
+    # What the MCP tools and the hourly summary line call productive or
+    # unproductive; everything else is neutral (gaming is fine, Erik
+    # 2026-10-23). Tune here.
+    [mcp]
+    productive = ["work", "study"]
+    unproductive = ["video", "social"]
+
     [devices.pc]
     kind = "desktop"
     [devices.framework]
@@ -55,7 +62,7 @@ spec:
       containers:
         - name: time
           # Pinned per commit (image-v2.yml publishes :v2-<sha>).
-          image: ghcr.io/erikfrankling/time:v2-2ab31ec
+          image: ghcr.io/erikfrankling/time:v2-39cfe65
           args: ["serve", "/config/config.toml"]
           env:
             - name: TZ
@@ -66,6 +73,10 @@ spec:
             - secretRef:
                 name: time-notify
                 optional: true
+            # TIME_MCP_TOKEN: bearer token for /mcp (the personal agent's
+            # Time MCP, docs in the time repo README).
+            - secretRef:
+                name: time-mcp
           ports:
             - containerPort: 7373
               name: http
@@ -165,7 +176,7 @@ spec:
                   topologyKey: kubernetes.io/hostname
           containers:
             - name: backup
-              image: ghcr.io/erikfrankling/time:v2-2ab31ec
+              image: ghcr.io/erikfrankling/time:v2-39cfe65
               command: ["/bin/sh", "-c"]
               args:
                 - |
