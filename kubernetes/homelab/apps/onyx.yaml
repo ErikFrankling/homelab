@@ -273,12 +273,11 @@ spec:
       port: 6379
       targetPort: redis
 ---
-# Embeddings (granite-embedding-97m-multilingual, Swedish too) on the GTX 1060.
-# The GPU belongs to kokoro-tts in the device plugin (nvidia.com/gpu: 1), so
-# this pod asks for no GPU and gets it from the nvidia runtime through
-# NVIDIA_VISIBLE_DEVICES instead: the model needs ~0.6 GiB next to kokoro's
-# ~1.9 GiB of the 3 GiB. On CPU the busy node embedded 1-2 chunks/s.
-# The HuggingFace cache persists so restarts do not download.
+# Onyx's own model server: the indexing pipeline's helpers (and the fallback
+# embedder). Document and query embeddings come from onyx-embed below: the
+# PyTorch in this image has no kernels for the GTX 1060 (sm_61), and on CPU
+# the busy node embedded only 1-2 chunks/s. The HuggingFace cache persists so
+# restarts do not download.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -297,20 +296,12 @@ spec:
         app.kubernetes.io/name: onyx-model
     spec:
       automountServiceAccountToken: false
-      runtimeClassName: nvidia
       containers:
         - name: model-server
           image: docker.io/onyxdotapp/onyx-model-server:v4.9.4@sha256:d459b24a00f0f853ba2be5a8b2d87a19a528b484f719acbb84f62c6257cdeeb6
           envFrom:
             - configMapRef:
                 name: onyx-env
-          env:
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: all
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: compute,utility
-            - name: PYTORCH_CUDA_ALLOC_CONF
-              value: expandable_segments:True
           ports:
             - containerPort: 9000
               name: http
@@ -544,6 +535,129 @@ spec:
   ports:
     - name: http
       port: 3000
+      targetPort: http
+---
+# Embeddings for Onyx: EmbeddingGemma-300M (multilingual, the model x-graph
+# uses too) on llama.cpp's Vulkan build on the GTX 1060, as an OpenAI-style
+# /v1/embeddings that Onyx calls through its LiteLLM provider (search settings,
+# set once through the API: docs/search.md). The GPU belongs to kokoro-tts in
+# the device plugin (nvidia.com/gpu: 1), so this pod requests no GPU and gets
+# it from the nvidia runtime through NVIDIA_VISIBLE_DEVICES: it needs ~0.5 GiB
+# next to kokoro's ~1.9 GiB of the 3 GiB.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onyx-embed-models
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-embed
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-embed
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-embed
+    spec:
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      initContainers:
+        - name: fetch-model
+          image: docker.io/curlimages/curl:8.17.0@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              f=/models/embeddinggemma-300M-Q8_0.gguf
+              if [ "$(stat -c %s "$f" 2>/dev/null)" != "333590944" ]; then
+                curl -fsSL --retry 5 -o "$f.part" https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF/resolve/main/embeddinggemma-300M-Q8_0.gguf
+                mv "$f.part" "$f"
+              fi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: llama-server
+          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:a644fb651975d9dea49140302577a3b945993fd5efd3400bf89c7d525d03c103
+          args:
+            - -m
+            - /models/embeddinggemma-300M-Q8_0.gguf
+            - --embeddings
+            - --pooling
+            - mean
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - -ngl
+            - "99"
+            - -c
+            - "8192"
+            - --parallel
+            - "4"
+            - -b
+            - "2048"
+            - -ub
+            - "2048"
+            - -t
+            - "2"
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility,graphics
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 2m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: onyx-embed-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-embed
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-embed
+  ports:
+    - name: http
+      port: 8080
       targetPort: http
 ---
 # Upstream's nginx routes (deployment/data/nginx) in Traefik: /api/* to the API
