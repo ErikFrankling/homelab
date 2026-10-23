@@ -5,7 +5,7 @@
 #     while all of them use more than 15 GB (never one with a running job)
 #   - each cache is pruned to a size budget, least recently used files first
 #   - old devShell profile generations go, then dead Nix store paths whenever
-#     the node has less than 45 GB free (nix.conf's min-free does the same
+#     the node has less than 115 GB free (nix.conf's min-free does the same
 #     during builds)
 set -u
 exec 7> /run/heavy-housekeeping.lock
@@ -59,7 +59,7 @@ for profile in /work/*/.heavy/shell-*; do
   case "$profile" in *-link) continue ;; esac
   [ -L "$profile" ] && nix-env -p "$profile" --delete-generations old > /dev/null 2>&1
 done
-if [ "$(free_gb)" -lt 45 ]; then
+if [ "$(free_gb)" -lt 115 ]; then
   echo "collecting dead store paths"
   nix-store --gc 2>&1 | tail -1
 fi

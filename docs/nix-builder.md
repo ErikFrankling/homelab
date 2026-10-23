@@ -40,7 +40,8 @@ client needs the new public key before it will accept anything built here.
   `config/nix-builder/nix.conf` are sized to use the node fully when idle.
 - **Disk:** the volume is the node's root disk and local-path enforces no
   quota. `min-free` in `nix.conf` makes Nix collect garbage when that disk
-  drops below 40 GiB free. The nightly job keeps GC roots under
+  drops below 110 GiB free (just above the 20% `DiskFillingUp` alert) and
+  collect until 135 GiB is free. The nightly job keeps GC roots under
   `/nix/var/nix/gcroots/auto-update` for the closures worth keeping; anything
   not rooted is fair game.
 
