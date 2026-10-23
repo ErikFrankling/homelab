@@ -23,6 +23,7 @@ resources:
   - apps/gatus.yaml
   - apps/kokoro-tts.yaml
   - apps/x-graph-embed.yaml
+  - apps/onyx.yaml
   - apps/t3-updates.yaml
   - apps/notify-gateway.yaml
   - apps/ntfy.yaml
@@ -50,6 +51,7 @@ resources:
   - secrets/otlp-ingest.enc.yaml
   - secrets/grafana.enc.yaml
   - secrets/alerts-discord.enc.yaml
+  - secrets/onyx.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard

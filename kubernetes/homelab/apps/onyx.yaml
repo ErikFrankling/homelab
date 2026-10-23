@@ -1,0 +1,624 @@
+# Onyx (github.com/onyx-dot-app/onyx, MIT): one search over everything Erik has
+# (mail, agent sessions, notes, Drive, GitHub, Canvas archive, X/Discord via
+# x-graph, the company brain). Hybrid keyword + vector search in OpenSearch,
+# connectors in the background workers, and an MCP server (/mcp/) that agents
+# call with one tool, search_indexed_documents. Web UI and admin at
+# https://search.erikfrankling.duckdns.org (lan-and-cluster).
+#
+# This is upstream's docker-compose.yml as plain manifests, not the Helm chart:
+# the chart installs the CloudNativePG and Redis operators (cluster-scoped CRDs
+# the homelab reconciler may not create) and splits the Celery workers into a
+# dozen pods. Here the background pod runs every worker under supervisord, one
+# model server serves both queries and indexing, and files live in Postgres
+# (FILE_STORE_BACKEND=postgres) so there is no object store.
+#
+# Sources that have no built-in connector (T3/Claude/Codex sessions, Obsidian,
+# the Canvas archive, x-graph, the brain) are pushed by the PC through the
+# ingestion API: ~/.dotfiles search-sync (docs/search.md).
+#
+# Upgrade: bump the three onyx images together (same tag); the api pod runs the
+# alembic migrations on start.
+#
+# CPU requests are 2m on purpose: the node is ~99% CPU-requested (mostly
+# naiaclaw tenant pods), and a Pending pod blocks the whole Kustomization.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onyx-db
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 40Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onyx-opensearch
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onyx-models
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onyx-env
+data:
+  AUTH_TYPE: basic
+  WEB_DOMAIN: https://search.erikfrankling.duckdns.org
+  FILE_STORE_BACKEND: postgres
+  POSTGRES_HOST: onyx-db
+  POSTGRES_USER: postgres
+  OPENSEARCH_HOST: onyx-opensearch
+  REDIS_HOST: onyx-cache
+  MODEL_SERVER_HOST: onyx-model
+  INDEXING_MODEL_SERVER_HOST: onyx-model
+  API_SERVER_PROTOCOL: http
+  API_SERVER_HOST: onyx-api
+  INTERNAL_URL: http://onyx-api:8080
+  MCP_SERVER_ENABLED: "true"
+  MCP_SERVER_PORT: "8090"
+  ENABLE_CRAFT: "false"
+  DISABLE_TELEMETRY: "true"
+  LOG_LEVEL: info
+  # One person, a CPU shared with everything else: keep the workers few.
+  CELERY_WORKER_DOCFETCHING_CONCURRENCY: "1"
+  CELERY_WORKER_DOCPROCESSING_CONCURRENCY: "2"
+  CELERY_WORKER_LIGHT_CONCURRENCY: "2"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-db
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-db
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-db
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: docker.io/library/postgres:15.2-alpine@sha256:d9c304353c031b21e9a7e33dc4781e272a9fa802a2ab9703fe4199d72ba1422c
+          args: ["-c", "max_connections=250"]
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onyx
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: postgres
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 2m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: onyx-db
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-db
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-opensearch
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-opensearch
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-opensearch
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: opensearch
+          image: docker.io/opensearchproject/opensearch:3.6.0@sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d
+          env:
+            - name: discovery.type
+              value: single-node
+            # No memlock ulimit in a pod; the node has no swap anyway.
+            - name: bootstrap.memory_lock
+              value: "false"
+            - name: OPENSEARCH_JAVA_OPTS
+              value: -Xms2g -Xmx2g
+            - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onyx
+                  key: OPENSEARCH_ADMIN_PASSWORD
+          ports:
+            - containerPort: 9200
+              name: http
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 2m
+              memory: 3Gi
+            limits:
+              memory: 6Gi
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/opensearch/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: onyx-opensearch
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-opensearch
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-opensearch
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-cache
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-cache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-cache
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: redis
+          image: docker.io/library/redis:7.4-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: 2m
+              memory: 64Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-cache
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-cache
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+# Embeddings (granite-embedding-97m-multilingual, Swedish too) and the
+# reranker, on CPU. The HuggingFace cache persists so restarts do not download.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-model
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-model
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-model
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: model-server
+          image: docker.io/onyxdotapp/onyx-model-server:v4.9.4@sha256:d459b24a00f0f853ba2be5a8b2d87a19a528b484f719acbb84f62c6257cdeeb6
+          envFrom:
+            - configMapRef:
+                name: onyx-env
+          ports:
+            - containerPort: 9000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 2m
+              memory: 1Gi
+            limits:
+              # Bulk indexing must not take the whole node.
+              cpu: "3"
+              memory: 6Gi
+          volumeMounts:
+            - name: models
+              mountPath: /app/.cache/huggingface
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: onyx-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-model
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-model
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-api
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-api
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: api
+          image: docker.io/onyxdotapp/onyx-backend:v4.9.4@sha256:f76bfd1f3c18c1a893685808bdc9eb41c9783dd6f6b755e3ff8ca40c3601bec2
+          command:
+            - /bin/sh
+            - -c
+            - alembic upgrade head && exec uvicorn onyx.main:app --host 0.0.0.0 --port 8080
+          envFrom:
+            - configMapRef:
+                name: onyx-env
+            - secretRef:
+                name: onyx
+          ports:
+            - containerPort: 8080
+              name: http
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 90
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 2m
+              memory: 1Gi
+            limits:
+              memory: 3Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-api
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-background
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-background
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-background
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:v4.9.4@sha256:f76bfd1f3c18c1a893685808bdc9eb41c9783dd6f6b755e3ff8ca40c3601bec2
+          command: ["/app/scripts/supervisord_entrypoint.sh"]
+          envFrom:
+            - configMapRef:
+                name: onyx-env
+            - secretRef:
+                name: onyx
+          resources:
+            requests:
+              cpu: 2m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-mcp
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-mcp
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mcp
+          image: docker.io/onyxdotapp/onyx-backend:v4.9.4@sha256:f76bfd1f3c18c1a893685808bdc9eb41c9783dd6f6b755e3ff8ca40c3601bec2
+          command: ["python", "-m", "onyx.mcp_server_main"]
+          envFrom:
+            - configMapRef:
+                name: onyx-env
+            - secretRef:
+                name: onyx
+          ports:
+            - containerPort: 8090
+              name: http
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 2m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-mcp
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-mcp
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-web
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onyx-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onyx-web
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: web
+          image: docker.io/onyxdotapp/onyx-web-server:v4.9.4@sha256:614bf5943d09a6aa7e005426f2d04e43dc812cf7de20a5609856c0c8ef963edd
+          envFrom:
+            - configMapRef:
+                name: onyx-env
+          ports:
+            - containerPort: 3000
+              name: http
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 2m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-web
+spec:
+  selector:
+    app.kubernetes.io/name: onyx-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+# Upstream's nginx routes (deployment/data/nginx) in Traefik: /api/* to the API
+# without the prefix, /mcp/* to the MCP server without the prefix, the OAuth
+# discovery documents, everything else to the web app.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: onyx-strip-api
+spec:
+  stripPrefixRegex:
+    regex:
+      - ^/api
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: onyx-strip-mcp
+spec:
+  replacePathRegex:
+    regex: ^/mcp/?(.*)$
+    replacement: /$1
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: onyx-oauth-metadata
+spec:
+  replacePath:
+    path: /oauth-provider/metadata
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: onyx
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`search.erikfrankling.duckdns.org`) && PathRegexp(`^/\.well-known/oauth-authorization-server(/.*)?$`)
+      priority: 100
+      middlewares:
+        - name: lan-and-cluster
+        - name: onyx-oauth-metadata
+      services:
+        - name: onyx-api
+          port: 8080
+    - kind: Rule
+      match: Host(`search.erikfrankling.duckdns.org`) && PathRegexp(`^/\.well-known/oauth-protected-resource(/.*)?$`)
+      priority: 100
+      middlewares:
+        - name: lan-and-cluster
+      services:
+        - name: onyx-mcp
+          port: 8090
+    - kind: Rule
+      match: Host(`search.erikfrankling.duckdns.org`) && Path(`/mcp/oauth/callback`)
+      priority: 100
+      middlewares:
+        - name: lan-and-cluster
+      services:
+        - name: onyx-web
+          port: 3000
+    - kind: Rule
+      match: Host(`search.erikfrankling.duckdns.org`) && PathRegexp(`^/mcp(/.*)?$`)
+      priority: 90
+      middlewares:
+        - name: lan-and-cluster
+        - name: onyx-strip-mcp
+      services:
+        - name: onyx-mcp
+          port: 8090
+    - kind: Rule
+      match: Host(`search.erikfrankling.duckdns.org`) && (PathRegexp(`^/api(/.*)?$`) || Path(`/openapi.json`))
+      priority: 90
+      middlewares:
+        - name: lan-and-cluster
+        - name: onyx-strip-api
+      services:
+        - name: onyx-api
+          port: 8080
+    - kind: Rule
+      match: Host(`search.erikfrankling.duckdns.org`)
+      priority: 10
+      middlewares:
+        - name: lan-and-cluster
+      services:
+        - name: onyx-web
+          port: 3000
