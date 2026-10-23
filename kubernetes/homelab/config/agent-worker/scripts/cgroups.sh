@@ -62,6 +62,10 @@ cores "$jobs_cpus" > "$cg/jobs/cpu.max"
 echo "$service_pool_memory" > "$cg/service/memory.max"
 cores "$service_cpus" > "$cg/service/cpu.max"
 echo "$service_weight" > "$cg/service/cpu.weight"
+# Builds and tests only get CPU the emulator, sshd and `heavy bg` servers
+# leave over. The pod itself competes at the default weight, far below the
+# nix builder (config/cpu-priority/rules).
+echo 1 > "$cg/jobs/cpu.idle" 2> /dev/null || true
 echo "$emulator_memory" > "$cg/emulator/memory.max"
 cores "$emulator_cpus" > "$cg/emulator/cpu.max"
 for pool in jobs service emulator; do echo 0 > "$cg/$pool/memory.swap.max" 2> /dev/null || true; done

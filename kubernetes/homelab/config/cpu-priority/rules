@@ -1,0 +1,18 @@
+# CPU priority per pod (apps/cpu-priority.yaml, docs/architecture.md "CPU
+# priority"). One rule per line: <weight> <namespace glob> <pod name glob>.
+# The first matching rule wins; pods no rule matches keep the kubelet's
+# default (cpu.weight 1, since no pod requests CPU).
+#   weight  1-10000: the pod's cgroup cpu.weight. Only matters when the CPU
+#           is contended; it never reserves anything or gates scheduling.
+#   idle    cpu.idle: the pod runs only on CPU nobody else wants.
+# Edits apply within a minute (this ConfigMap is not content-hashed). Taking a
+# pod out of the list does not reset it; delete the pod to get the default.
+
+# The nightly NixOS update builds here and has to finish in under an hour
+# (Erik, 2026-10-23); it waited behind everything else at weight 1.
+10000 homelab nix-builder-*
+
+# Batch work that can wait: Onyx indexing, sandbox tenants and e2e runs.
+idle homelab onyx-background-*
+idle nc-* *
+idle e2e-* *

@@ -35,9 +35,12 @@ client needs the new public key before it will accept anything built here.
   The limit is a hard ceiling, so a runaway build is killed inside the
   container. The small request makes this pod the first one the kubelet evicts
   and the first one the kernel OOM-kills if the node itself runs short.
-- **CPU:** no request and no limit, like everything else here, so it gets the
-  smallest share whenever another pod wants the CPU. `max-jobs` and `cores` in
-  `config/nix-builder/nix.conf` are sized to use the node fully when idle.
+- **CPU:** no request and no limit, like everything else here, so it never
+  holds back scheduling. Its priority comes from the `cpu-priority` DaemonSet
+  instead, which sets the pod's `cpu.weight` to 10000 against everyone else's 1
+  (docs/architecture.md, "CPU priority"): under contention the nightly build
+  gets most of the node, and when it is idle it costs nothing. `max-jobs` and
+  `cores` in `config/nix-builder/nix.conf` are sized to use the node fully.
 - **Disk:** the volume is the node's root disk and local-path enforces no
   quota. `min-free` in `nix.conf` makes Nix collect garbage when that disk
   drops below 150 GiB free (just above the 20% `DiskFillingUp` alert) and

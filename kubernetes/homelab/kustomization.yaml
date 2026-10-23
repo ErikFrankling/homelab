@@ -20,6 +20,7 @@ resources:
   - apps/brain.yaml
   - apps/nix-builder.yaml
   - apps/agent-worker.yaml
+  - apps/cpu-priority.yaml
   - apps/gatus.yaml
   - apps/kokoro-tts.yaml
   - apps/x-graph-embed.yaml
@@ -54,6 +55,14 @@ resources:
   - secrets/onyx.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
+  # Not content-hashed: apply.sh re-reads the rules every 30 s, so edits take
+  # effect without restarting the DaemonSet.
+  - name: cpu-priority
+    options:
+      disableNameSuffixHash: true
+    files:
+      - config/cpu-priority/rules
+      - config/cpu-priority/apply.sh
   # Content-hashed name: editing config/AdGuardHome.yaml rolls the adguard
   # deployment automatically.
   - name: adguard-config

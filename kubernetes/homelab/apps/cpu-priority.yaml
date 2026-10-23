@@ -1,0 +1,59 @@
+# CPU priority without CPU requests (docs/architecture.md, "CPU priority").
+#
+# The Kyverno policy zeroes every CPU request so CPU never gates scheduling,
+# which also gives every pod the minimum cgroup cpu.weight: under contention
+# the nix builder got the same sliver as 90 other pods, and the 2026-10-23
+# nightly update took 3h26. This DaemonSet sets cpu.weight / cpu.idle on
+# chosen pods' cgroups instead (config/cpu-priority/rules). A weight is only a
+# share of contended CPU; nothing is reserved and scheduling is untouched.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cpu-priority
+spec:
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cpu-priority
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cpu-priority
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: apply
+          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/rules/apply.sh"]
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              memory: 16Mi
+          securityContext:
+            # Writes other pods' cgroup files on the host.
+            privileged: true
+          volumeMounts:
+            - mountPath: /host/cgroup
+              name: cgroup
+            - mountPath: /host/pods
+              name: pods
+              readOnly: true
+            - mountPath: /rules
+              name: rules
+              readOnly: true
+      terminationGracePeriodSeconds: 1
+      volumes:
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: pods
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: rules
+          configMap:
+            name: cpu-priority

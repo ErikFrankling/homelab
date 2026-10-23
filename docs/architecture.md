@@ -118,6 +118,36 @@ alloy, the naiaclaw sandboxes' 500m init containers) and the rollout of
   config support and crash-loops on the config here; stay on `v2-70f326d` (the
   `time-mcp` line) until the branches merge.
 
+## CPU priority (cpu-priority DaemonSet, 2026-10-23)
+
+Zero requests have a side effect: every pod gets the minimum cgroup
+`cpu.weight` (1), so under contention each busy pod gets the same share. On
+2026-10-23 the node sat at load 36 on 8 CPUs (APK builds in `agent-worker`,
+Onyx indexing, sandboxes), the nix builder got about one core, and the nightly
+NixOS update took 3h26. Erik: an update should take at most an hour. Priority
+is fine; reservations that gate scheduling are not.
+
+`apps/cpu-priority.yaml` is a privileged DaemonSet that every 30 s writes
+`cpu.weight` or `cpu.idle` into chosen pods' cgroups
+(`/sys/fs/cgroup/kubepods.slice/kubepods-<qos>.slice/kubepods-<qos>-pod<uid>.slice`),
+following `kubernetes/homelab/config/cpu-priority/rules`:
+
+| Rule | Effect under contention |
+|---|---|
+| `10000 homelab nix-builder-*` | The builder gets nearly all of the CPU the pods compete for, about 6 of 8 cores (`system.slice`, with k3s itself, keeps its own share) |
+| `idle homelab onyx-background-*`, `idle nc-* *`, `idle e2e-* *` | Run only on CPU nobody else wants |
+| everything else | Kubelet default, weight 1 |
+
+Inside `agent-worker`, `heavy` jobs (Gradle/APK builds, tests) run in a
+`jobs/` cgroup with `cpu.idle` (`config/agent-worker/scripts/cgroups.sh`), so
+they yield to the emulator and `heavy bg` servers in the same pod.
+
+A weight reserves nothing: the scheduler never sees it, and an idle builder
+costs nobody anything. Edits to `rules` apply within a minute. Taking a pod
+out of the rules does not reset it; delete the pod. Check it with
+`sudo kubectl -n homelab logs ds/cpu-priority` and
+`cat /sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod<uid with _>.slice/cpu.weight`.
+
 ## CPU requests and limits are deliberately unset
 
 Manifests in this repository set memory requests and limits but **no CPU
