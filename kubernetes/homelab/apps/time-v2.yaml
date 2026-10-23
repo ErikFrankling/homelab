@@ -62,7 +62,7 @@ spec:
       containers:
         - name: time
           # Pinned per commit (image-v2.yml publishes :v2-<sha>).
-          image: ghcr.io/erikfrankling/time:v2-39cfe65
+          image: ghcr.io/erikfrankling/time:v2-70f326d
           args: ["serve", "/config/config.toml"]
           env:
             - name: TZ
@@ -176,7 +176,7 @@ spec:
                   topologyKey: kubernetes.io/hostname
           containers:
             - name: backup
-              image: ghcr.io/erikfrankling/time:v2-39cfe65
+              image: ghcr.io/erikfrankling/time:v2-70f326d
               command: ["/bin/sh", "-c"]
               args:
                 - |
