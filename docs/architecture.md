@@ -73,6 +73,36 @@ Images are pinned to the exact digests observed on the Docker host. Hermes is
 also pinned to upstream commit
 `43bca6d107c86efc7e60a4a35ca8a55e1b4b4c1e` and built by GitHub Actions.
 
+## CPU requests are zero everywhere (policy, 2026-10-23)
+
+Erik's rule: CPU never gates scheduling on the homelab; only RAM does. Slow is
+fine, `Pending` is not. On 2026-10-23 the node sat at 99% requested CPU (Onyx,
+alloy, the naiaclaw sandboxes' 500m init containers) and the rollout of
+`time-v2` stayed `Pending`, taking Time down.
+
+- `kubernetes/bootstrap/policies/zero-cpu-requests.yaml` is a Kyverno
+  ClusterPolicy that rewrites every container's CPU request to `0` at pod
+  creation, in every namespace except `kube-system`, `kyverno`, `flux-system`
+  and `cert-manager` (their small requests are the CPU weight that keeps DNS,
+  ingress and the controllers ahead of everything else). It covers Helm charts,
+  naiaclaw sandboxes and anything added later. It is cluster-scoped, so apply it
+  by hand after a node rebuild: `sudo kubectl apply -f kubernetes/bootstrap/policies/`.
+- Manifests in this repository carry no CPU requests and no CPU limits.
+- Running pods can be lowered without a restart:
+  `kubectl patch pod P --subresource resize --type=strategic -p '{"spec":{"containers":[{"name":"C","resources":{"requests":{"cpu":"0"}}}]}}'`.
+  **Init containers cannot be resized**, and the scheduler still counts a running
+  pod's init-container request. Only recreating the pod clears it.
+- Do not recreate a long-running naiaclaw sandbox just to clear its 500m init
+  request: on 2026-10-23 `byoproof` came back in `CrashLoopBackOff` (`Invalid
+  config ... gateway.auth` in its old `/sandbox/.openclaw/openclaw.json`).
+- Core services (`time`, `time-v2`, `notify-gateway`, `executor`, `brain`,
+  `gatus`, `grafana`) run with `priorityClassName: homelab-core`, so when memory
+  is short they preempt batch and search workloads. `low-priority` (-100) is for
+  best-effort work such as the alloy DaemonSet.
+- `time-v2` image `v2-daba5bf` (the time repo's `v2` branch) has no `[mcp]`
+  config support and crash-loops on the config here; stay on `v2-70f326d` (the
+  `time-mcp` line) until the branches merge.
+
 ## CPU requests and limits are deliberately unset
 
 Manifests in this repository set memory requests and limits but **no CPU
@@ -116,8 +146,8 @@ verified empirically on this cluster on 2026-08-15. The scheduler's
 (a 10-CPU-request pod still failed with `Insufficient cpu`), and the kubelet
 independently re-checks fit with hard-coded defaults at bind time (the same
 pod pinned via `nodeName` to bypass the scheduler was rejected `OutOfcpu`).
-The only software workaround is rewriting requests at admission, which was
-tried and deliberately rejected as pod-fiddling. If the 8-CPU ledger ever
+The only software workaround is rewriting requests at admission, which was first
+rejected as pod-fiddling and is now done by the Kyverno policy above. If the 8-CPU ledger ever
 fills again, the honest options are lowering the sandbox catalog's CPU
 requests at their source or more hardware.
 

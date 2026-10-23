@@ -168,6 +168,7 @@ spec:
         time.erikfrankling.se/config-rev: "classify-off-1"
     spec:
       automountServiceAccountToken: false
+      priorityClassName: homelab-core
       containers:
         - name: time
           image: ghcr.io/erikfrankling/time:latest
@@ -219,10 +220,8 @@ spec:
             failureThreshold: 5
           resources:
             limits:
-              cpu: "1"
               memory: 512Mi
             requests:
-              cpu: 25m
               memory: 64Mi
           securityContext:
             allowPrivilegeEscalation: false

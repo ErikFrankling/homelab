@@ -55,6 +55,7 @@ spec:
         app.kubernetes.io/name: executor
     spec:
       automountServiceAccountToken: false
+      priorityClassName: homelab-core
       containers:
         - name: executor
           image: ghcr.io/usefulsoftwareco/executor-selfhost:2.0.0-beta.24@sha256:39d8ce360adf86df46e953f43551dad4440d04d7246d30fc7b0d6f3f5cfed3f7

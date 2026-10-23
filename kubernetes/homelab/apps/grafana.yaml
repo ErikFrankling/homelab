@@ -34,6 +34,7 @@ spec:
         app.kubernetes.io/name: grafana
     spec:
       automountServiceAccountToken: false
+      priorityClassName: homelab-core
       securityContext:
         runAsNonRoot: true
         runAsUser: 472
@@ -70,7 +71,6 @@ spec:
             limits:
               memory: 512Mi
             requests:
-              cpu: 20m
               memory: 128Mi
           securityContext:
             allowPrivilegeEscalation: false

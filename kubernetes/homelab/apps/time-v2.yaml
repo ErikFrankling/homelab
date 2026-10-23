@@ -59,6 +59,7 @@ spec:
         app.kubernetes.io/name: time-v2
     spec:
       automountServiceAccountToken: false
+      priorityClassName: homelab-core
       containers:
         - name: time
           # Pinned per commit (image-v2.yml publishes :v2-<sha>).
@@ -98,10 +99,8 @@ spec:
             failureThreshold: 5
           resources:
             limits:
-              cpu: "1"
               memory: 512Mi
             requests:
-              cpu: 25m
               memory: 64Mi
           securityContext:
             # The PVC's files belong to root (v1 ran as root on it).

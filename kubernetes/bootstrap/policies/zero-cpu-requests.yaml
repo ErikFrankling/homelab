@@ -1,0 +1,65 @@
+# Homelab policy (docs/architecture.md, "CPU requests"): CPU never gates
+# scheduling. Every pod's CPU requests are rewritten to 0 at admission, so
+# no workload (ours, Helm charts, naiaclaw sandboxes, anything added later)
+# can use up the node's allocatable CPU and leave pods Pending. Memory is the
+# real constraint and is left alone.
+#
+# Cluster-scoped, so Flux (namespace-scoped) does not apply it; apply by hand:
+#   sudo kubectl apply -f kubernetes/bootstrap/policies/
+# kube-system, kyverno, flux-system and cert-manager are excluded: their small
+# requests are the CPU weight that keeps DNS, ingress and the controllers
+# ahead of everything else under contention (the kubelet runs with
+# cpu-cfs-quota=false, so a request is only a weight).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: homelab-zero-cpu-requests
+  annotations:
+    # Mutate Pods only; do not rewrite every Deployment/StatefulSet template
+    # (that would fight Flux's drift detection).
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  admission: true
+  background: false
+  rules:
+    - name: zero-cpu-requests
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kyverno, flux-system, cert-manager]
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    resources:
+                      requests:
+                        cpu: "0"
+          - list: request.object.spec.initContainers || `[]`
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    resources:
+                      requests:
+                        cpu: "0"
+---
+# Core services outrank batch and search work when memory is short (the only
+# resource that still gates scheduling). Set priorityClassName: homelab-core on
+# time, notify-gateway, executor, brain, gatus, grafana. `low-priority` (-100)
+# already exists for best-effort work such as the alloy daemonset.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: homelab-core
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Homelab core services (time, notify-gateway, executor, brain, gatus, grafana).

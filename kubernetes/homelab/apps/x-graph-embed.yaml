@@ -117,12 +117,9 @@ spec:
             timeoutSeconds: 10
           resources:
             limits:
-              cpu: "4"
               memory: 2Gi
             requests:
-              # The node is 99% requested (about 130m free while this pod is replaced), and under
-              # load the request is the pod's cpu.weight share. 100m is what fits; 50m starved it.
-              cpu: 100m
+              # No CPU request: the homelab-zero-cpu-requests policy zeroes them (docs/architecture.md).
               memory: 768Mi
           volumeMounts:
             - name: models

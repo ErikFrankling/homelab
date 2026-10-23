@@ -27,6 +27,7 @@ spec:
         app.kubernetes.io/name: gatus
     spec:
       automountServiceAccountToken: false
+      priorityClassName: homelab-core
       # The node's own network, so checks leave from 192.168.50.100 like any
       # LAN machine. From a pod address the lan-only routes answer 403, and
       # widening them to cluster pods would expose Executor and the time
