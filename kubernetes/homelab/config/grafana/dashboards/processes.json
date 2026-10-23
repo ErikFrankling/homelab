@@ -1,0 +1,664 @@
+{
+  "uid": "processes",
+  "title": "Processes (history)",
+  "tags": [
+    "pc",
+    "framework",
+    "processes"
+  ],
+  "description": "A task manager you can scroll back: RAM, CPU and disk per program and per unit (systemd service, app scope, T3 agent thread scope) every 15 s, from Alloy's process exporter on each machine (dotfiles modules/nixos/observability). Zoom into a spike; the tables rank the selected time range. Map a t3code-<provider>-<id>.scope to its thread with the system-history skill.",
+  "schemaVersion": 41,
+  "editable": false,
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(namedprocess_namegroup_num_procs, host_name)",
+          "refId": "host"
+        },
+        "refresh": 2,
+        "current": {
+          "text": "pc",
+          "value": "pc"
+        }
+      },
+      {
+        "name": "cgroup",
+        "label": "cgroup regex",
+        "type": "custom",
+        "query": ".*,.*/app-t3code\\.slice/.*,.*/app\\.slice/.*,/system\\.slice/.*,.*session-[0-9]+\\.scope",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "allowCustomValue": true
+      },
+      {
+        "name": "program",
+        "label": "program regex",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Machine memory",
+      "description": "Used = total - available. Swap used includes zram.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "node_memory_MemTotal_bytes{host_name=\"$host\"} - node_memory_MemAvailable_bytes{host_name=\"$host\"}",
+          "legendFormat": "RAM used",
+          "refId": "RAM used"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "node_memory_SwapTotal_bytes{host_name=\"$host\"} - node_memory_SwapFree_bytes{host_name=\"$host\"}",
+          "legendFormat": "swap used",
+          "refId": "swap use"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "node_memory_MemTotal_bytes{host_name=\"$host\"}",
+          "legendFormat": "RAM total",
+          "refId": "RAM tota"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Machine CPU and memory pressure",
+      "description": "CPU busy in cores; PSI: share of time some task waited for memory / IO.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(node_cpu_seconds_total{host_name=\"$host\",mode!=\"idle\"}[$__rate_interval]))",
+          "legendFormat": "CPU cores busy",
+          "refId": "CPU core"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(node_pressure_memory_waiting_seconds_total{host_name=\"$host\"}[$__rate_interval]) * 100",
+          "legendFormat": "memory pressure %",
+          "refId": "memory p"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(node_pressure_io_waiting_seconds_total{host_name=\"$host\"}[$__rate_interval]) * 100",
+          "legendFormat": "IO pressure %",
+          "refId": "IO press"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "RAM by program (PSS, top 15)",
+      "description": "Proportional set size: shared pages split fairly, so browser processes add up correctly.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(15, sum by (groupname, unit) (namedprocess_namegroup_memory_bytes{memtype=\"proportionalResident\",host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}))",
+          "legendFormat": "{{groupname}} · {{unit}}",
+          "refId": "{{groupn"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "CPU by program (cores, top 15)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(15, sum by (groupname, unit) (rate(namedprocess_namegroup_cpu_seconds_total{host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}[$__rate_interval])))",
+          "legendFormat": "{{groupname}} · {{unit}}",
+          "refId": "{{groupn"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "RAM by unit / T3 thread scope (top 12)",
+      "description": "Sum of PSS of all processes in each unit.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(12, sum by (unit) (namedprocess_namegroup_memory_bytes{memtype=\"proportionalResident\",host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}))",
+          "legendFormat": "{{unit}}",
+          "refId": "{{unit}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Swap by program (top 10)",
+      "description": "Pages of each program that sit in swap (zram).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, sum by (groupname, unit) (namedprocess_namegroup_memory_bytes{memtype=\"swapped\",host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}))",
+          "legendFormat": "{{groupname}} · {{unit}}",
+          "refId": "{{groupn"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Disk read + write by program (top 10)",
+      "description": "Bytes per second actually read from and written to storage.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, sum by (groupname, unit) (rate(namedprocess_namegroup_read_bytes_total{host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}[$__rate_interval]) + rate(namedprocess_namegroup_write_bytes_total{host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}[$__rate_interval])))",
+          "legendFormat": "{{groupname}} · {{unit}}",
+          "refId": "{{groupn"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Top in the selected time range",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 12
+      },
+      "description": "Peak RAM (PSS), average CPU and disk traffic per program and unit over the whole range shown. Zoom to a spike to rank what ran then.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "ram",
+          "instant": true,
+          "format": "table",
+          "expr": "topk(40, max_over_time(sum by (groupname, unit) (namedprocess_namegroup_memory_bytes{memtype=\"proportionalResident\",host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"})[$__range:15s]))"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "cpu",
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (groupname, unit) (increase(namedprocess_namegroup_cpu_seconds_total{host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}[$__range])) / $__range_s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "disk",
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (groupname, unit) (increase(namedprocess_namegroup_read_bytes_total{host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}[$__range]) + increase(namedprocess_namegroup_write_bytes_total{host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"}[$__range]))"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "groupname": "program",
+              "unit": "unit",
+              "Value #ram": "peak RAM",
+              "Value #cpu": "avg CPU (cores)",
+              "Value #disk": "disk read+write"
+            }
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "peak RAM",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "peak RAM",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "peak RAM"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg CPU (cores)"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "disk read+write"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    }
+  ]
+}

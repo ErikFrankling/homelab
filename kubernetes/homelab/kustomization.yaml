@@ -137,6 +137,7 @@ configMapGenerator:
   - name: grafana-dashboards
     files:
       - config/grafana/dashboards/home.json
+      - config/grafana/dashboards/processes.json
 labels:
   - includeSelectors: false
     pairs:
