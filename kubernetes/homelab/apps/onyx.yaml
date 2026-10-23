@@ -273,8 +273,12 @@ spec:
       port: 6379
       targetPort: redis
 ---
-# Embeddings (granite-embedding-97m-multilingual, Swedish too) and the
-# reranker, on CPU. The HuggingFace cache persists so restarts do not download.
+# Embeddings (granite-embedding-97m-multilingual, Swedish too) on the GTX 1060.
+# The GPU belongs to kokoro-tts in the device plugin (nvidia.com/gpu: 1), so
+# this pod asks for no GPU and gets it from the nvidia runtime through
+# NVIDIA_VISIBLE_DEVICES instead: the model needs ~0.6 GiB next to kokoro's
+# ~1.9 GiB of the 3 GiB. On CPU the busy node embedded 1-2 chunks/s.
+# The HuggingFace cache persists so restarts do not download.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -293,12 +297,20 @@ spec:
         app.kubernetes.io/name: onyx-model
     spec:
       automountServiceAccountToken: false
+      runtimeClassName: nvidia
       containers:
         - name: model-server
           image: docker.io/onyxdotapp/onyx-model-server:v4.9.4@sha256:d459b24a00f0f853ba2be5a8b2d87a19a528b484f719acbb84f62c6257cdeeb6
           envFrom:
             - configMapRef:
                 name: onyx-env
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: expandable_segments:True
           ports:
             - containerPort: 9000
               name: http
