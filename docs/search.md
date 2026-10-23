@@ -61,3 +61,8 @@ on the PC and start `systemctl --user start search-sync`.
   "Prefix string is not valid for cloud models". Set them empty.
 - The node had 110 pods and was full; `max-pods=200` in `ops/k3s/config.yaml`.
 - CPU requests are 2m: the node is ~99% CPU-requested.
+- Admin setting `auto_detect_search_filters` is off (PATCH /api/admin/settings).
+  With it on, the LLM guessed a source filter (often `github`) for unfiltered
+  queries and returned unrelated PRs or nothing.
+- Onyx's GitHub connector (cc_pair 7, daily) indexes ErikFrankling PRs and
+  issues with Erik's `gh` token; it is the only connector that fetches itself.
