@@ -6,7 +6,7 @@
     "framework",
     "processes"
   ],
-  "description": "A task manager you can scroll back: RAM, CPU and disk per program and per unit (systemd service, app scope, T3 agent thread scope) every 15 s, from Alloy's process exporter on each machine (dotfiles modules/nixos/observability). Zoom into a spike; the tables rank the selected time range. Map a t3code-<provider>-<id>.scope to its thread with the system-history skill.",
+  "description": "A task manager you can scroll back: RAM, CPU and disk per program and per unit (systemd service, app scope, T3 agent thread scope) every 30 s, from Alloy's process exporter on each machine (dotfiles modules/nixos/observability). Zoom into a spike; the tables rank the selected time range. Map a t3code-<provider>-<id>.scope to its thread with the system-history skill.",
   "schemaVersion": 41,
   "editable": false,
   "refresh": "1m",
@@ -537,7 +537,7 @@
           "refId": "ram",
           "instant": true,
           "format": "table",
-          "expr": "topk(40, max_over_time(sum by (groupname, unit) (namedprocess_namegroup_memory_bytes{memtype=\"proportionalResident\",host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"})[$__range:15s]))"
+          "expr": "topk(40, max_over_time(sum by (groupname, unit) (namedprocess_namegroup_memory_bytes{memtype=\"proportionalResident\",host_name=\"$host\",cgroup=~\"$cgroup\",groupname=~\"$program\"})[$__range:30s]))"
         },
         {
           "datasource": {
