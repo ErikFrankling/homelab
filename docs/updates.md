@@ -11,7 +11,7 @@ session, then Discord if still firing after 3 h.
 | Proxmox kernel, libc, anything that asks for a reboot | `homelab-maintenance-reboot.timer` reboots the host | 05:15, only when needed |
 | naiaclaw (Ubuntu 24.04, VM 200) | Ubuntu's unattended-upgrades, security pocket; nvidia packages held (`52-nvidia-no-auto-upgrade`) | ~06:00–07:00 UTC daily |
 | naiaclaw reboot | the same 05:15 window, `qm reboot 200` | only when needed |
-| Cluster images | Renovate (`.github/renovate.json5`, `.github/workflows/renovate.yml`): digest/patch bumps merge to main, Flux applies; minor/major open a PR | 04:45 UTC daily |
+| Cluster images | Renovate (`.github/renovate.json5`, `.github/workflows/renovate.yml`): digest, patch and minor bumps merge to main and Flux applies them; majors (and minors of postgres, redis, opensearch, onyx) open a PR | 04:45 UTC daily |
 | Tailscale on Proxmox | apt (above) plus Tailscale's own auto-update (`AutoUpdate.Apply`) | daily |
 | Tailscale on the framework | dotfiles `nixpkgs_unstable` input, moved by the nightly flake update; never held back with nixpkgs | nightly |
 | Tailscale in the Gatus probe | Renovate (image `ghcr.io/tailscale/tailscale`) | daily |

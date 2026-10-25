@@ -1,7 +1,7 @@
 // Keeps the pinned container images current (docs/updates.md). Run by
-// .github/workflows/renovate.yml every morning at 04:45 UTC. Digest and patch
-// bumps merge straight to main, where Flux applies them within a minute;
-// minor and major bumps open a pull request and wait for someone.
+// .github/workflows/renovate.yml every morning at 04:45 UTC. Digest, patch and
+// minor bumps merge straight to main, where Flux applies them within a minute;
+// major bumps, and minor ones of the data stores below, open a pull request.
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended", ":disableRateLimiting"],
@@ -17,7 +17,7 @@
   ignoreTests: true,
   packageRules: [
     {
-      matchUpdateTypes: ["digest", "patch", "pin", "pinDigest"],
+      matchUpdateTypes: ["digest", "patch", "minor", "pin", "pinDigest"],
       automerge: true,
       automergeType: "branch",
     },
@@ -40,6 +40,7 @@
       // Data formats change across these; a person reads the notes first.
       matchPackageNames: [
         "docker.io/library/postgres",
+        "docker.io/library/redis",
         "docker.io/opensearchproject/opensearch",
         "docker.io/onyxdotapp/**",
       ],
