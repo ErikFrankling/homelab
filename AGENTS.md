@@ -81,6 +81,11 @@ The Docker-to-k3s migration completed on 2026-07-24:
   `ops/ca-trust/distrust.sh` distrusts roots on proxmox and naiaclaw before
   Debian/Ubuntu ship the removal (emSign ECC Root CA - G3 since 2026-10-21);
   rerun it after a node rebuild.
+- Updates (since 2026-10-25, `docs/updates.md`): unattended-upgrades on
+  proxmox (Debian, Proxmox, Tailscale) at 04:30 and naiaclaw; reboots only in
+  the 05:15 window (`homelab-maintenance-reboot` on proxmox), which opens an
+  Alertmanager silence that health-watch also honours; Renovate bumps the
+  cluster images at 04:45 UTC. Failures alert (`updates` rule group).
 - Backups are not currently operational. The old restic profile contains a
   placeholder repository and has never run. The new CronJobs remain suspended
   until a real B2 repository, scoped credentials, off-cluster password recovery
@@ -102,7 +107,9 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 ## Physical Host
 
 - Hostname: `proxmox`.
-- OS: Proxmox VE `9.1.5` on Debian 13 (`trixie`), kernel `6.17.9-1-pve`.
+- OS: Proxmox VE `9.2.21` on Debian 13 (`trixie`) since 2026-10-25, kernel
+  `6.17.9-1-pve` running with `7.0.14-25-pve` installed for the next reboot
+  window. Updated unattended; see `docs/updates.md`.
 - Hardware vendor/model reported by DMI: Gigabyte Technology Co., Ltd. `Z270P-D3`.
 - Motherboard/baseboard reported by DMI: Gigabyte `Z270P-D3-CF`, version `x.x`.
 - BIOS: American Megatrends `F7`, release date `2017-11-08`.

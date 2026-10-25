@@ -27,6 +27,8 @@ spec:
           args:
             - --web.listen-address=:9101
             - --path.rootfs=/host
+            # homelab_updates.prom from ops/updates/install.sh (unattended upgrades).
+            - --collector.textfile.directory=/host/var/lib/prometheus/node-exporter
             - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/kubelet|var/lib/rancher/k3s/agent/containerd)($|/)
           ports:
             - {containerPort: 9101, hostPort: 9101, name: metrics}

@@ -1,0 +1,50 @@
+// Keeps the pinned container images current (docs/updates.md). Run by
+// .github/workflows/renovate.yml every morning at 04:45 UTC. Digest and patch
+// bumps merge straight to main, where Flux applies them within a minute;
+// minor and major bumps open a pull request and wait for someone.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended", ":disableRateLimiting"],
+  dependencyDashboard: true,
+  dependencyDashboardTitle: "Renovate: pending image and action updates",
+  // Only the cluster; docker-compose.yml and config/ are the frozen Docker VM.
+  enabledManagers: ["kubernetes", "github-actions"],
+  kubernetes: {
+    managerFilePatterns: ["/^kubernetes/.+\\.ya?ml$/"],
+  },
+  // A GITHUB_TOKEN push starts no workflow, so there are never checks to wait
+  // for. A broken image shows up in Gatus and the alerts instead.
+  ignoreTests: true,
+  packageRules: [
+    {
+      matchUpdateTypes: ["digest", "patch", "pin", "pinDigest"],
+      automerge: true,
+      automergeType: "branch",
+    },
+    {
+      // Built from Erik's own repos and imported or pushed by their deploy
+      // scripts; their tags are commits, not versions.
+      matchPackageNames: [
+        "ghcr.io/erikfrankling/**",
+        "docker.io/library/brain",
+        "brain",
+      ],
+      enabled: false,
+    },
+    {
+      // Not reconciled by Flux (kubernetes/optional/media is inactive).
+      matchFileNames: ["kubernetes/optional/**"],
+      enabled: false,
+    },
+    {
+      // Data formats change across these; a person reads the notes first.
+      matchPackageNames: [
+        "docker.io/library/postgres",
+        "docker.io/opensearchproject/opensearch",
+        "docker.io/onyxdotapp/**",
+      ],
+      matchUpdateTypes: ["minor", "major"],
+      automerge: false,
+    },
+  ],
+}

@@ -119,6 +119,50 @@ groups:
         annotations:
           summary: "{{ $labels.host_name }}: {{ $labels.probe }} health check failing"
 
+  # Unattended upgrades on proxmox and naiaclaw (ops/updates/install.sh,
+  # docs/updates.md). The hosts write homelab_updates.prom after every run
+  # and hourly; upgrades run at 04:30 on proxmox, ~06:00-07:00 on naiaclaw.
+  - name: updates
+    rules:
+      - alert: HostUpdateFailed
+        expr: homelab_unattended_upgrades_last_run_success == 0 and homelab_unattended_upgrades_last_run_timestamp_seconds > 0
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: the last unattended-upgrades run logged an ERROR"
+          description: "/var/log/unattended-upgrades/unattended-upgrades.log and -dpkg.log on {{ $labels.host_name }}"
+      - alert: HostUpdatesNotRunning
+        expr: time() - homelab_unattended_upgrades_last_run_timestamp_seconds > 2 * 86400 + 3 * 3600
+        for: 1h
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: unattended-upgrades has not run for over 2 days"
+          description: "systemctl status apt-daily-upgrade.timer apt-daily-upgrade.service on {{ $labels.host_name }}"
+      # Security fixes it could not install by itself (new dependencies, a
+      # conffile prompt, a held package): someone has to run apt.
+      - alert: HostSecurityUpdatesStuck
+        expr: homelab_apt_upgrades_pending{kind="security"} > 0
+        for: 2d
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: {{ $value }} security updates pending for 2 days"
+          description: "apt list --upgradable on {{ $labels.host_name }}; unattended-upgrades is not installing them"
+      - alert: HostUpdatesStuck
+        expr: homelab_apt_upgrades_pending{kind="all", host_name="proxmox"} > 0
+        for: 4d
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "proxmox: {{ $value }} updates pending for 4 days (Proxmox packages usually need apt full-upgrade)"
+      # The 05:15 window (homelab-maintenance-reboot.timer on proxmox) should
+      # have rebooted it the next night.
+      - alert: HostRebootOverdue
+        expr: homelab_reboot_required == 1
+        for: 3d
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: an update has waited 3 days for its reboot"
+          description: "journalctl -u homelab-maintenance-reboot on proxmox"
+
   - name: health-checks
     rules:
       # health-watch already starts sessions for failing Gatus checks. This

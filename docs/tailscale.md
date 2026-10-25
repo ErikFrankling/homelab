@@ -214,6 +214,20 @@ From a remote client (off Wi-Fi, e.g. phone on mobile data, Tailscale on):
   additionally be advertised from `naiaclaw` or a cluster pod; Tailscale
   fails over between routers advertising identical routes.
 
+## Updates and security
+
+- tailscaled on the host is kept current by unattended-upgrades (origin
+  `Tailscale`) and by Tailscale's own auto-update; the framework follows the
+  dotfiles `nixpkgs_unstable` input; the Gatus probe image by Renovate. See
+  `docs/updates.md`.
+- Exposure as of 2026-10-25: no Serve, Funnel, exit node or app connector
+  anywhere; the only subnet route is `192.168.50.0/24` from this host; Tailscale
+  SSH runs only here, in check mode, for Erik's own devices (not the
+  `tag:client` nodes). The tailnet policy is still the default allow-all
+  packet filter. That review covered the "Tailworm" report (11 findings,
+  2026-10-25), where the SSH forwarding findings need an accepted SSH session
+  and the rest need Serve, Funnel or app connectors.
+
 ## Relation to the old OpenVPN setup
 
 | OpenVPN era | Now |

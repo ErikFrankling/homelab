@@ -46,6 +46,13 @@ scrape_configs:
       - targets: [192.168.50.100:9101]
         labels:
           host_name: naiaclaw
+  # The Proxmox host: Debian's prometheus-node-exporter on the LAN address,
+  # with homelab_updates.prom (ops/updates/install.sh, docs/updates.md).
+  - job_name: proxmox
+    static_configs:
+      - targets: [192.168.50.10:9100]
+        labels:
+          host_name: proxmox
   # Gatus on the host network: gatus_results_* for every check.
   - job_name: gatus
     static_configs:
