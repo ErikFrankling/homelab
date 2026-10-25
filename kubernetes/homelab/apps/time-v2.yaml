@@ -64,7 +64,7 @@ spec:
         - name: time
           # Pinned per commit (image-v2.yml publishes :v2-<sha>).
           # 70f326d is the time-mcp line (has [mcp] config); v2-daba5bf is the v2 branch without it and crash-loops on [mcp] until the two merge.
-          image: ghcr.io/erikfrankling/time:v2-5225965
+          image: ghcr.io/erikfrankling/time:v2-5fdd487
           args: ["serve", "/config/config.toml"]
           env:
             - name: TZ
@@ -176,7 +176,7 @@ spec:
                   topologyKey: kubernetes.io/hostname
           containers:
             - name: backup
-              image: ghcr.io/erikfrankling/time:v2-5225965
+              image: ghcr.io/erikfrankling/time:v2-5fdd487
               command: ["/bin/sh", "-c"]
               args:
                 - |
