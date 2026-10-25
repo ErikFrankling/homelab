@@ -33,6 +33,13 @@ data:
     productive = ["work", "study"]
     unproductive = ["video", "feeds"]
 
+    # The decision model for sleep and gaps between input (OpenCode Go,
+    # DeepSeek V4.1 Flash, low reasoning; key in secret time-decide). Asked
+    # once a night and once per two hours with ambiguous gaps; every answer
+    # cached and logged (/api/decisions). Derived from this day on.
+    [decide]
+    since = "2026-10-21"
+
     [devices.pc]
     kind = "desktop"
     [devices.framework]
@@ -64,7 +71,7 @@ spec:
         - name: time
           # Pinned per commit (image-v2.yml publishes :v2-<sha>).
           # 70f326d is the time-mcp line (has [mcp] config); v2-daba5bf is the v2 branch without it and crash-loops on [mcp] until the two merge.
-          image: ghcr.io/erikfrankling/time:v2-b8c9569
+          image: ghcr.io/erikfrankling/time:v2-081670a
           args: ["serve", "/config/config.toml"]
           env:
             - name: TZ
@@ -79,6 +86,9 @@ spec:
             # Time MCP, docs in the time repo README).
             - secretRef:
                 name: time-mcp
+            # TIME_DECIDE_KEY: the decision model (sleep, gaps).
+            - secretRef:
+                name: time-decide
           ports:
             - containerPort: 7373
               name: http
@@ -176,7 +186,7 @@ spec:
                   topologyKey: kubernetes.io/hostname
           containers:
             - name: backup
-              image: ghcr.io/erikfrankling/time:v2-b8c9569
+              image: ghcr.io/erikfrankling/time:v2-081670a
               command: ["/bin/sh", "-c"]
               args:
                 - |

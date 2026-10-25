@@ -49,6 +49,7 @@ resources:
   - secrets/notify-gateway.enc.yaml
   - secrets/time-notify.enc.yaml
   - secrets/time-mcp.enc.yaml
+  - secrets/time-decide.enc.yaml
   - secrets/otlp-ingest.enc.yaml
   - secrets/grafana.enc.yaml
   - secrets/alerts-discord.enc.yaml
