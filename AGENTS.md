@@ -108,8 +108,9 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 
 - Hostname: `proxmox`.
 - OS: Proxmox VE `9.2.21` on Debian 13 (`trixie`) since 2026-10-25, kernel
-  `6.17.9-1-pve` running with `7.0.14-25-pve` installed for the next reboot
-  window. Updated unattended; see `docs/updates.md`.
+  `6.17.9-1-pve` pinned (known good); `7.0.14-25-pve` installed and waiting
+  for a supervised reboot. Unattended reboots only boot a kernel that has
+  booted this host before; see `docs/updates.md`, "Kernels".
 - Hardware vendor/model reported by DMI: Gigabyte Technology Co., Ltd. `Z270P-D3`.
 - Motherboard/baseboard reported by DMI: Gigabyte `Z270P-D3-CF`, version `x.x`.
 - BIOS: American Megatrends `F7`, release date `2017-11-08`.

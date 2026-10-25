@@ -162,6 +162,24 @@ groups:
         annotations:
           summary: "{{ $labels.host_name }}: an update has waited 3 days for its reboot"
           description: "journalctl -u homelab-maintenance-reboot on proxmox"
+      # A new Proxmox kernel never boots unattended (docs/updates.md,
+      # "Kernels"); it needs someone at home for a supervised reboot. No
+      # session: an agent must not reboot into it.
+      - alert: HostKernelAwaitingSupervisedReboot
+        expr: homelab_kernel_awaiting_supervised_reboot == 1
+        for: 1h
+        labels: {severity: info, project: homelab, session: "false"}
+        annotations:
+          summary: "proxmox: kernel {{ $labels.kernel }} is installed and waits for a supervised reboot (running {{ $labels.pinned }})"
+          description: "Plan it for when someone is home: docs/updates.md, 'Supervised kernel reboot'"
+      # The unattended reboot window would refuse to reboot the host.
+      - alert: HostKernelPinUnsafe
+        expr: homelab_kernel_pin_safe == 0
+        for: 30m
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "proxmox: no known-good kernel is pinned, so the 05:15 window will not reboot the host"
+          description: "ssh proxmox 'homelab-maintenance-reboot --dry-run; proxmox-boot-tool kernel list; cat /var/lib/homelab/booted-kernels'"
 
   - name: health-checks
     rules:
