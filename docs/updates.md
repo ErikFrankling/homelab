@@ -113,9 +113,17 @@ strands the whole homelab until someone is at the machine.
   `HostKernelAwaitingSupervisedReboot` (info, no session) reaches Discord,
   again every 24 h until it is resolved.
 
-As of 2026-10-25: pinned and known good `6.17.9-1-pve` (every boot in the
-journal since 2026-08-05). Waiting: `7.0.14-25-pve` (new 7.0 series) and
-`6.17.13-21-pve`.
+As of 2026-10-26: pinned and known good `7.0.14-25-pve` (supervised reboot
+08:16-08:39) and `6.17.9-1-pve` before it. `6.17.13-21-pve` never booted and
+is older than the pin, so nothing waits.
+
+**VM 200 memory must leave the host room.** GPU passthrough pins and
+prefaults all of VM 200's RAM at start. On 7.0 the 60 GiB guest no longer fit
+beside the host (62.7 GiB): the host stalled under memory pressure for 11
+minutes (no SSH), then the
+OOM killer killed kvm and VM 200 stayed off. It now has 56 GiB
+(`qm set 200 --memory 57344`), leaving about 5 GiB on the host. Keep at
+least 4 GiB free on the host when raising it.
 
 ### Supervised kernel reboot
 
@@ -135,7 +143,8 @@ reboot
   answers, `homelab-kernel-booted` records 7.0 and pins it. Check with
   `proxmox-boot-tool kernel list` and `cat /var/lib/homelab/booted-kernels`;
   the alert resolves within the hour.
-- If it boots but VM 200 does not come up: 7.0 is not recorded. Run
+- If it boots but VM 200 does not come up, look for `oom-kill` in
+  `journalctl -k -b` first (see above); otherwise the kernel is not recorded. Run
   `proxmox-boot-tool kernel unpin --next-boot` if it is still set, then
   `reboot`, and the host comes back on the pinned 6.17.
 - If it never reaches userspace (panic or hang): GRUB keeps choosing the
