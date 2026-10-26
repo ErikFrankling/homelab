@@ -62,7 +62,7 @@ spec:
               readOnly: true
       containers:
         - name: worker
-          image: debian:13-slim@sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483
+          image: debian:13-slim@sha256:4876fdea29cac1a33a3195f1eb1952feb1fca7dd6dd00be3e2f1879cf20d34d2
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "/config/entrypoint.sh"]
           env:
