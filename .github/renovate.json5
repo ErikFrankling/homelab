@@ -43,6 +43,8 @@
     {
       // Data formats change across these; a person reads the notes first.
       matchPackageNames: [
+        // 2026.10.7 refused to migrate 2026.5.28 state (needs 2026.9.5 first).
+        "ghcr.io/openclaw/openclaw",
         "docker.io/library/postgres",
         "docker.io/library/redis",
         "docker.io/opensearchproject/opensearch",
