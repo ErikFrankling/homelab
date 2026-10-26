@@ -6,9 +6,10 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended", ":disableRateLimiting"],
   dependencyDashboard: true,
-  dependencyDashboardTitle: "Renovate: pending image and action updates",
+  dependencyDashboardTitle: "Renovate: pending image updates",
   // Only the cluster; docker-compose.yml and config/ are the frozen Docker VM.
-  enabledManagers: ["kubernetes", "github-actions"],
+  // Not github-actions: a GITHUB_TOKEN may not push changes to workflow files.
+  enabledManagers: ["kubernetes"],
   kubernetes: {
     managerFilePatterns: ["/^kubernetes/.+\\.ya?ml$/"],
   },
@@ -20,6 +21,9 @@
       matchUpdateTypes: ["digest", "patch", "minor", "pin", "pinDigest"],
       automerge: true,
       automergeType: "branch",
+      // One branch for all of them: Renovate restarts after each automerge
+      // and stops after the second, so separate branches took weeks.
+      groupName: "image updates",
     },
     {
       // Built from Erik's own repos and imported or pushed by their deploy
@@ -46,6 +50,7 @@
       ],
       matchUpdateTypes: ["minor", "major"],
       automerge: false,
+      groupName: null,
     },
   ],
 }

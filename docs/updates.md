@@ -12,7 +12,7 @@ session, then Discord if still firing after 3 h.
 | Proxmox kernel | installed by unattended-upgrades, booted only in a supervised reboot (see Kernels); `HostKernelAwaitingSupervisedReboot` says when one waits | when someone is home |
 | naiaclaw (Ubuntu 24.04, VM 200) | Ubuntu's unattended-upgrades, security pocket; nvidia packages held (`52-nvidia-no-auto-upgrade`) | ~06:00–07:00 UTC daily |
 | naiaclaw reboot | the same 05:15 window, `qm reboot 200` | only when needed |
-| Cluster images | Renovate (`.github/renovate.json5`, `.github/workflows/renovate.yml`): digest, patch and minor bumps merge to main and Flux applies them; majors (and minors of postgres, redis, opensearch, onyx) open a PR | 04:45 UTC daily |
+| Cluster images | Renovate (`.github/renovate.json5`, `.github/workflows/renovate.yml`): digest, patch and minor bumps go to main as one grouped commit and Flux applies them; majors (and minors of postgres, redis, opensearch, onyx) open a PR. GitHub Actions versions are not updated (a `GITHUB_TOKEN` cannot push workflow files) | 04:45 UTC daily |
 | Tailscale on Proxmox | apt (above) plus Tailscale's own auto-update (`AutoUpdate.Apply`) | daily |
 | Tailscale on the framework | dotfiles `nixpkgs_unstable` input, moved by the nightly flake update; never held back with nixpkgs | nightly |
 | Tailscale in the Gatus probe | Renovate (image `ghcr.io/tailscale/tailscale`) | daily |
