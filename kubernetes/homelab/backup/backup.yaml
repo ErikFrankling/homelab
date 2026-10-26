@@ -101,7 +101,7 @@ spec:
           automountServiceAccountToken: false
           initContainers:
             - name: sqlite-snapshots
-              image: python:3.13-alpine
+              image: python:3.15-alpine
               command:
                 - python
                 - /scripts/snapshot.py
@@ -124,7 +124,7 @@ spec:
                   readOnly: true
           containers:
             - name: restic
-              image: restic/restic:0.18.1
+              image: restic/restic:0.19.1
               command:
                 - /bin/sh
                 - /scripts/backup.sh
@@ -204,7 +204,7 @@ spec:
           automountServiceAccountToken: false
           initContainers:
             - name: restore
-              image: restic/restic:0.18.1
+              image: restic/restic:0.19.1
               args:
                 - restore
                 - latest
@@ -225,7 +225,7 @@ spec:
                   name: restore
           containers:
             - name: verify
-              image: python:3.13-alpine
+              image: python:3.15-alpine
               command:
                 - python
                 - /scripts/verify.py

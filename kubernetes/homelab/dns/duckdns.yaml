@@ -83,7 +83,7 @@ spec:
           automountServiceAccountToken: false
           containers:
             - name: duckdns
-              image: curlimages/curl:8.11.1
+              image: curlimages/curl:8.23.0
               command:
                 - /bin/sh
                 - /scripts/update.sh
