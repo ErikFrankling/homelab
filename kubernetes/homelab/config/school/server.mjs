@@ -12,7 +12,15 @@ import { timingSafeEqual, createHash } from "node:crypto";
 const PORT = Number(process.env.PORT || 8080);
 const DATA = process.env.DATA_FILE || "/data/state.json";
 const TOKEN = process.env.INGEST_TOKEN || "";
-const PAGE = readFileSync(new URL("./index.html", import.meta.url));
+const PAGE = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+const FONT = readFileSync(new URL("./inter.woff2", import.meta.url));
+
+// The page arrives with its data inlined, so it renders complete on first
+// paint instead of empty-then-filled.
+function page() {
+  const json = JSON.stringify(view()).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  return PAGE.replace("<!--DATA-->", `<script>window.__DATA__=${json}</script>`);
+}
 
 let state = { items: [], meta: {}, done: {}, seen: {}, log: [] };
 if (existsSync(DATA)) state = { ...state, ...JSON.parse(readFileSync(DATA, "utf8")) };
@@ -117,8 +125,8 @@ function authorized(req) {
   return timingSafeEqual(a, b);
 }
 
-const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#14171f"/><rect x="12" y="16" width="40" height="36" rx="6" fill="none" stroke="#8ab4ff" stroke-width="4"/><path d="M12 26h40" stroke="#8ab4ff" stroke-width="4"/><path d="M22 10v10M42 10v10" stroke="#8ab4ff" stroke-width="4" stroke-linecap="round"/><path d="M24 39l6 6 11-12" fill="none" stroke="#7ee0a8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const MANIFEST = { name: "School", short_name: "School", start_url: "/", display: "standalone", background_color: "#0c0e13", theme_color: "#0c0e13", icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }] };
+const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0e0f11"/><rect x="14" y="17" width="36" height="32" rx="5" fill="none" stroke="#ececee" stroke-width="3"/><path d="M14 27h36" stroke="#ececee" stroke-width="3"/><path d="M24 12v9M40 12v9" stroke="#ececee" stroke-width="3" stroke-linecap="round"/><circle cx="40" cy="38" r="3.5" fill="#7b83eb"/></svg>`;
+const MANIFEST = { name: "School", short_name: "School", start_url: "/", display: "standalone", background_color: "#0e0f11", theme_color: "#0e0f11", icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }] };
 
 createServer(async (req, res) => {
   try {
@@ -127,6 +135,7 @@ createServer(async (req, res) => {
     if (p === "/healthz") return send(res, 200, "ok", "text/plain");
     if (req.method === "GET" && p === "/api/items") return send(res, 200, view());
     if (req.method === "GET" && p === "/calendar.ics") return send(res, 200, ics(), "text/calendar; charset=utf-8");
+    if (req.method === "GET" && p === "/inter.woff2") return send(res, 200, FONT, "font/woff2", { "Cache-Control": "public, max-age=31536000, immutable" });
     if (req.method === "GET" && p === "/icon.svg") return send(res, 200, ICON, "image/svg+xml", { "Cache-Control": "max-age=86400" });
     if (req.method === "GET" && p === "/manifest.webmanifest") return send(res, 200, MANIFEST, "application/manifest+json");
     if (req.method === "POST" && p === "/api/ingest") {
@@ -143,7 +152,7 @@ createServer(async (req, res) => {
       save();
       return send(res, 200, { id, done_override: state.done[id]?.done ?? null });
     }
-    if (req.method === "GET" && (p === "/" || p === "/index.html")) return send(res, 200, PAGE, "text/html; charset=utf-8");
+    if (req.method === "GET" && (p === "/" || p === "/index.html")) return send(res, 200, page(), "text/html; charset=utf-8");
     send(res, 404, { error: "not found" });
   } catch (e) {
     send(res, 400, { error: String(e.message || e) });
