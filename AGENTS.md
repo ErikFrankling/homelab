@@ -63,6 +63,11 @@ The Docker-to-k3s migration completed on 2026-07-24:
   Its embeddings run on the GTX 1060 beside kokoro-tts (`onyx-embed`), its LLM
   is Gemma on the PC's llama-swap, and the PC pushes the data hourly
   (`search-sync`). See `docs/search.md`.
+- School (`apps/school.yaml`, https://school.erikfrankling.duckdns.org,
+  lan-only) is the KTH deadline calendar. Code is `config/school/` (Node, no
+  build); done toggles are in `/data/state.json` on PVC `school-data`. The PC
+  pushes the items after the daily Canvas archive refresh (dotfiles
+  `modules/home-manager/school-sync`); it never talks to Canvas.
 - The node allows 200 pods (`max-pods` in `ops/k3s/config.yaml`, 2026-10-23);
   110 was full.
 - Shared Traefik configuration is tracked under

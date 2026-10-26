@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c0e13">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>School</title>
+<style>
+:root {
+  --bg: #0c0e13; --panel: #13161d; --panel2: #191d26; --line: #232835; --text: #e7e9ef; --muted: #8a92a6; --faint: #5b6273;
+  --red: #ff6b6b; --amber: #f5b85a; --green: #6fdc9c; --blue: #8ab4ff;
+  --radius: 14px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Inter", sans-serif; -webkit-font-smoothing: antialiased; padding-bottom: env(safe-area-inset-bottom); }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
+.top { display: flex; align-items: center; gap: 12px; padding: 12px 0 10px; }
+.brand { font-weight: 700; font-size: 19px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 9px; }
+.brand img { width: 26px; height: 26px; }
+.sync { color: var(--faint); font-size: 12px; margin-left: auto; text-align: right; }
+.tabs { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 11px; padding: 3px; }
+.tabs button { padding: 6px 14px; border-radius: 8px; color: var(--muted); font-weight: 550; font-size: 14px; }
+.tabs button.on { background: var(--panel2); color: var(--text); box-shadow: 0 1px 0 #ffffff0d inset; }
+.bar { display: flex; gap: 10px; align-items: center; padding-bottom: 10px; flex-wrap: wrap; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12.5px; white-space: nowrap; font-weight: 550; }
+.chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.chip.on { color: var(--text); border-color: color-mix(in srgb, var(--c) 55%, var(--line)); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.chip.off { opacity: .45; }
+.toggle { font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.toggle input { accent-color: var(--blue); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0 6px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.stat b { display: block; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12.5px; }
+.stat.red b { color: var(--red); } .stat.amber b { color: var(--amber); } .stat.green b { color: var(--green); }
+
+h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 8px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
+h2.sec .n { background: var(--panel2); color: var(--muted); border-radius: 999px; padding: 0 7px; font-size: 11.5px; letter-spacing: 0; }
+h2.sec.red { color: var(--red); }
+.list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.row { display: grid; grid-template-columns: 4px 76px 1fr auto; gap: 12px; align-items: center; padding: 11px 12px 11px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--panel2); }
+.row .stripe { align-self: stretch; background: var(--c); border-radius: 0 3px 3px 0; }
+.row .when { font-size: 12.5px; color: var(--muted); line-height: 1.25; font-variant-numeric: tabular-nums; }
+.row .when b { display: block; color: var(--text); font-size: 13.5px; font-weight: 600; }
+.row .main { min-width: 0; }
+.row .title { font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sub { font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.row.done .title { color: var(--faint); text-decoration: line-through; text-decoration-color: #ffffff30; }
+.row.deferred .title { color: var(--muted); }
+.ctag { color: var(--c); font-weight: 650; }
+.pill { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 999px; letter-spacing: .01em; }
+.pill.missed { background: #ff6b6b1f; color: var(--red); }
+.pill.overdue { background: #ff6b6b1f; color: var(--red); }
+.pill.open { background: #8ab4ff1a; color: var(--blue); }
+.pill.soon { background: #f5b85a1f; color: var(--amber); }
+.pill.done { background: #6fdc9c1a; color: var(--green); }
+.pill.deferred { background: #ffffff10; color: var(--muted); }
+.pill.passed { background: #ffffff0a; color: var(--faint); }
+.pill.new { background: #b48aff22; color: #c9a8ff; }
+.check { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: none; transition: .15s; }
+.check:hover { border-color: var(--green); }
+.check.on { background: var(--green); border-color: var(--green); }
+.check svg { width: 15px; height: 15px; opacity: 0; }
+.check.on svg { opacity: 1; }
+.empty { color: var(--faint); padding: 16px; font-size: 14px; }
+details.more { margin-top: 8px; }
+details.more summary { color: var(--muted); font-size: 13px; cursor: pointer; padding: 6px 2px; }
+
+/* calendar */
+.calhead { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; }
+.calhead h3 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.calhead .nav { margin-left: auto; display: flex; gap: 6px; }
+.calhead .nav button { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 5px 11px; color: var(--muted); }
+.calhead .nav button:hover { color: var(--text); }
+.month { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); gap: 1px; }
+.dow { background: var(--panel); color: var(--faint); font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; padding: 7px 8px; font-weight: 650; }
+.day { background: var(--panel); min-height: 112px; padding: 6px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; }
+.day.out { background: #10131a; }
+.day.out .num { color: var(--faint); }
+.day .num { font-size: 12.5px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; margin-bottom: 1px; }
+.day.today .num { color: #0c0e13; background: var(--blue); border-radius: 999px; width: 22px; height: 22px; display: grid; place-items: center; }
+.day.sel { outline: 2px solid var(--blue); outline-offset: -2px; }
+.ev { font-size: 11.5px; line-height: 1.3; padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--c) 18%, transparent); border-left: 3px solid var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.ev.done { opacity: .42; text-decoration: line-through; }
+.ev.deferred { opacity: .5; border-left-style: dashed; }
+.ev.missed { box-shadow: inset 0 0 0 1px #ff6b6b55; }
+.ev .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+.dots { display: none; gap: 3px; flex-wrap: wrap; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+.dots i.done { opacity: .35; }
+.daylist { margin-top: 14px; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.wday { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px; min-height: 260px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wday.today { border-color: color-mix(in srgb, var(--blue) 60%, var(--line)); }
+.wday h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; justify-content: space-between; }
+.wday h4 b { color: var(--text); font-size: 15px; letter-spacing: 0; }
+.wday.today h4 b { color: var(--blue); }
+.wev { padding: 7px 8px; border-radius: 9px; background: color-mix(in srgb, var(--c) 14%, var(--panel2)); border-left: 3px solid var(--c); cursor: pointer; font-size: 12.5px; line-height: 1.3; }
+.wev .t { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.wev .c { color: var(--c); font-weight: 650; font-size: 11px; }
+.wev.done { opacity: .45; } .wev.done .n { text-decoration: line-through; }
+.wev.deferred { opacity: .55; border-left-style: dashed; }
+.wev.missed { box-shadow: inset 0 0 0 1px #ff6b6b66; }
+
+/* detail */
+.sheet { position: fixed; inset: 0; z-index: 20; background: #000a; display: none; justify-content: flex-end; }
+.sheet.open { display: flex; }
+.panel { width: min(760px, 100%); height: 100%; overflow-y: auto; background: var(--bg); border-left: 1px solid var(--line); padding: 0 0 40px; animation: slide .18s ease-out; }
+@keyframes slide { from { transform: translateX(24px); opacity: .5; } }
+.phead { position: sticky; top: 0; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: calc(10px + env(safe-area-inset-top)) 18px 10px; display: flex; align-items: center; gap: 10px; }
+.phead .back { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 0; }
+.phead .back:hover { color: var(--text); }
+.pbody { padding: 18px 22px; }
+.pbody .course { color: var(--c); font-weight: 650; font-size: 13px; letter-spacing: .02em; }
+.pbody h1 { font-size: 24px; line-height: 1.25; margin: 6px 0 10px; letter-spacing: -0.015em; }
+.pmeta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13.5px; }
+.donebtn { margin: 16px 0 6px; display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-weight: 600; }
+.donebtn:hover { border-color: var(--green); }
+.donebtn.on { background: #6fdc9c1c; border-color: #6fdc9c66; color: var(--green); }
+.donebtn .check { width: 22px; height: 22px; }
+.donebtn .check svg { width: 12px; height: 12px; }
+.reset { color: var(--faint); font-size: 12.5px; margin-left: 10px; text-decoration: underline; }
+.autonote { color: var(--faint); font-size: 12.5px; }
+.md { margin-top: 14px; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.md h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 26px 0 8px; }
+.md h4, .md h5, .md h6 { font-size: 15px; margin: 18px 0 6px; }
+.md p { margin: 0 0 10px; }
+.md ul, .md ol { margin: 0 0 10px; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md blockquote { margin: 0 0 14px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 10px; }
+.md blockquote p:last-child { margin: 0; }
+.md code { background: var(--panel2); border-radius: 5px; padding: 1px 5px; font-size: .9em; }
+.md pre { background: var(--panel); border: 1px solid var(--line); padding: 12px; border-radius: 10px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+
+@media (max-width: 760px) {
+  .wrap { padding: 0 12px; }
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
+  .stat { padding: 10px 12px; } .stat b { font-size: 21px; }
+  .row { grid-template-columns: 4px 58px 1fr auto; gap: 10px; }
+  .row .when b { font-size: 12.5px; }
+  .day { min-height: 54px; padding: 4px; }
+  .day .ev { display: none; }
+  .dots { display: flex; }
+  .dow { padding: 6px 4px; text-align: center; font-size: 10.5px; }
+  .day .num { margin: 0 auto 2px; }
+  .week { grid-template-columns: 1fr; }
+  .wday { min-height: 0; }
+  .wday.emptyday { display: none; }
+  .pbody { padding: 16px; }
+  .pbody h1 { font-size: 21px; }
+  .sync { display: none; }
+  .tabs button { padding: 6px 11px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand"><img src="/icon.svg" alt="">School</div>
+      <div class="tabs" id="tabs">
+        <button data-v="agenda">Agenda</button><button data-v="week">Week</button><button data-v="month">Month</button>
+      </div>
+      <div class="sync" id="sync"></div>
+    </div>
+    <div class="bar">
+      <div class="chips" id="chips"></div>
+      <label class="toggle"><input type="checkbox" id="showdone"> Show done</label>
+    </div>
+  </div>
+</header>
+<main class="wrap" id="main"></main>
+<div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
+
+<script>
+const TZ = "Europe/Stockholm";
+const COLORS = { DA2210: "#f5b85a", DD2300: "#4fd1c5", DD2395: "#ff7a90", DD2440: "#b28cff", IK2218: "#5fb3ff", SF1688: "#7bdc7b", KTH: "#9aa4b8" };
+const KIND = { assignment: "Assignment", quiz: "Quiz", lab: "Lab", seminar: "Seminar", exam: "Exam", "peer review": "Peer review", registration: "Registration", event: "Event" };
+const CHECK = '<svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="#0c0e13" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+let DATA = { items: [], meta: {} };
+let S = JSON.parse(localStorage.getItem("school-ui") || "{}");
+S = { view: "agenda", hidden: [], showDone: false, ...S };
+let cursor = new Date();   // month/week being shown
+let selDay = null;         // mobile month: selected day key
+
+const save = () => localStorage.setItem("school-ui", JSON.stringify({ view: S.view, hidden: S.hidden, showDone: S.showDone }));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const color = (c) => COLORS[c] || "#9aa4b8";
+
+// ---- dates (always Stockholm) ----
+const parts = (d) => Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23" }).formatToParts(d).map((p) => [p.type, p.value]));
+const dayKey = (d) => { const p = parts(d); return `${p.year}-${p.month}-${p.day}`; };
+const keyDate = (k) => new Date(k + "T12:00:00Z");
+const addDays = (k, n) => { const d = keyDate(k); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const dow = (k) => (keyDate(k).getUTCDay() + 6) % 7; // Monday 0
+const weekStart = (k) => addDays(k, -dow(k));
+const hm = (d) => { const p = parts(d); return `${p.hour}:${p.minute}`; };
+const fmtDay = (k, opts = { weekday: "short", day: "numeric", month: "short" }) => keyDate(k).toLocaleDateString("en-GB", { ...opts, timeZone: "UTC" });
+function rel(due) {
+  const ms = due - Date.now(), h = Math.round(ms / 3600000), d = Math.round((keyDate(dayKey(due)) - keyDate(dayKey(new Date()))) / 86400000);
+  if (Math.abs(ms) < 3600000) return ms > 0 ? "within the hour" : "just now";
+  if (d === 0) return ms > 0 ? `in ${h} h` : `${-h} h ago`;
+  if (d === 1) return "tomorrow"; if (d === -1) return "yesterday";
+  return d > 0 ? `in ${d} days` : `${-d} days ago`;
+}
+
+// ---- status ----
+const PASSIVE = new Set(["exam", "seminar", "event", "registration"]);
+function status(it) {
+  const now = Date.now(), due = new Date(it.due);
+  if (it.done_override === true) return "done";
+  if (it.deferred && it.done_override === null) return "deferred";
+  if (it.auto_done && it.done_override !== false) return "done";
+  if (due > now) return "open";
+  // Nothing to hand in (exam, seminar, event, window): once it is over it has passed, not been missed.
+  const handIn = it.canvas && (it.canvas.types || []).some((t) => !["none", "not_graded", "on_paper"].includes(t));
+  if (PASSIVE.has(it.kind) && !handIn) return "passed";
+  return "missed";
+}
+function lateOpen(it) { return status(it) === "missed" && it.canvas && (!it.lock_at || new Date(it.lock_at) > Date.now()); }
+const isNew = (it) => !it.initial && it.first_seen && Date.now() - new Date(it.first_seen) < 4 * 86400000;
+const isChanged = (it) => it.changed_at && Date.now() - new Date(it.changed_at) < 3 * 86400000;
+function pill(it) {
+  const st = status(it), due = new Date(it.due);
+  if (st === "done") return `<span class="pill done">Done</span>`;
+  if (st === "deferred") return `<span class="pill deferred">Not due this round${it.deferred.until ? " · " + esc(it.deferred.until) : ""}</span>`;
+  if (st === "passed") return `<span class="pill passed">Passed</span>`;
+  if (st === "missed") return lateOpen(it) ? `<span class="pill overdue">Overdue${it.lock_at ? " · closes " + esc(fmtDay(dayKey(new Date(it.lock_at)), { day: "numeric", month: "short" })) : ""}</span>` : `<span class="pill missed">Missed</span>`;
+  const soon = due - Date.now() < 3 * 86400000;
+  return `<span class="pill ${soon ? "soon" : "open"}">${esc(rel(due))}</span>`;
+}
+
+function visible(it) { return !S.hidden.includes(it.course); }
+function shown(it) { return visible(it) && (S.showDone || !["done", "passed"].includes(status(it)) || dayKey(new Date(it.due)) === dayKey(new Date())); }
+
+// ---- rendering: agenda ----
+function row(it) {
+  const st = status(it), due = new Date(it.due), k = dayKey(due);
+  const when = it.all_day ? `<b>${esc(fmtDay(k, { day: "numeric", month: "short" }))}</b>${esc(fmtDay(k, { weekday: "short" }))}` : `<b>${esc(fmtDay(k, { day: "numeric", month: "short" }))}</b>${esc(fmtDay(k, { weekday: "short" }))} ${hm(due)}`;
+  const badges = (isNew(it) ? `<span class="pill new">New</span>` : isChanged(it) ? `<span class="pill new">Updated</span>` : "");
+  return `<div class="row ${st}" style="--c:${color(it.course)}" data-id="${esc(it.id)}">
+    <div class="stripe"></div><div class="when">${when}</div>
+    <div class="main"><div class="title">${esc(it.title)}</div>
+      <div class="sub"><span class="ctag">${esc(it.course)}</span><span>${esc(KIND[it.kind] || it.kind)}</span>${pill(it)}${badges}</div></div>
+    <button class="check ${st === "done" ? "on" : ""}" data-toggle="${esc(it.id)}" aria-label="Mark done" title="Mark done">${CHECK}</button>
+  </div>`;
+}
+function section(title, items, cls = "", emptyText = "") {
+  if (!items.length && !emptyText) return "";
+  return `<h2 class="sec ${cls}">${esc(title)} <span class="n">${items.length}</span></h2>` +
+    (items.length ? `<div class="list">${items.map(row).join("")}</div>` : `<div class="list"><div class="empty">${esc(emptyText)}</div></div>`);
+}
+function agenda() {
+  const all = DATA.items.filter(visible), now = new Date(), today = dayKey(now), wkEnd = addDays(weekStart(today), 6), nextEnd = addDays(wkEnd, 7);
+  const by = (a, b) => new Date(a.due) - new Date(b.due);
+  const st = (it) => status(it);
+  const overdue = all.filter((it) => st(it) === "missed" && now - new Date(it.due) < 21 * 86400000 && dayKey(new Date(it.due)) !== today).sort(by).reverse();
+  const older = all.filter((it) => st(it) === "missed" && now - new Date(it.due) >= 21 * 86400000).sort(by).reverse();
+  const isOn = (it, lo, hi) => { const k = dayKey(new Date(it.due)); return k >= lo && k <= hi; };
+  const todays = all.filter((it) => isOn(it, today, today) && st(it) !== "deferred" && (S.showDone || st(it) !== "passed")).sort(by);
+  const week = all.filter((it) => isOn(it, addDays(today, 1), wkEnd) && st(it) !== "deferred" && shown(it)).sort(by);
+  const next = all.filter((it) => isOn(it, addDays(wkEnd, 1), nextEnd) && st(it) !== "deferred" && shown(it)).sort(by);
+  const later = all.filter((it) => dayKey(new Date(it.due)) > nextEnd && st(it) !== "deferred" && shown(it)).sort(by);
+  const deferred = all.filter((it) => st(it) === "deferred").sort(by);
+  const done = all.filter((it) => ["done", "passed"].includes(st(it)) && dayKey(new Date(it.due)) < today).sort(by).reverse();
+  const openWeek = all.filter((it) => isOn(it, today, wkEnd) && st(it) === "open").length;
+  const doneCount = all.filter((it) => st(it) === "done").length;
+  const upcoming = all.filter((it) => st(it) === "open").length;
+  return `<div class="stats">
+      <div class="stat red"><b>${overdue.length}</b><span>overdue (3 weeks)</span></div>
+      <div class="stat amber"><b>${openWeek}</b><span>due this week</span></div>
+      <div class="stat"><b>${upcoming}</b><span>open in total</span></div>
+      <div class="stat green"><b>${doneCount}</b><span>done</span></div>
+    </div>` +
+    section(`Today · ${fmtDay(today, { weekday: "long", day: "numeric", month: "long" })}`, todays, "", "Nothing due today.") +
+    section("Overdue", overdue, "red") +
+    section("Rest of this week", week, "", "Nothing else this week.") +
+    section("Next week", next) +
+    section("Later", later) +
+    section("Not due this round", deferred) +
+    (older.length ? `<details class="more"><summary>${older.length} older missed items</summary>${section("Missed earlier", older, "red")}</details>` : "") +
+    (S.showDone && done.length ? section("Done and passed", done) : "") +
+    `<p style="color:var(--faint);font-size:12.5px;margin:28px 0">Subscribe in a calendar app: <a href="/calendar.ics">/calendar.ics</a></p>`;
+}
+
+// ---- rendering: month ----
+function evChip(it) {
+  const due = new Date(it.due), st = status(it);
+  return `<div class="ev ${st}" style="--c:${color(it.course)}" data-id="${esc(it.id)}" title="${esc(it.course + ": " + it.title)}">${it.all_day ? "" : `<span class="t">${hm(due)}</span>`}${esc(it.title)}</div>`;
+}
+function itemsOn(k) { return DATA.items.filter((it) => shownCal(it) && dayKey(new Date(it.due)) === k).sort((a, b) => new Date(a.due) - new Date(b.due)); }
+function shownCal(it) { return visible(it) && (S.showDone || !["done", "passed"].includes(status(it))); }
+function month() {
+  const ck = dayKey(cursor), first = ck.slice(0, 8) + "01", start = weekStart(first), today = dayKey(new Date());
+  const title = keyDate(first).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  let cells = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="dow">${d}</div>`).join("");
+  let k = start;
+  for (let i = 0; i < 42; i++) {
+    const items = itemsOn(k), out = k.slice(0, 7) !== first.slice(0, 7);
+    if (i >= 35 && out && k.slice(0, 7) > first.slice(0, 7) && dow(k) === 0) break;
+    cells += `<div class="day ${out ? "out" : ""} ${k === today ? "today" : ""} ${k === selDay ? "sel" : ""}" data-day="${k}">
+      <div class="num">${Number(k.slice(8))}</div>${items.slice(0, 4).map(evChip).join("")}${items.length > 4 ? `<div class="ev" style="--c:#555">+${items.length - 4} more</div>` : ""}
+      <div class="dots">${items.map((it) => `<i class="${["done", "passed"].includes(status(it)) ? "done" : ""}" style="--c:${color(it.course)}"></i>`).join("")}</div></div>`;
+    k = addDays(k, 1);
+  }
+  const sel = selDay && selDay.slice(0, 7) === first.slice(0, 7) ? selDay : (today.slice(0, 7) === first.slice(0, 7) ? today : null);
+  const list = sel ? itemsOn(sel) : [];
+  return `<div class="calhead"><h3>${esc(title)}</h3><div class="nav"><button data-nav="-1">‹</button><button data-nav="0">Today</button><button data-nav="1">›</button></div></div>
+    <div class="month">${cells}</div>
+    ${sel ? `<div class="daylist">${section(fmtDay(sel, { weekday: "long", day: "numeric", month: "long" }), list, "", "Nothing due.")}</div>` : ""}`;
+}
+
+// ---- rendering: week ----
+function week() {
+  const start = weekStart(dayKey(cursor)), today = dayKey(new Date()), end = addDays(start, 6);
+  const wk = (() => { const d = keyDate(start); d.setUTCDate(d.getUTCDate() + 3); const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 4)); return 1 + Math.round(((d - y) / 86400000 - 3 + ((y.getUTCDay() + 6) % 7)) / 7); })();
+  let cols = "";
+  for (let i = 0; i < 7; i++) {
+    const k = addDays(start, i), items = itemsOn(k);
+    cols += `<div class="wday ${k === today ? "today" : ""} ${items.length ? "" : "emptyday"}"><h4>${esc(fmtDay(k, { weekday: "short" }))} <b>${Number(k.slice(8))}</b></h4>
+      ${items.map((it) => `<div class="wev ${status(it)}" style="--c:${color(it.course)}" data-id="${esc(it.id)}"><div class="c">${esc(it.course)} · ${esc(KIND[it.kind] || it.kind)}</div><div class="n">${esc(it.title)}</div><div class="t">${it.all_day ? "all day" : hm(new Date(it.due))} · ${pill(it)}</div></div>`).join("")}</div>`;
+  }
+  const none = !DATA.items.some((it) => shownCal(it) && dayKey(new Date(it.due)) >= start && dayKey(new Date(it.due)) <= end);
+  return `<div class="calhead"><h3>Week ${wk} <span style="color:var(--muted);font-weight:500;font-size:15px">${esc(fmtDay(start, { day: "numeric", month: "short" }))} – ${esc(fmtDay(end, { day: "numeric", month: "short" }))}</span></h3>
+    <div class="nav"><button data-nav="-1">‹</button><button data-nav="0">Today</button><button data-nav="1">›</button></div></div>
+    <div class="week">${cols}</div>${none ? `<div class="list" style="margin-top:10px"><div class="empty">Nothing due this week.</div></div>` : ""}`;
+}
+
+// ---- markdown (escaped first; only http(s) links) ----
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, t, u) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  return s;
+}
+function md(src) {
+  const lines = String(src || "").split("\n"), out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^```/.test(l)) { const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); i++; out.push(`<pre><code>${esc(buf.join("\n"))}</code></pre>`); continue; }
+    let m;
+    if ((m = l.match(/^(#{1,6})\s+(.*)/))) { const n = Math.max(3, Math.min(6, m[1].length)); out.push(`<h${n}>${inline(m[2])}</h${n}>`); i++; continue; }
+    if (/^>\s?/.test(l)) { const buf = []; while (i < lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/, "")); out.push(`<blockquote>${md(buf.join("\n"))}</blockquote>`); continue; }
+    if (/^\s*([-*]|\d+\.)\s+/.test(l)) {
+      const ordered = /^\s*\d+\./.test(l), buf = [];
+      while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) {
+        let t = lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, "");
+        while (i < lines.length && lines[i].trim() && !/^\s*([-*]|\d+\.)\s+/.test(lines[i]) && !/^(#|>|```)/.test(lines[i])) t += " " + lines[i++].trim();
+        buf.push(`<li>${inline(t)}</li>`);
+      }
+      out.push(ordered ? `<ol>${buf.join("")}</ol>` : `<ul>${buf.join("")}</ul>`); continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const buf = [];
+    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|>|```|\s*([-*]|\d+\.)\s+)/.test(lines[i])) buf.push(lines[i++]);
+    out.push(`<p>${buf.map((b) => inline(b.replace(/\s{2,}$/, ""))).join(/\s{2,}$/.test(buf[0]) ? "<br>" : " ")}</p>`);
+  }
+  return out.join("\n");
+}
+
+// ---- detail ----
+function detail(id) {
+  const it = DATA.items.find((x) => x.id === id);
+  const sheet = document.getElementById("sheet"), panel = document.getElementById("panel");
+  if (!it) { sheet.classList.remove("open"); return; }
+  const st = status(it), due = new Date(it.due), k = dayKey(due);
+  const auto = it.auto_done ? `<div class="autonote">Canvas: ${esc(it.auto_reason || "done")}${it.done_override === false ? " (you marked it not done)" : ""}</div>` : "";
+  panel.innerHTML = `<div class="phead"><button class="back" data-close>‹ Back</button></div>
+    <div class="pbody" style="--c:${color(it.course)}">
+      <div class="course">${esc(it.course)} · ${esc(it.course_name)}</div>
+      <h1>${esc(it.title)}</h1>
+      <div class="pmeta">${pill(it)}<span>${esc(KIND[it.kind] || it.kind)}</span><span>·</span><span>${esc(fmtDay(k, { weekday: "long", day: "numeric", month: "long", year: "numeric" }))}${it.all_day ? "" : " " + hm(due)}</span></div>
+      <button class="donebtn ${st === "done" ? "on" : ""}" data-toggle="${esc(it.id)}"><span class="check ${st === "done" ? "on" : ""}">${CHECK}</span>${st === "done" ? "Done" : "Mark done"}</button>
+      ${it.done_override !== null ? `<button class="reset" data-reset="${esc(it.id)}">Reset to automatic</button>` : ""}
+      ${auto}
+      <div class="md">${md(it.markdown)}</div>
+    </div>`;
+  sheet.classList.add("open");
+  panel.scrollTop = 0;
+}
+
+// ---- wiring ----
+function render() {
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === S.view));
+  const courses = [...new Set(DATA.items.map((i) => i.course))].sort();
+  document.getElementById("chips").innerHTML = courses.map((c) => `<button class="chip ${S.hidden.includes(c) ? "off" : "on"}" style="--c:${color(c)}" data-course="${c}"><i></i>${c}</button>`).join("");
+  document.getElementById("showdone").checked = S.showDone;
+  const m = DATA.meta || {};
+  document.getElementById("sync").innerHTML = m.archive_retrieved_at ? `Canvas data ${esc(new Date(m.archive_retrieved_at).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}` : "";
+  document.getElementById("main").innerHTML = S.view === "month" ? month() : S.view === "week" ? week() : agenda();
+  route();
+}
+function route() {
+  const m = location.hash.match(/^#\/item\/(.+)$/);
+  if (m) detail(decodeURIComponent(m[1])); else document.getElementById("sheet").classList.remove("open");
+}
+async function load() {
+  const r = await fetch("/api/items", { cache: "no-store" });
+  DATA = await r.json();
+  render();
+}
+async function setDone(id, done) {
+  const it = DATA.items.find((x) => x.id === id);
+  await fetch(`/api/items/${encodeURIComponent(id)}/done`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ done }) });
+  it.done_override = done;
+  render();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-toggle],[data-reset],[data-close],[data-id],[data-day],[data-nav],[data-course],#tabs button");
+  if (!t) { if (e.target.id === "sheet") history.back(); return; }
+  if (t.dataset.toggle) { e.stopPropagation(); const it = DATA.items.find((x) => x.id === t.dataset.toggle); setDone(it.id, status(it) !== "done"); return; }
+  if (t.dataset.reset) { setDone(t.dataset.reset, null); return; }
+  if (t.dataset.close !== undefined) { if (history.length > 1 && location.hash) history.back(); else location.hash = ""; return; }
+  if (t.dataset.id) { location.hash = "#/item/" + encodeURIComponent(t.dataset.id); return; }
+  if (t.dataset.day) { selDay = t.dataset.day; render(); return; }
+  if (t.dataset.nav) {
+    const n = Number(t.dataset.nav);
+    if (n === 0) { cursor = new Date(); selDay = null; }
+    else if (S.view === "month") { cursor = new Date(cursor); cursor.setUTCDate(1); cursor.setUTCMonth(cursor.getUTCMonth() + n); cursor.setUTCDate(15); selDay = null; }
+    else { cursor = new Date(cursor.getTime() + n * 7 * 86400000); }
+    render(); return;
+  }
+  if (t.dataset.course) { const c = t.dataset.course; S.hidden = S.hidden.includes(c) ? S.hidden.filter((x) => x !== c) : [...S.hidden, c]; save(); render(); return; }
+  if (t.dataset.v) { S.view = t.dataset.v; save(); render(); }
+});
+document.getElementById("showdone").addEventListener("change", (e) => { S.showDone = e.target.checked; save(); render(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && location.hash) history.back(); });
+window.addEventListener("hashchange", route);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+load();
+</script>
+</body>
+</html>

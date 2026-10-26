@@ -1,0 +1,117 @@
+# School calendar: every deadline in Erik's KTH courses with a done toggle
+# (https://school.erikfrankling.duckdns.org, lan-only).
+#
+# Code: config/school/server.mjs and index.html (no dependencies, no build).
+# Data: the PC builds the item list from its Canvas archive after the daily
+# canvas-archive-refresh and POSTs it to /api/ingest with the token in secret
+# school-secrets (dotfiles modules/home-manager/school-sync). This service
+# never talks to Canvas. Done toggles live in /data/state.json on the PVC.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: school-data
+  annotations:
+    # Erik's done toggles can't be rebuilt from Canvas.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: school
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: school
+  strategy:
+    # One JSON file on a ReadWriteOnce volume: never two writers.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: school
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: school
+          image: docker.io/library/node:24-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/app/server.mjs"]
+          env:
+            - name: TZ
+              value: Europe/Stockholm
+            - name: INGEST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: school-secrets
+                  key: ingest-token
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              memory: 40Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: code
+          configMap:
+            name: school-code
+        - name: data
+          persistentVolumeClaim:
+            claimName: school-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: school
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: school

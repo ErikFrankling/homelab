@@ -67,6 +67,15 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  - name: school
+    group: phone
+    url: https://school.erikfrankling.duckdns.org/api/items
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   - name: vaultwarden
     group: phone
     url: https://vault.erikfrankling.duckdns.org/alive

@@ -67,6 +67,15 @@ spec:
         # v2 (apps/time-v2.yaml). Rollback: change back to `time`.
         - name: time-v2
           port: 80
+    # School calendar (apps/school.yaml): KTH deadlines and done toggles.
+    # Personal, so LAN and tailnet only; the PC pushes data from the LAN.
+    - kind: Rule
+      match: Host(`school.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: school
+          port: 80
     # v1, kept running for rollback and comparison.
     - kind: Rule
       match: Host(`time-v1.erikfrankling.duckdns.org`)

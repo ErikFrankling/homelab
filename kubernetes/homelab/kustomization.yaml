@@ -16,6 +16,7 @@ resources:
   - apps/openclaw.yaml
   - apps/time.yaml
   - apps/time-v2.yaml
+  - apps/school.yaml
   - apps/executor.yaml
   - apps/brain.yaml
   - apps/nix-builder.yaml
@@ -54,6 +55,7 @@ resources:
   - secrets/grafana.enc.yaml
   - secrets/alerts-discord.enc.yaml
   - secrets/onyx.enc.yaml
+  - secrets/school.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
   # Not content-hashed: apply.sh re-reads the rules every 30 s, so edits take
@@ -82,6 +84,11 @@ configMapGenerator:
   - name: t3-updates-code
     files:
       - config/t3-updates/server.mjs
+  # The school calendar (apps/school.yaml): editing it restarts the pod.
+  - name: school-code
+    files:
+      - config/school/server.mjs
+      - config/school/index.html
   # The notify gateway: editing it restarts the pod.
   - name: notify-gateway-code
     files:
