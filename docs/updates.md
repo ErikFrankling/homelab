@@ -48,7 +48,11 @@ seeds `/var/lib/homelab/booted-kernels` with the running kernel when VM 200
 answers. On both hosts it
 installs `homelab-update-metrics` (hourly, and after every
 `apt-daily-upgrade` run) which writes
-`/var/lib/prometheus/node-exporter/homelab_updates.prom`.
+`/var/lib/prometheus/node-exporter/homelab_updates.prom`. On naiaclaw it also
+sets cloud-init `ssh_deletekeys: false`: a changed instance-id (any edit to
+VM 200's cloud-init settings in Proxmox) otherwise regenerates the SSH host
+keys on the next boot, as on 2026-10-26. That boot also re-runs Proxmox's
+`package_upgrade: true`, a full `apt upgrade`.
 
 Rerun it after a host rebuild. Backups of the Proxmox config from before the
 first install are in `/root/config-backups/2026-10-25-unattended-upgrades/`.

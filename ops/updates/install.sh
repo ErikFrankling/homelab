@@ -386,6 +386,14 @@ EOF
 fi
 
 if [ "$role" = naiaclaw ]; then
+  # Keep the SSH host keys when Proxmox changes the cloud-init instance-id
+  # (any edit to VM 200's cloud-init settings does). The first boot after the
+  # 2026-10-18 ipconfig change regenerated them (2026-10-26 05:20), which
+  # broke every known_hosts entry for 192.168.50.100.
+  cat > /etc/cloud/cloud.cfg.d/99-homelab-keep-ssh-host-keys.cfg <<'EOF'
+# homelab ops/updates/install.sh
+ssh_deletekeys: false
+EOF
   systemctl daemon-reload
 fi
 
