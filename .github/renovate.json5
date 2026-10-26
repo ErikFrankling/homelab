@@ -52,5 +52,10 @@
       automerge: false,
       groupName: null,
     },
+    {
+      // Backend, model server and web server only work at the same version.
+      matchPackageNames: ["docker.io/onyxdotapp/**"],
+      groupName: "onyx",
+    },
   ],
 }
