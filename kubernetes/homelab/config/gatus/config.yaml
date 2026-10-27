@@ -76,6 +76,7 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
   - name: vaultwarden
     group: phone
     url: https://vault.erikfrankling.duckdns.org/alive
@@ -161,6 +162,9 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+      # A node starved for CPU answers in 10-20 s instead of timing out
+      # (2026-10-27); that is down for Erik.
+      - "[RESPONSE_TIME] < 5000"
   - name: nix-cache
     group: phone
     url: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info

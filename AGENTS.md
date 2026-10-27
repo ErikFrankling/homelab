@@ -116,7 +116,8 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
   `7.0.14-25-pve` pinned (known good since the supervised reboot on
   2026-10-26). Unattended reboots only boot a kernel that has booted this
   host before; see `docs/updates.md`, "Kernels". The host has 62.7 GiB; VM 200
-  has 56 GiB since 2026-10-26 (60 GiB was OOM-killed at start on kernel 7.0).
+  has 52 GiB since 2026-10-27 (56 GiB starved the host: about 4.6 GiB of its
+  free memory is CMA-typed on 7.0 and unusable; see `docs/updates.md`).
 - Hardware vendor/model reported by DMI: Gigabyte Technology Co., Ltd. `Z270P-D3`.
 - Motherboard/baseboard reported by DMI: Gigabyte `Z270P-D3-CF`, version `x.x`.
 - BIOS: American Megatrends `F7`, release date `2017-11-08`.
@@ -217,6 +218,9 @@ Namespaces/workloads observed include:
 - Observability: `grafana`, `loki`, `mimir`, `alloy`, `kube-state-metrics`, `monitoring`.
 - Husk: removed on 2026-07-24; do not recreate it on this cluster.
 - Naiaclaw: `naiaclaw-system` with `naiaclaw-api`, `naiaclaw-postgres`, `dns-monitor`, and `squid`.
+  `naiaclaw-github-delivery-drain-oc96` and `naiaclaw-teams-delivery-drain-oc96`
+  are suspended by hand since 2026-10-27 (not in this repo): the oc96 API image
+  `tp-e280544b` has no drain endpoints, so they failed every minute.
 - P9/OpenClaw-related: `p9` and tenant namespace `nc-acme-822b33ad`.
 
 The `p9` registry local-path volume actually consumes about 29 GiB despite a

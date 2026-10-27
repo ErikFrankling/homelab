@@ -124,6 +124,11 @@ if [ "$role" = proxmox ]; then
   apt-get update -qq
   apt-get install -y -qq --no-install-recommends unattended-upgrades apt-listchanges prometheus-node-exporter > /dev/null
 
+  # KSM cannot merge VM 200's RAM (passthrough pins it), so ksmd only burns
+  # CPU and mmap locks scanning it, which the VM sees as steal (2026-10-27).
+  systemctl disable --now ksmtuned 2> /dev/null || true
+  echo 0 > /sys/kernel/mm/ksm/run
+
   cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";

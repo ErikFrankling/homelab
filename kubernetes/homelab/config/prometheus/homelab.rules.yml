@@ -183,6 +183,16 @@ groups:
 
   - name: health-checks
     rules:
+      # Several ingresses failing at once is the node, not an app: on
+      # 2026-10-27 Time, school and the rest timed out together while every
+      # pod was Running. Gatus fails a check that takes over 5 s to answer.
+      - alert: IngressesTimingOut
+        expr: count(gatus_results_endpoint_success{group="phone"} == 0) >= 2
+        for: 5m
+        labels: {severity: critical, project: homelab, session: "false"}
+        annotations:
+          summary: "{{ $value }} homelab ingresses failing or slower than 5 s through the tailnet"
+          description: "Check the node and the host first: ssh naiaclaw 'vmstat 3 3' (st = host steal), ssh proxmox 'cat /proc/pressure/memory'. Gatus: http://192.168.50.100:18080"
       # health-watch already starts sessions for failing Gatus checks. This
       # only tells Erik when one is still failing after 3 hours of that.
       - alert: HealthCheckStillFailing
@@ -250,3 +260,34 @@ groups:
         labels: {severity: info, project: time, session: "false"}
         annotations:
           summary: "Time: {{ $labels.device }} has {{ $value }} unsent events and the backlog keeps growing"
+
+  # The 2026-10-27 outage (docs/updates.md, "VM 200 memory must leave the host room"): the
+  # Proxmox host ran out of memory it could actually use, reclaimed nonstop,
+  # and VM 200's vCPUs lost a third of their time to steal.
+  - name: capacity
+    rules:
+      # Free pages the kernel files as CMA (kernel 7.0 marks about 4.6 GiB
+      # that way) only take movable allocations: not the passthrough guest's
+      # pinned RAM, not the kernel's own. MemFree minus CmaFree is the real
+      # headroom.
+      - alert: ProxmoxUsableMemoryLow
+        expr: (node_memory_MemFree_bytes{job="proxmox"} - node_memory_CmaFree_bytes{job="proxmox"}) < 1.5 * 1024^3
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true", host_name: proxmox}
+        annotations:
+          summary: "proxmox: only {{ $value | humanize1024 }}B of non-CMA memory free; VM 200 may need less RAM"
+          description: "ssh proxmox 'free -m; grep nr_free_cma /proc/vmstat'. See docs/updates.md, \"VM 200 memory must leave the host room\"."
+      - alert: ProxmoxMemoryStalled
+        expr: rate(node_pressure_memory_stalled_seconds_total{job="proxmox"}[5m]) > 0.1
+        for: 10m
+        labels: {severity: critical, project: homelab, session: "true", host_name: proxmox}
+        annotations:
+          summary: "proxmox: tasks stalled on memory {{ $value | humanizePercentage }} of the time; VM 200 is losing CPU to steal"
+          description: "ssh proxmox 'cat /proc/pressure/memory; free -m; grep nr_free_cma /proc/vmstat; systemctl is-active ksmtuned'"
+      - alert: NodeCPUSteal
+        expr: sum(rate(node_cpu_seconds_total{job="node", mode="steal"}[5m])) > 1
+        for: 15m
+        labels: {severity: warning, project: homelab, session: "true", host_name: naiaclaw}
+        annotations:
+          summary: "naiaclaw: {{ $value | humanize }} cores stolen by the Proxmox host"
+          description: "The host itself is busy (reclaim, KSM, another VM). ssh proxmox 'top -bn1 | head -20; cat /proc/pressure/memory'"

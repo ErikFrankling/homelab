@@ -120,10 +120,27 @@ is older than the pin, so nothing waits.
 **VM 200 memory must leave the host room.** GPU passthrough pins and
 prefaults all of VM 200's RAM at start. On 7.0 the 60 GiB guest no longer fit
 beside the host (62.7 GiB): the host stalled under memory pressure for 11
-minutes (no SSH), then the
-OOM killer killed kvm and VM 200 stayed off. It now has 56 GiB
-(`qm set 200 --memory 57344`), leaving about 5 GiB on the host. Keep at
-least 4 GiB free on the host when raising it.
+minutes (no SSH), then the OOM killer killed kvm and VM 200 stayed off.
+
+`free` overstates what is left. On `7.0.14-25-pve` about 4.6 GiB of free pages
+sit in pageblocks typed CMA (`nr_free_cma` in `/proc/vmstat`,
+`/proc/pagetypeinfo`), although no CMA area exists (`0K cma-reserved` at boot).
+Only movable allocations (page cache, ordinary process memory) may use them:
+not the guest's pinned RAM and not the kernel. The IOMMU also keeps a 64-byte
+record per pinned 4 KiB page (`dmaengine-unmap-2` in `slabtop`, about
+0.9 GiB for 56 GiB). The real headroom is `MemFree - CmaFree`.
+
+At 56 GiB that headroom was about 0.4 GiB. From 2026-10-27 ~07:30 UTC the host
+reclaimed nonstop (memory PSI `full` 40-90%, direct reclaim scanning hundreds
+of millions of pinned pages a second, page cache under 100 MB), KSM scanned
+the guest without merging a page, and VM 200 lost 24-50% of its CPU to steal.
+k3s fell behind, controllers lost leader election, and Time, school and the
+other ingresses timed out. Since 2026-10-27 VM 200 has **52 GiB**
+(`qm set 200 --memory 53248`), which leaves about 4.6 GiB of non-CMA memory,
+and `ksmtuned` is disabled (`ops/updates/install.sh`). Alerts
+`ProxmoxUsableMemoryLow` (under 1.5 GiB non-CMA free), `ProxmoxMemoryStalled`
+and `NodeCPUSteal` watch it. Keep at least 3 GiB of `MemFree - CmaFree` when
+raising it, and recheck `nr_free_cma` after every kernel change.
 
 ### Supervised kernel reboot
 
