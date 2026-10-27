@@ -1,0 +1,50 @@
+# Workaround for a naiaclaw sandbox bug (2026-10-27). The browser sandboxes'
+# `trust-proxy` init container runs `certutil -N --empty-password` on an
+# emptyDir. When the node reboots, the kubelet reruns the init container in
+# the same pod with the old database still there; certutil then asks for the
+# existing password on a terminal it does not have and loops forever,
+# printing two error lines per try. One such pod wrote about 1 MB/s of log
+# for a day: kubelet rotation, both alloys streaming it through the
+# apiserver and Loki ingesting it pushed k3s past its CPU share and the node
+# fell over.
+#
+# This rewrites only the exact command above to start from an empty
+# database, so a rerun behaves like the first run. Once naiaclaw changes the
+# command, the precondition stops matching and the policy does nothing; then
+# delete this file.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: naiaclaw-nss-init-idempotent
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  admission: true
+  background: false
+  rules:
+    - name: fresh-nss-db
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: ["nc-*"]
+              operations: [CREATE]
+      mutate:
+        foreach:
+          - list: request.object.spec.initContainers || `[]`
+            preconditions:
+              all:
+                - key: "{{ element.name }}"
+                  operator: Equals
+                  value: trust-proxy
+                - key: "{{ element.command[2] || '' }}"
+                  operator: Equals
+                  value: "mkdir -p /pki/nssdb && certutil -d sql:/pki/nssdb -N --empty-password && certutil -d sql:/pki/nssdb -A -n naiaclaw-proxy -t C,, -i /etc/naiaclaw-proxy/tls.crt"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    command:
+                      - /bin/sh
+                      - -c
+                      - "mkdir -p /pki/nssdb && rm -f /pki/nssdb/cert9.db /pki/nssdb/key4.db /pki/nssdb/pkcs11.txt && certutil -d sql:/pki/nssdb -N --empty-password </dev/null && certutil -d sql:/pki/nssdb -A -n naiaclaw-proxy -t C,, -i /etc/naiaclaw-proxy/tls.crt"

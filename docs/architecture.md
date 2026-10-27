@@ -6,7 +6,7 @@
 |---|---|---|
 | Proxmox | `192.168.50.10` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
-| k3s VM (`naiaclaw`) | `192.168.50.100` | Single Kubernetes node, 8 vCPU (all host threads), 58 GiB RAM, GTX 1060 passed through |
+| k3s VM (`naiaclaw`) | `192.168.50.100` | Single Kubernetes node, 8 vCPU (all host threads), 52 GiB RAM, GTX 1060 passed through |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |
 
 DuckDNS resolves the apex and wildcard to `192.168.50.100`, the VM's only
@@ -134,9 +134,16 @@ following `kubernetes/homelab/config/cpu-priority/rules`:
 
 | Rule | Effect under contention |
 |---|---|
-| `10000 homelab nix-builder-*` | The builder gets nearly all of the CPU the pods compete for, about 6 of 8 cores (`system.slice`, with k3s itself, keeps its own share) |
-| `idle homelab onyx-background-*`, `idle nc-* *`, `idle e2e-* *` | Run only on CPU nobody else wants |
+| `10000` for Traefik, CoreDNS, AdGuard, Time, school, Vaultwarden, Executor, brain, Gatus, notify-gateway, ntfy | What Erik uses answers first. They need little CPU, so the weight costs the builds almost nothing (2026-10-27) |
+| `2000 homelab nix-builder-*` | The builder still takes nearly all CPU the other pods compete for, but never ahead of the services above |
+| `idle homelab time-backup-*`, `idle homelab onyx-background-*`, `idle nc-* *`, `idle e2e-* *` | Run only on CPU nobody else wants |
 | everything else | Kubelet default, weight 1 |
+
+k3s itself (apiserver, kine, kubelet, containerd) runs in `system.slice`,
+which `ops/systemd/system-slice-cpu.conf` gives the same weight as
+`kubepods.slice` (313). At the default 100 it got about 2 of 8 cores under
+load. On 2026-10-27 that let kine queries take 49 s; leases expired and Flux,
+Kyverno and the sandbox controller restarted together.
 
 Inside `agent-worker`, `heavy` jobs (Gradle/APK builds, tests) run in a
 `jobs/` cgroup with `cpu.idle` (`config/agent-worker/scripts/cgroups.sh`), so
@@ -217,7 +224,7 @@ are descriptive rather than enforced quotas. Each PVC carries
 were patched to reclaim policy `Retain`. Manual PVC deletion still causes an
 outage and leaves a `Released` PV that must be rebound deliberately.
 
-VM 200 has 58 GiB RAM and a 160 GiB root disk. After cutover, the node reported
+VM 200 has 52 GiB RAM and a 160 GiB root disk. After cutover, the node reported
 no memory/disk pressure and about 76 GiB disk space available. PCI passthrough
 locks and prefaults the entire guest allocation at start; see
 [gpu-passthrough.md](gpu-passthrough.md). Media is excluded

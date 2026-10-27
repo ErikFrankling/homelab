@@ -8,9 +8,28 @@
 # Edits apply within a minute (this ConfigMap is not content-hashed). Taking a
 # pod out of the list does not reset it; delete the pod to get the default.
 
+# Batch jobs whose names would match a service rule below.
+idle homelab time-backup-*
+
+# What Erik uses answers first (2026-10-27): ingress, DNS and the core
+# services outrank every build. They use little CPU, so the top weight costs
+# the builds almost nothing; it only stops a build from starving them.
+10000 kube-system traefik-*
+10000 kube-system coredns-*
+10000 homelab adguard-*
+10000 homelab time-*
+10000 homelab school-*
+10000 homelab vaultwarden-*
+10000 homelab executor-*
+10000 homelab brain-*
+10000 homelab gatus-*
+10000 homelab notify-gateway-*
+10000 homelab ntfy-*
+
 # The nightly NixOS update builds here and has to finish in under an hour
-# (Erik, 2026-10-23); it waited behind everything else at weight 1.
-10000 homelab nix-builder-*
+# (Erik, 2026-10-23); it waited behind everything else at weight 1. 2000 is
+# still far above the other pods together, but below the services above.
+2000 homelab nix-builder-*
 
 # Batch work that can wait: Onyx indexing, sandbox tenants and e2e runs.
 idle homelab onyx-background-*
