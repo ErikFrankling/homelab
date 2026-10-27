@@ -197,6 +197,39 @@ booted=/var/lib/homelab/booted-kernels
 
 pinned_kernel() { head -n 1 /etc/kernel/proxmox-boot-pin 2> /dev/null || true; }
 known_good() { [ -n "$1" ] && grep -qxF "$1" "$booted" 2> /dev/null; }
+# The fallback: the newest known-good kernel other than the pinned one, and
+# still installed. GRUB lists it under "Advanced options".
+fallback_kernel() {
+  p=$(pinned_kernel)
+  grep -vxF "$p" "$booted" 2> /dev/null | while read -r k; do
+    [ -e "/boot/vmlinuz-$k" ] && echo "$k"
+  done | sort -V | tail -n 1
+}
+# Keeps the pinned and the fallback kernel installed. Proxmox's
+# proxmox-auto-removal keeps only the two newest kernels, the running, the
+# pinned and the manually selected ones; unattended-upgrades removes the rest
+# (Remove-Unused-Kernel-Packages). On 2026-10-27 that had already dropped
+# 6.17.9 from proxmox-boot-tool's list and was one kernel update away from
+# removing it. So: both go on proxmox-boot-tool's manual list and their
+# packages are marked manual; other known-good kernels may age out.
+protect_kernels() {
+  manual=/etc/kernel/proxmox-boot-manual-kernels
+  keep=$(printf '%s\n%s\n' "$(pinned_kernel)" "$(fallback_kernel)" | sed '/^$/d')
+  for k in $keep; do
+    grep -qxF "$k" "$manual" 2> /dev/null || proxmox-boot-tool kernel add "$k" > /dev/null
+    apt-mark manual "proxmox-kernel-$k-signed" > /dev/null 2>&1 || true
+  done
+  # Older known-good kernels leave the manual list and may be auto-removed.
+  for k in $(cat "$booted" 2> /dev/null); do
+    echo "$keep" | grep -qxF "$k" && continue
+    if grep -qxF "$k" "$manual" 2> /dev/null; then
+      proxmox-boot-tool kernel remove "$k" > /dev/null
+      apt-mark auto "proxmox-kernel-$k-signed" > /dev/null 2>&1 || true
+    fi
+  done
+  # Regenerate APT::NeverAutoRemove (/etc/apt/apt.conf.d/76pveconf) now.
+  /etc/kernel/postinst.d/proxmox-auto-removal > /dev/null
+}
 newest_kernel() {
   ls /boot/vmlinuz-*-pve 2> /dev/null | sed 's|^/boot/vmlinuz-||' | sort -V | tail -n 1
 }
@@ -253,7 +286,8 @@ if [ "$k" != "$p" ] && [ "$(printf '%s\n%s\n' "$p" "$k" | sort -V | tail -n 1)" 
   proxmox-boot-tool kernel pin "$k" > /dev/null
   echo "pinned $k (was ${p:-none})"
 fi
-echo "kernel $k booted and VM 200 is up: known good"
+protect_kernels
+echo "kernel $k booted and VM 200 is up: known good; protected: $(pinned_kernel) $(fallback_kernel)"
 /usr/local/sbin/homelab-update-metrics || true
 EOF
   chmod 0755 /usr/local/sbin/homelab-kernel-booted
@@ -386,6 +420,8 @@ EOF
   systemctl daemon-reload
   systemctl enable --now homelab-maintenance-reboot.timer > /dev/null
   systemctl enable homelab-kernel-booted.service > /dev/null 2>&1
+  # Keep the pinned and the fallback kernel installed (homelab-kernel.sh).
+  sh -c ". /usr/local/lib/homelab-kernel.sh; protect_kernels"
   systemctl enable prometheus-node-exporter > /dev/null
   systemctl restart prometheus-node-exporter
 fi

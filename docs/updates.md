@@ -113,9 +113,43 @@ strands the whole homelab until someone is at the machine.
   `HostKernelAwaitingSupervisedReboot` (info, no session) reaches Discord,
   again every 24 h until it is resolved.
 
-As of 2026-10-26: pinned and known good `7.0.14-25-pve` (supervised reboot
-08:16-08:39) and `6.17.9-1-pve` before it. `6.17.13-21-pve` never booted and
-is older than the pin, so nothing waits.
+- **A fallback kernel stays installed**: the newest known-good kernel other
+  than the pinned one. Proxmox's `proxmox-auto-removal` keeps only the two
+  newest kernels plus the running, pinned and manually selected ones, and
+  unattended-upgrades removes the rest. By 2026-10-27 that had already dropped
+  `6.17.9-1-pve` from `proxmox-boot-tool kernel list`, one kernel update before
+  removing it. `protect_kernels` (`/usr/local/lib/homelab-kernel.sh`) puts the
+  pinned and the fallback kernel on proxmox-boot-tool's manual list
+  (`/etc/kernel/proxmox-boot-manual-kernels`), which feeds the
+  `APT::NeverAutoRemove` list in `/etc/apt/apt.conf.d/76pveconf`, and marks
+  their packages manual. It runs after every boot that records a kernel and
+  on every run of `install.sh`. Older known-good kernels leave the manual list
+  and age out normally.
+
+As of 2026-10-27: pinned and known good `7.0.14-25-pve` (supervised reboot
+2026-10-26 08:16-08:39). Fallback: `6.17.9-1-pve` (every boot from 2026-08-05
+to 2026-10-26, with VM 200 at 60 GiB). `6.17.13-21-pve` never booted and is
+older than the pin, so nothing waits. Check with `proxmox-boot-tool kernel
+list`: both the pinned and the fallback kernel are under "Manually selected
+kernels".
+
+### Booting the fallback kernel
+
+The host has no remote console, so this needs either SSH (a one-time boot) or
+someone at the machine (the GRUB menu).
+
+- **Over SSH, while the host still works** (for example, to leave a 7.0
+  regression): `proxmox-boot-tool kernel pin 6.17.9-1-pve --next-boot`, then
+  `reboot`. Only that one boot uses 6.17; `proxmox-boot-cleanup.service` then
+  points GRUB back at the pinned 7.0. To stay on 6.17, run
+  `proxmox-boot-tool kernel pin 6.17.9-1-pve` once it is up. The kernel is
+  already known good, so `homelab-kernel-booted` keeps the pin and the
+  unattended reboot window boots it.
+- **At the machine, when 7.0 does not boot**: under *Advanced options for
+  Proxmox VE GNU/Linux* in the GRUB menu, pick *Linux 6.17.9-1-pve*.
+- On 6.17.9, VM 200 ran with 60 GiB, and nothing was CMA-typed as far as
+  anyone knows (it was never measured). Check `grep nr_free_cma /proc/vmstat`
+  before you raise VM 200's memory again.
 
 **VM 200 memory must leave the host room.** GPU passthrough pins and
 prefaults all of VM 200's RAM at start. On 7.0 the 60 GiB guest no longer fit
@@ -163,7 +197,7 @@ reboot
 - If it boots but VM 200 does not come up, look for `oom-kill` in
   `journalctl -k -b` first (see above); otherwise the kernel is not recorded. Run
   `proxmox-boot-tool kernel unpin --next-boot` if it is still set, then
-  `reboot`, and the host comes back on the pinned 6.17.
+  `reboot`, and the host comes back on the pinned kernel.
 - If it never reaches userspace (panic or hang): GRUB keeps choosing the
   next-boot kernel, because the cleanup runs in userspace and GRUB cannot
   write its environment block on LVM. At the machine, pick the pinned

@@ -114,7 +114,8 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 - Hostname: `proxmox`.
 - OS: Proxmox VE `9.2.21` on Debian 13 (`trixie`) since 2026-10-25, kernel
   `7.0.14-25-pve` pinned (known good since the supervised reboot on
-  2026-10-26). Unattended reboots only boot a kernel that has booted this
+  2026-10-26); `6.17.9-1-pve` stays installed as the GRUB fallback. Unattended
+  reboots only boot a kernel that has booted this
   host before; see `docs/updates.md`, "Kernels". The host has 62.7 GiB; VM 200
   has 52 GiB since 2026-10-27 (56 GiB starved the host: about 4.6 GiB of its
   free memory is CMA-typed on 7.0 and unusable; see `docs/updates.md`).
