@@ -25,7 +25,7 @@ spec:
       runtimeClassName: nvidia
       containers:
         - name: kokoro-tts
-          image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.9.0-cu126@sha256:9ba150465c6b8f5d6b1c62b54de83eb9aa0a1444aad8a1a9c8948eed60564b76
+          image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.9.1-cu126@sha256:10a9367bdfb2ba17d37e175fc9d13653ec1a066846d2dc4ffd4a5d9633d0e39b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8880
