@@ -247,7 +247,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: redis
-          image: docker.io/library/redis:7.4-alpine@sha256:6ba19c50b56777f5c11c58eff8ddb69d0d5f27ba131cffb63f180ccfd43c66af
+          image: docker.io/library/redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
           args: ["redis-server", "--save", "", "--appendonly", "no"]
           ports:
             - containerPort: 6379
@@ -569,7 +569,7 @@ spec:
       runtimeClassName: nvidia
       initContainers:
         - name: fetch-model
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          image: docker.io/curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
           command:
             - sh
             - -c
@@ -585,7 +585,7 @@ spec:
               mountPath: /models
       containers:
         - name: llama-server
-          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:7f4d8bdd29b931d776f02e6b61f1353a80522d0ebde380383128b65fc5129726
+          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:76af7ee470093727cb66db78368935b027b965df8a6c4dc4ca6e782c1cd0cfac
           args:
             - -m
             - /models/embeddinggemma-300M-Q8_0.gguf

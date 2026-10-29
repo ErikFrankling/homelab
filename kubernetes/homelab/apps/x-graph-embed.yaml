@@ -46,7 +46,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: fetch-model
-          image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+          image: docker.io/curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
           command:
             - sh
             - -c
@@ -67,7 +67,7 @@ spec:
                 - ALL
       containers:
         - name: llama-server
-          image: ghcr.io/ggml-org/llama.cpp:server@sha256:d880b2a0e478795ce99d0a275732f5a50e579cb234ae7d2d3815afc909fd02f2
+          image: ghcr.io/ggml-org/llama.cpp:server@sha256:01c2bc28d51291536df2ccebe5c6af1cdec9ea9b2bd98ac59556408caf96d3f8
           imagePullPolicy: IfNotPresent
           args:
             - -m
