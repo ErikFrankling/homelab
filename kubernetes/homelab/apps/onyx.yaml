@@ -585,7 +585,7 @@ spec:
               mountPath: /models
       containers:
         - name: llama-server
-          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:76af7ee470093727cb66db78368935b027b965df8a6c4dc4ca6e782c1cd0cfac
+          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:98b45d5444dad686e05022a0a96334076f2fdafd6a89c45eddfd8d1b156c9e88
           args:
             - -m
             - /models/embeddinggemma-300M-Q8_0.gguf
