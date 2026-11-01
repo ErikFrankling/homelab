@@ -62,13 +62,15 @@ fi
 # ERROR (a package that failed to install). Logrotate may have just moved it.
 ts=0
 ok=0
-for log in /var/log/unattended-upgrades/unattended-upgrades.log /var/log/unattended-upgrades/unattended-upgrades.log.1; do
+for log in /var/log/unattended-upgrades/unattended-upgrades.log /var/log/unattended-upgrades/unattended-upgrades.log.1 /var/log/unattended-upgrades/unattended-upgrades.log.*.gz; do
   [ -f "$log" ] || continue
-  line=$(grep -n 'Starting unattended upgrades script' "$log" | tail -n 1 | cut -d: -f1)
+  # zcat -f reads plain and gzipped logs alike (logrotate compresses .1 on its next cycle).
+  content=$(zcat -f "$log")
+  line=$(printf '%s\n' "$content" | grep -n 'Starting unattended upgrades script' | tail -n 1 | cut -d: -f1)
   [ -n "$line" ] || continue
-  started=$(sed -n "${line}p" "$log" | cut -c1-19)
+  started=$(printf '%s\n' "$content" | sed -n "${line}p" | cut -c1-19)
   ts=$(date -d "$started" +%s)
-  if tail -n "+$line" "$log" | grep -q ' ERROR '; then ok=0; else ok=1; fi
+  if printf '%s\n' "$content" | tail -n "+$line" | grep -q ' ERROR '; then ok=0; else ok=1; fi
   break
 done
 
