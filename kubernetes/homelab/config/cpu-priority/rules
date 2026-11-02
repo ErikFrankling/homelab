@@ -44,6 +44,14 @@ idle homelab time-backup-*
 # still far above the other pods together, but below the services above.
 2000 homelab nix-builder-*
 
+# Fleet (namespace fleet, repo husk-security/fleet): 100 agents share the harness pod's
+# guest processes. At weight 1 it got 0.12-0.82 cores at load 60-130, against the
+# 2.4-3.2 the run needs (2026-11-02). Store and Postgres sit under every agent's
+# commits. Well below the services above; boxes and the rest stay at the default.
+200 fleet harness-*
+100 fleet store-*
+100 fleet postgres-*
+
 # Batch work that can wait: Onyx indexing, sandbox tenants and e2e runs.
 idle homelab onyx-background-*
 idle nc-* *
