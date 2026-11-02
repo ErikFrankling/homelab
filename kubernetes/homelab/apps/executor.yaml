@@ -192,7 +192,13 @@ data:
     fi
 
     echo "executor at ${mebibytes}Mi, restarting"
-    kubectl rollout restart -n homelab deployment/executor
+    # Not kubectl rollout restart: Flux strips fields owned by kubectl's field
+    # managers, which reverts the template and restarts it a second time. Not
+    # kubectl delete pod either: only a Recreate rollout stops the old pod before
+    # the next one opens the same PGlite data.
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    kubectl patch -n homelab deployment/executor --type=merge --field-manager=executor-recycler \
+      -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"homelab/recycled-at\":\"${now}\"}}}}}"
 ---
 apiVersion: batch/v1
 kind: CronJob
