@@ -159,36 +159,13 @@ spec:
 # memory, not a clock, because growth tracks agent traffic (50-140 MB/h) and a
 # restart drops running executions and paused approvals (executor#2449). The data
 # on the PV is untouched. Remove all of this once #2216 is fixed.
+#
+# Its Role and RoleBinding are in kubernetes/bootstrap/namespace-rbac.yaml: Flux's
+# reconciler may not bind roles, so a binding in this file stops all of homelab.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: executor-recycler
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: executor-recycler
-rules:
-  - apiGroups: [metrics.k8s.io]
-    resources: [pods]
-    verbs: [list]
-  - apiGroups: [apps]
-    resources: [deployments]
-    resourceNames: [executor]
-    verbs: [get, patch]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: executor-recycler
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: executor-recycler
-subjects:
-  - kind: ServiceAccount
-    name: executor-recycler
-    namespace: homelab
 ---
 apiVersion: v1
 kind: ConfigMap
