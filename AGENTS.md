@@ -247,7 +247,7 @@ disk, and do not place media on the root-backed storage class.
   encrypted-secret, and suspended-backup manifests.
 - `kubernetes/optional/media/`: inactive Mullvad/qBittorrent/Servarr/Jellyfin
   design.
-- `ops/`: migration helper plus tracked k3s and sysctl host configuration.
+- `ops/`: migration helper plus tracked k3s, sysctl and earlyoom host configuration.
 
 ## Useful Commands
 

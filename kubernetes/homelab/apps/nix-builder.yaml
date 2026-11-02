@@ -90,11 +90,11 @@ spec:
             # This is what keeps a build from hurting the rest of the node.
             # The limit is a hard cgroup ceiling: a build that outgrows it is
             # OOM-killed inside this container and nothing else is touched.
-            # The request is deliberately tiny, which does two things. Under
-            # node memory pressure the kubelet evicts by usage above request,
-            # so this pod goes first; and a low request gives it the highest
-            # oom_score_adj of any Burstable pod, so the kernel picks it first
-            # too. No CPU request means the smallest CPU share under contention
+            # The request is deliberately tiny: it gives this pod the highest
+            # oom_score_adj of any Burstable pod, so earlyoom and the kernel
+            # pick its processes first when the node runs short (the kubelet
+            # does not evict on memory here, see ops/earlyoom/install.sh). No CPU
+            # request means the smallest CPU share under contention
             # (see docs/architecture.md).
             limits:
               memory: 24Gi

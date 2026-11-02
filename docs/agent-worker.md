@@ -28,9 +28,8 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
 
 ## Keeping it away from everything else
 
-- **Memory:** limit 20 GiB (one release APK build peaks near 10 GB, the emulator takes 4), request 256 MiB. That is the smallest request of
-  any heavy pod, so under node pressure this pod is evicted and OOM-killed
-  before nix-builder and the services.
+- **Memory:** limit 20 GiB (one release APK build peaks near 10 GB, the emulator takes 4), request 8 GiB. Under node pressure earlyoom
+  (`ops/earlyoom/install.sh`) kills nix-builder's processes before this pod's.
 - **CPU:** no request and no limit, so it gets the smallest share under
   contention. `max-jobs = 2`, `cores = 4` for Nix builds here.
 - **Disk:** same node disk as nix-builder. `min-free` = 155 GiB, so it collects

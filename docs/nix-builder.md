@@ -33,8 +33,9 @@ client needs the new public key before it will accept anything built here.
 
 - **Memory:** the builder container has a 24 GiB limit and a 512 MiB request.
   The limit is a hard ceiling, so a runaway build is killed inside the
-  container. The small request makes this pod the first one the kubelet evicts
-  and the first one the kernel OOM-kills if the node itself runs short.
+  container. The small request and `--prefer` in `ops/earlyoom/install.sh` make its
+  evaluations and compilers the first thing earlyoom kills if the node itself
+  runs short. The kubelet does not evict on memory here.
 - **CPU:** no request and no limit, like everything else here, so it never
   holds back scheduling. Its priority comes from the `cpu-priority` DaemonSet
   instead, which sets the pod's `cpu.weight` to 10000 against everyone else's 1

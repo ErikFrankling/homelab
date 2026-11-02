@@ -284,6 +284,13 @@ groups:
         annotations:
           summary: "proxmox: tasks stalled on memory {{ $value | humanizePercentage }} of the time; VM 200 is losing CPU to steal"
           description: "ssh proxmox 'cat /proc/pressure/memory; free -m; grep nr_free_cma /proc/vmstat; systemctl is-active ksmtuned'"
+      - alert: NodeMemoryStalled
+        expr: rate(node_pressure_memory_stalled_seconds_total{job="node"}[5m]) > 0.1
+        for: 5m
+        labels: {severity: critical, project: homelab, session: "true", host_name: naiaclaw}
+        annotations:
+          summary: "naiaclaw: tasks stalled on memory {{ $value | humanizePercentage }} of the time"
+          description: "The node is thrashing and earlyoom has not cleared it. ssh naiaclaw 'free -m; cat /proc/pressure/memory; journalctl -u earlyoom -n 20; ps -eo rss,comm --sort=-rss | head -20'"
       - alert: NodeCPUSteal
         expr: sum(rate(node_cpu_seconds_total{job="node", mode="steal"}[5m])) > 1
         for: 15m

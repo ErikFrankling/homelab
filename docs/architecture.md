@@ -208,6 +208,9 @@ Rules that go with this choice:
 - **Memory requests stay.** Memory is incompressible. Removing memory requests
   invites OOM kills and breaks eviction ordering. Keeping them also holds pods
   in `Burstable` QoS rather than `BestEffort`, which is evicted first.
+- **Node memory has one guard: earlyoom** (`ops/earlyoom/install.sh`, since
+  2026-11-02). The kubelet here only evicts on disk, there is no swap, and the
+  kernel OOM killer fires minutes after the node has stopped responding.
 - **`kube-system` is untouched.** CFS shares derive from requests, so if
   everything requests nothing, everything gets an equal share. CoreDNS and
   Traefik should win under contention, so their requests are left alone.
