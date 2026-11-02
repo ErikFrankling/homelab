@@ -456,9 +456,15 @@ function onDay(k) { return DATA.items.filter((it) => listed(it) && dueKey(it) ==
 // A day's deadlines and openings, in time order, ready to draw as a chip or a row.
 function entriesOn(k, opening) {
   return [
-    ...onDay(k).map((it) => ({ at: new Date(it.due), done: finished(it), course: it.course, ring: false, chip: (o) => chip(it, o), row: () => row(it) })),
-    ...opening.filter((o) => opensKey(o) === k).map((o) => ({ at: new Date(o.opens), done: false, course: o.course, ring: true, chip: (x) => chipOpen(o, x), row: () => openRow(o) })),
+    ...onDay(k).map((it) => ({ at: new Date(it.due), done: finished(it), course: it.course, ring: false, stem: stem(it.title), chip: (o) => chip(it, o), row: () => row(it) })),
+    ...opening.filter((o) => opensKey(o) === k).map((o) => ({ at: new Date(o.opens), done: false, course: o.course, ring: true, stem: o.title, chip: (x) => chipOpen(o, x), row: () => openRow(o) })),
   ].sort((a, b) => a.at - b.at);
+}
+// The E, C and A levels of one task share a deadline: one chip on the calendar.
+const stem = (title) => title.replace(/(\s*-\s*[A-F] level|\.[A-F])$/, "");
+function oneChipEach(entries) {
+  const seen = new Set();
+  return entries.filter((e) => { const k = `${e.course}|${+e.at}|${e.ring}|${e.stem}`; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 function chipOpen(o, opts = {}) {
   const time = o.all_day ? "" : hm(new Date(o.opens)), mark = tagOf(o.source) ? "~" : "";
@@ -471,9 +477,9 @@ function chipOpen(o, opts = {}) {
 function chip(it, opts = {}) {
   const st = status(it);
   const time = it.all_day ? "" : hm(new Date(it.due)), mark = tagOf(it.due_source) ? "~" : "";
-  if (opts.week) return `<button class="chip ${st}${st === "missed" && stillOpen(it) ? " late" : ""}" data-id="${esc(it.id)}"><span class="dot" style="--c:${color(it.course)}"></span><span class="x">${esc(it.title)}</span><span class="c"><span class="t">${mark}${it.all_day ? "All day" : time}</span> · ${esc(it.course)}</span></button>`;
+  if (opts.week) return `<button class="chip ${st}${st === "missed" && stillOpen(it) ? " late" : ""}" data-id="${esc(it.id)}"><span class="dot" style="--c:${color(it.course)}"></span><span class="x">${esc(stem(it.title))}</span><span class="c"><span class="t">${mark}${it.all_day ? "All day" : time}</span> · ${esc(it.course)}</span></button>`;
   const late = st === "missed" && stillOpen(it);
-  return `<button class="chip ${st}${late ? " late" : ""}${time ? "" : " allday"}" data-id="${esc(it.id)}" title="${esc(`${it.course} · ${it.title}${tagOf(it.due_source) ? ` · ${tagOf(it.due_source)}` : ""}`)}"><span class="dot" style="--c:${color(it.course)}"></span>${time ? `<span class="t">${mark}${time}</span>` : ""}<span class="x">${esc(it.title)}</span></button>`;
+  return `<button class="chip ${st}${late ? " late" : ""}${time ? "" : " allday"}" data-id="${esc(it.id)}" title="${esc(`${it.course} · ${it.title}${tagOf(it.due_source) ? ` · ${tagOf(it.due_source)}` : ""}`)}"><span class="dot" style="--c:${color(it.course)}"></span>${time ? `<span class="t">${mark}${time}</span>` : ""}<span class="x">${esc(stem(it.title))}</span></button>`;
 }
 function calhead(title, sub, tag) {
   return `<div class="calhead"><h2>${esc(title)}${sub ? ` <span class="sub">${esc(sub)}</span>` : ""}</h2>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}
@@ -486,7 +492,7 @@ function month() {
   const maxChips = 3, ph = phone(), opening = visibleOpenings();
   let cells = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="dow">${ph ? d[0] : d}</div>`).join("");
   for (let i = 0; i < weeks * 7; i++) {
-    const k = addDays(start, i), items = entriesOn(k, opening), out = k.slice(0, 7) !== mon;
+    const k = addDays(start, i), all = entriesOn(k, opening), items = ph ? all : oneChipEach(all), out = k.slice(0, 7) !== mon;
     // Up to three on a busy day, one line each so they fit; quiet days keep two-line titles.
     const shown = items.slice(0, maxChips);
     cells += `<div class="cell${items.length >= maxChips ? " dense" : ""}${out ? " out" : ""}${i % 7 === 6 ? " c7" : ""}${k === t ? " today" : ""}${k === selDay ? " sel" : ""}" data-day="${k}">
@@ -508,7 +514,7 @@ function month() {
 }
 function popover(k, anchor) {
   closePop();
-  const items = entriesOn(k, visibleOpenings()), r = anchor.closest(".cell").getBoundingClientRect();
+  const items = oneChipEach(entriesOn(k, visibleOpenings())), r = anchor.closest(".cell").getBoundingClientRect();
   const el = document.createElement("div");
   el.className = "pop"; el.id = "pop";
   el.innerHTML = `<div class="ph"><span>${esc(fd(k, { weekday: "long" }))}</span><span class="sub">${esc(fd(k, { day: "numeric", month: "short" }))} · ${items.length} items</span><button data-closepop aria-label="Close">${I.x}</button></div>${items.map((e) => e.chip()).join("")}`;
@@ -533,7 +539,7 @@ function week() {
   }
   let cols = "";
   for (let i = 0; i < 7; i++) {
-    const k = addDays(start, i), items = entriesOn(k, opening);
+    const k = addDays(start, i), items = oneChipEach(entriesOn(k, opening));
     cols += `<div class="wcol${k === t ? " today" : ""}"><h4>${esc(fd(k, { weekday: "short" }))} <b class="num">${Number(k.slice(8))}</b></h4>${items.map((e) => e.chip({ week: true })).join("")}</div>`;
   }
   return head + `<div class="week">${cols}</div>`;
