@@ -3,17 +3,20 @@
 // after the daily refresh and POSTs it to /api/ingest (dotfiles
 // modules/home-manager/school-sync). This server never talks to Canvas.
 //
-// State is one JSON file on the PVC: the latest items, Erik's done toggles,
-// when each item was first seen and last changed, and a short ingest log.
+// State is one JSON file on the PVC: the latest items, one-off items added by
+// hand or by an agent (POST /api/custom; ingests leave them alone), Erik's done
+// toggles, when each item was first seen and last changed, and an ingest log.
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
 import { timingSafeEqual, createHash } from "node:crypto";
+import { status, stockholm, windowDays, windowLabel, openings, today } from "./logic.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const DATA = process.env.DATA_FILE || "/data/state.json";
 const TOKEN = process.env.INGEST_TOKEN || "";
 const PAGE = readFileSync(new URL("./index.html", import.meta.url), "utf8");
 const FONT = readFileSync(new URL("./inter.woff2", import.meta.url));
+const LOGIC = readFileSync(new URL("./logic.mjs", import.meta.url));
 
 // The page arrives with its data inlined, so it renders complete on first
 // paint instead of empty-then-filled.
@@ -22,7 +25,7 @@ function page() {
   return PAGE.replace("<!--DATA-->", `<script>window.__DATA__=${json}</script>`);
 }
 
-let state = { items: [], meta: {}, done: {}, seen: {}, log: [] };
+let state = { items: [], custom: [], meta: {}, done: {}, seen: {}, log: [] };
 if (existsSync(DATA)) state = { ...state, ...JSON.parse(readFileSync(DATA, "utf8")) };
 
 function save() {
@@ -30,19 +33,70 @@ function save() {
   renameSync(DATA + ".tmp", DATA);
 }
 
+const everything = () => [...state.items, ...state.custom];
+
 function view() {
-  return {
-    meta: state.meta,
-    log: state.log.slice(-14),
-    items: state.items.map((it) => ({
+  const items = everything().map((it) => {
+    const full = {
       ...it,
       first_seen: state.seen[it.id]?.first_seen ?? null,
       changed_at: state.seen[it.id]?.changed_at ?? null,
       initial: state.seen[it.id]?.initial ?? false,
       done_override: state.done[it.id]?.done ?? null,
       done_at: state.done[it.id]?.at ?? null,
-    })),
+    };
+    return { ...full, status: status(full), window_days: windowDays(full), window: windowLabel(full) };
+  });
+  return { meta: state.meta, log: state.log.slice(-14), no_opening: state.no_opening ?? [], items };
+}
+
+const SITE = "https://school.erikfrankling.duckdns.org";
+
+// The list a reminder job needs, without each item's page of text.
+function brief() {
+  const short = (it) => ({ id: it.id, course: it.course, title: it.title, kind: it.kind, status: it.status, due: it.due, due_source: it.due_source, opens: it.opens, opens_source: it.opens_source, window_days: it.window_days, url: `${SITE}/#/item/${encodeURIComponent(it.id)}` });
+  const t = today(view().items);
+  const open = (o) => ({ ...o, url: `${SITE}/#/item/${encodeURIComponent(o.id)}`, source_url: o.url });
+  return { date: t.date, opened_today: t.opened_today.map(open), be_ready: t.be_ready.map(open), closing_soon: t.closing_soon.map(short), due_today: t.due_today.map(short), overdue: t.overdue.map(short) };
+}
+
+// A date as an agent or the form writes it: "2026-11-05" (a whole day), "2026-11-05T15:30"
+// (Stockholm time) or a full ISO time with an offset.
+function parseWhen(v, endOfDay) {
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { at: stockholm(`${s}T${endOfDay ? "23:59" : "00:00"}`), allDay: true };
+  const at = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s) ? stockholm(s) : new Date(s);
+  if (Number.isNaN(at.getTime())) throw new Error(`bad date: ${s}`);
+  return { at, allDay: false };
+}
+
+const KINDS = new Set(["action", "assignment", "quiz", "lab", "seminar", "exam", "peer review", "event"]);
+
+function addCustom(b) {
+  const title = String(b.title ?? "").trim();
+  if (!title || title.length > 200) throw new Error("title is required, at most 200 characters");
+  if (!b.due) throw new Error("due is required");
+  const kind = b.kind ?? "action";
+  if (!KINDS.has(kind)) throw new Error(`kind must be one of ${[...KINDS].join(", ")}`);
+  const due = parseWhen(b.due, true), opens = b.opens ? parseWhen(b.opens, false) : null;
+  if (opens && opens.at >= due.at) throw new Error("opens must be before due");
+  const url = b.url ? String(b.url) : null;
+  if (url && !/^https?:\/\//.test(url)) throw new Error("url must be http(s)");
+  const course = String(b.course ?? "KTH").trim().toUpperCase().slice(0, 12);
+  const known = everything().find((i) => i.course === course);
+  const note = String(b.note ?? "").slice(0, 4000);
+  const now = new Date().toISOString();
+  const it = {
+    id: `manual-${Date.now().toString(36)}`, origin: "manual", course, course_name: known?.course_name ?? course, course_id: known?.course_id ?? null,
+    title, kind, due: due.at.toISOString(), due_source: "manual", all_day: due.allDay, start: null, lock_at: null,
+    opens: opens ? opens.at.toISOString() : null, opens_source: opens ? "manual" : null, opens_url: url, opens_all_day: opens?.allDay ?? false, opens_group: opens ? title : null,
+    canvas: null, auto_done: false, auto_reason: null, deferred: null, markdown: note,
+    detail: { facts: [], notes: [], body: note, related: [] }, sources: url ? [{ label: "Link", url }] : [], added_by: String(b.added_by ?? "").slice(0, 60) || null,
   };
+  state.custom.push(it);
+  state.seen[it.id] = { first_seen: now, hash: null, changed_at: null, initial: false };
+  save();
+  return it;
 }
 
 function ingest(body) {
@@ -65,6 +119,7 @@ function ingest(body) {
   const ids = new Set(body.items.map((i) => i.id));
   const removed = [...before].filter((id) => !ids.has(id));
   state.items = body.items;
+  state.no_opening = body.no_opening ?? [];
   state.meta = { generated_at: body.generated_at, archive_retrieved_at: body.archive_retrieved_at, ingested_at: now };
   state.log.push({ at: now, items: body.items.length, added: added.length, changed: changed.length, removed: removed.length });
   state.log = state.log.slice(-60);
@@ -79,14 +134,21 @@ function ics() {
   const day = (iso) => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }).replace(/-/g, "");
   const out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//homelab//school//EN", "X-WR-CALNAME:School", "X-WR-TIMEZONE:Europe/Stockholm"];
   const now = stamp(new Date().toISOString());
-  for (const it of state.items) {
-    const done = state.done[it.id]?.done ?? it.auto_done;
+  const items = everything().map((it) => ({ ...it, done_override: state.done[it.id]?.done ?? null }));
+  for (const o of openings(items)) {
+    out.push("BEGIN:VEVENT", `UID:opens-${o.id}@school.erikfrankling.duckdns.org`, `DTSTAMP:${now}`);
+    if (o.all_day) out.push(`DTSTART;VALUE=DATE:${day(o.opens)}`);
+    else out.push(`DTSTART:${stamp(new Date(o.opens).toISOString())}`, `DTEND:${stamp(new Date(new Date(o.opens).getTime() + 30 * 60000).toISOString())}`);
+    out.push(`SUMMARY:${esc(`${o.course}: Opens: ${o.title}`)}`, `URL:https://school.erikfrankling.duckdns.org/#/item/${encodeURIComponent(o.id)}`, "END:VEVENT");
+  }
+  for (const it of items) {
+    const done = it.done_override ?? it.auto_done;
     out.push("BEGIN:VEVENT", `UID:${it.id}@school.erikfrankling.duckdns.org`, `DTSTAMP:${now}`);
     if (it.all_day) {
       out.push(`DTSTART;VALUE=DATE:${day(it.due)}`);
     } else {
       const end = new Date(it.due);
-      const start = it.start && it.kind !== "registration" ? new Date(it.start) : new Date(end.getTime() - 30 * 60000);
+      const start = it.start ? new Date(it.start) : new Date(end.getTime() - 30 * 60000);
       out.push(`DTSTART:${stamp(start.toISOString())}`, `DTEND:${stamp(end.toISOString())}`);
     }
     const tag = it.deferred ? " (not due this round)" : done ? " ✓" : "";
@@ -134,6 +196,19 @@ createServer(async (req, res) => {
     const p = url.pathname;
     if (p === "/healthz") return send(res, 200, "ok", "text/plain");
     if (req.method === "GET" && p === "/api/items") return send(res, 200, view());
+    if (req.method === "GET" && p === "/api/today") return send(res, 200, brief());
+    if (req.method === "GET" && p === "/logic.mjs") return send(res, 200, LOGIC, "text/javascript; charset=utf-8");
+    if (req.method === "POST" && p === "/api/custom") return send(res, 201, addCustom(JSON.parse(await readBody(req, 64 * 1024))));
+    const custom = p.match(/^\/api\/custom\/([^/]+)$/);
+    if (req.method === "DELETE" && custom) {
+      const id = decodeURIComponent(custom[1]);
+      if (!state.custom.some((i) => i.id === id)) return send(res, 404, { error: "no such one-off item" });
+      state.custom = state.custom.filter((i) => i.id !== id);
+      delete state.done[id];
+      delete state.seen[id];
+      save();
+      return send(res, 200, { removed: id });
+    }
     if (req.method === "GET" && p === "/calendar.ics") return send(res, 200, ics(), "text/calendar; charset=utf-8");
     if (req.method === "GET" && p === "/inter.woff2") return send(res, 200, FONT, "font/woff2", { "Cache-Control": "public, max-age=31536000, immutable" });
     if (req.method === "GET" && p === "/icon.svg") return send(res, 200, ICON, "image/svg+xml", { "Cache-Control": "max-age=86400" });
@@ -145,7 +220,7 @@ createServer(async (req, res) => {
     const m = p.match(/^\/api\/items\/([^/]+)\/done$/);
     if (req.method === "POST" && m) {
       const id = decodeURIComponent(m[1]);
-      if (!state.items.some((i) => i.id === id)) return send(res, 404, { error: "no such item" });
+      if (!everything().some((i) => i.id === id)) return send(res, 404, { error: "no such item" });
       const { done } = JSON.parse((await readBody(req, 4096)) || "{}");
       if (done === null || done === undefined) delete state.done[id];
       else state.done[id] = { done: !!done, at: new Date().toISOString() };

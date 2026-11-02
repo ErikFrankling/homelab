@@ -9,6 +9,7 @@
 <link rel="icon" href="/icon.svg">
 <link rel="apple-touch-icon" href="/icon.svg">
 <link rel="preload" href="/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="modulepreload" href="/logic.mjs">
 <title>School</title>
 <style>
 @font-face { font-family: "Inter"; src: url("/inter.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
@@ -49,6 +50,7 @@ svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-widt
 .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
 body.v-agenda .wrap { max-width: 808px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; display: inline-block; }
+.dot.ring { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
 
 /* ---------- header ---------- */
 header.app { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
@@ -72,12 +74,14 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .summary { display: flex; align-items: center; gap: 8px; padding: 24px 0 0; font-size: 13px; color: var(--text-2); }
 .summary .od { color: var(--red); font-weight: 500; }
 .summary .sep { color: var(--text-3); }
-.summary .showdone { margin-left: auto; height: 32px; padding: 0 10px; margin-right: -10px; border-radius: 6px; color: var(--text-2); font-size: 13px; display: inline-flex; align-items: center; gap: 8px; }
+.summary .acts { margin-left: auto; margin-right: -10px; display: flex; gap: 2px; }
+.sbtn { height: 32px; padding: 0 10px; border-radius: 6px; color: var(--text-2); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sbtn:hover { background: var(--bg-3); color: var(--text); }
+.sbtn svg.i { width: 14px; height: 14px; }
 .summary .showdone .mini { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid #4b4c53; display: grid; place-items: center; }
 .summary .showdone.on .mini { background: var(--accent); border-color: var(--accent); }
 .summary .showdone .mini svg { width: 9px; height: 9px; display: none; }
 .summary .showdone.on .mini svg { display: block; }
-.summary .showdone:hover { background: var(--bg-3); color: var(--text); }
 .group { margin-top: 24px; }
 .dayhead {
   position: sticky; top: var(--header); z-index: 2; background: var(--bg);
@@ -113,6 +117,11 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .cb.on span { background: var(--accent); border-color: var(--accent); }
 .cb.on svg { opacity: 1; transform: none; }
 .row.deferred .cb span { border-style: dashed; }
+.oc { width: 44px; height: 44px; display: grid; place-items: center start; color: #b9beff; }
+.oc svg.i { margin-left: 2px; }
+.row.opening .meta { flex-wrap: wrap; white-space: normal; row-gap: 2px; }
+.op { color: #b9beff; font-weight: 500; }
+.row .meta .tag { color: var(--text-3); }
 
 .quiet { display: flex; align-items: center; gap: 8px; width: 100%; height: 48px; color: var(--text-2); font-size: 13px; border-top: 1px solid var(--line); }
 .quiet:hover { color: var(--text); }
@@ -140,7 +149,8 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .cell .n { align-self: flex-start; height: 22px; min-width: 22px; padding: 0 5px; margin: 0 0 2px 0; display: grid; place-items: center; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .cell.out .n { color: #5c5d64; }
 .cell.today .n { color: var(--accent); background: var(--accent-bg); font-weight: 600; }
-.chip { display: grid; grid-template-columns: 7px 34px 1fr; gap: 0 6px; align-items: baseline; padding: 2px 6px; border-radius: 4px; font-size: 12px; line-height: 16px; cursor: pointer; text-align: left; width: 100%; }
+.chip .op { color: var(--text-3); font-weight: 500; }
+.chip { display: grid; grid-template-columns: 7px 40px 1fr; gap: 0 6px; align-items: baseline; padding: 2px 6px; border-radius: 4px; font-size: 12px; line-height: 16px; cursor: pointer; text-align: left; width: 100%; }
 .chip:hover { background: var(--bg-3); }
 .chip .dot { transform: translateY(-1px); }
 .chip .t { color: var(--text-3); }
@@ -148,7 +158,9 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .chip.done .x, .chip.passed .x, .chip.deferred .x { color: var(--text-3); }
 .chip.allday .x { grid-column: 2 / 4; }
 .chip.late .t, .chip.late .x { color: var(--red); }
-.more { margin-top: auto; align-self: stretch; text-align: left; font-size: 12px; line-height: 16px; color: var(--text-2); padding: 2px 6px 2px 53px; border-radius: 4px; font-weight: 500; }
+.more { margin-top: auto; align-self: stretch; text-align: left; font-size: 12px; line-height: 16px; color: var(--text-2); padding: 2px 6px 2px 59px; border-radius: 4px; font-weight: 500; }
+.calnote { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 12px; line-height: 16px; color: var(--text-3); }
+.calnote span:last-child { margin-left: 16px; }
 .more:hover { background: var(--bg-3); color: var(--text); }
 .mdots { display: none; }
 .pop { position: absolute; z-index: 6; width: 340px; max-height: min(420px, calc(100vh - 32px)); overflow-y: auto; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 12px 32px #00000099, 0 0 0 1px #00000066; padding: 4px 4px 8px; }
@@ -156,7 +168,7 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .pop .ph .sub { color: var(--text-3); font-weight: 500; }
 .pop .ph button { margin-left: auto; width: 36px; height: 36px; border-radius: 6px; display: grid; place-items: center; color: var(--text-2); }
 .pop .ph button:hover { background: var(--bg-3); color: var(--text); }
-.pop .chip { padding: 6px 8px; font-size: 13px; line-height: 18px; grid-template-columns: 7px 38px 1fr; }
+.pop .chip { padding: 6px 8px; font-size: 13px; line-height: 18px; grid-template-columns: 7px 44px 1fr; }
 .pop .chip .x { -webkit-line-clamp: 3; }
 
 /* ---------- week ---------- */
@@ -190,6 +202,18 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .ddue { margin-top: 12px; font-size: 15px; line-height: 24px; font-weight: 500; color: var(--text); }
 .ddue .rel { color: var(--text-2); font-weight: 500; }
 .ddue.late .rel { color: var(--red); }
+.dopens { margin-top: 2px; font-size: 15px; line-height: 24px; font-weight: 500; color: var(--text); }
+.dopens .rel { color: var(--text-2); }
+.dorigin { margin-top: 4px; font-size: 13px; line-height: 20px; color: var(--text-3); }
+.dorigin a { color: var(--text-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.addform label { display: block; margin-top: 16px; font-size: 13px; line-height: 16px; font-weight: 500; color: var(--text-2); }
+.addform label em { font-style: normal; font-weight: 400; color: var(--text-3); }
+.addform input, .addform select, .addform textarea { display: block; width: 100%; margin-top: 8px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 8px; color: var(--text); font: 15px/20px inherit; font-family: inherit; }
+.addform input:focus, .addform select:focus, .addform textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.addform .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.addform .donebtn { margin-top: 24px; background: var(--accent); border-color: transparent; color: #0e0f11; font-weight: 600; }
+.formerr { margin: 12px 0 0; font-size: 13px; color: var(--text-2); }
+.formerr:empty { display: none; }
 .dmeta { margin-top: 8px; font-size: 13px; line-height: 20px; color: var(--text-2); }
 .dmeta .sep { color: var(--text-3); margin: 0 6px; }
 .dactions { margin-top: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -287,11 +311,11 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-modal="true" role="dialog"></aside>
 <!--DATA-->
-<script>
-const TZ = "Europe/Stockholm";
+<script type="module">
+import { TZ, dayKey, addDays, daysBetween, hm, status, finished, stillOpen, windowDays, windowLabel, openings, today as todayInfo, SHORT_WINDOW_DAYS } from "/logic.mjs";
 // Distinct hues at one lightness; none of them is the overdue red or the accent.
-const COLORS = { DA2210: "#d8b45a", DD2300: "#4fb3a2", DD2395: "#e38a55", DD2440: "#b087e0", IK2218: "#5d9fe0", SF1688: "#7fb870", KTH: "#8a8b93" };
-const KIND = { assignment: "Assignment", quiz: "Quiz", lab: "Lab", seminar: "Seminar", exam: "Exam", "peer review": "Peer review", registration: "Registration", event: "Event" };
+const COLORS = { DA2210: "#d8b45a", DD2300: "#4fb3a2", DD2395: "#e38a55", DD2440: "#b087e0", IK2218: "#5d9fe0", SF1688: "#7fb870", DD2380: "#d884ad", KTH: "#8a8b93" };
+const KIND = { assignment: "Assignment", quiz: "Quiz", lab: "Lab", seminar: "Seminar", exam: "Exam", "peer review": "Peer review", action: "To do", event: "Event" };
 const TICK = '<svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.4 2.4 4.6-5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const I = {
   left: '<svg class="i" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg>',
@@ -299,6 +323,8 @@ const I = {
   x: '<svg class="i" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
   out: '<svg class="i" viewBox="0 0 16 16"><path d="M6 4h6v6M12 4l-7 7"/></svg>',
   down: '<svg class="i" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>',
+  up: '<svg class="i" viewBox="0 0 16 16"><path d="M8 13V3.5M4 7.5l4-4 4 4"/></svg>',
+  plus: '<svg class="i" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></svg>',
 };
 
 let DATA = window.__DATA__ || { items: [], meta: {} };
@@ -311,34 +337,16 @@ const color = (c) => COLORS[c] || "#8a8b93";
 const phone = () => matchMedia("(max-width: 720px)").matches;
 
 // ---- dates, always in Stockholm ----
-const fmtParts = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const parts = (d) => Object.fromEntries(fmtParts.formatToParts(d).map((p) => [p.type, p.value]));
-const dayKey = (d) => { const p = parts(d); return `${p.year}-${p.month}-${p.day}`; };
-const keyDate = (k) => new Date(k + "T12:00:00Z");
-const addDays = (k, n) => { const d = keyDate(k); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const dow = (k) => (keyDate(k).getUTCDay() + 6) % 7;
 const weekStart = (k) => addDays(k, -dow(k));
-const hm = (d) => { const p = parts(d); return `${p.hour}:${p.minute}`; };
+const keyDate = (k) => new Date(k + "T12:00:00Z");
 const fd = (k, o) => keyDate(k).toLocaleDateString("en-GB", { ...o, timeZone: "UTC" }).replace("Sept", "Sep");
-const daysBetween = (a, b) => Math.round((keyDate(b) - keyDate(a)) / 86400000);
 const isoWeek = (k) => { const d = keyDate(k); d.setUTCDate(d.getUTCDate() + 3 - dow(k)); const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 4)); return 1 + Math.round((d - y) / 86400000 / 7 - 0.5 + ((y.getUTCDay() + 6) % 7) / 7); };
 const today = () => dayKey(new Date());
 const dueKey = (it) => dayKey(new Date(it.due));
 const range = (s, e) => s.slice(5, 7) === e.slice(5, 7) ? `${Number(s.slice(8))}–${fd(e, { day: "numeric", month: "short" })}` : `${fd(s, { day: "numeric", month: "short" })} – ${fd(e, { day: "numeric", month: "short" })}`;
 
 // ---- status ----
-const PASSIVE = new Set(["exam", "seminar", "event", "registration"]);
-function status(it) {
-  if (it.done_override === true) return "done";
-  if (it.deferred && it.done_override === null) return "deferred";
-  if (it.auto_done && it.done_override !== false) return "done";
-  if (new Date(it.due) > Date.now()) return "open";
-  const handIn = it.canvas && (it.canvas.types || []).some((t) => !["none", "not_graded", "on_paper"].includes(t));
-  if (PASSIVE.has(it.kind) && !handIn) return "passed";
-  return "missed";
-}
-const closedAt = (it) => it.lock_at && it.lock_at !== it.due ? new Date(it.lock_at) : null;
-const stillOpen = (it) => it.canvas && (!closedAt(it) || closedAt(it) > Date.now());
 const isNew = (it) => !it.initial && it.first_seen && Date.now() - new Date(it.first_seen) < 4 * 86400000;
 function relDays(it) {
   const n = daysBetween(today(), dueKey(it));
@@ -356,9 +364,15 @@ function sideStatus(it) {
   return relDays(it);
 }
 const visible = (it) => !S.hidden.includes(it.course);
-const finished = (it) => ["done", "passed"].includes(status(it));
 const listed = (it) => visible(it) && (S.showDone || !finished(it));
 const byDue = (a, b) => new Date(a.due) - new Date(b.due) || a.course.localeCompare(b.course);
+// Dates Canvas did not set say so wherever they are shown.
+const SOURCE_TAG = { "course page": "per course page", announcement: "per announcement", schedule: "per TimeEdit", inferred: "inferred" };
+const tagOf = (source) => SOURCE_TAG[source] || "";
+const tagSpan = (source) => tagOf(source) ? `<span class="sep">·</span><span class="tag">${esc(tagOf(source))}</span>` : "";
+const shortWindow = (o) => o.window_days !== null && o.window_days <= SHORT_WINDOW_DAYS;
+const visibleOpenings = () => openings(DATA.items.filter(visible));
+const opensKey = (o) => dayKey(new Date(o.opens));
 
 // ---- agenda ----
 function row(it, opts = {}) {
@@ -366,45 +380,68 @@ function row(it, opts = {}) {
   const date = fd(dueKey(it), { day: "numeric", month: "short" });
   let when = opts.showDate ? date : it.all_day ? "All day" : hm(new Date(it.due)), sub = sideStatus(it);
   if (late) { when = sideStatus(it); sub = date; }
+  else if (opts.closing) { const n = daysBetween(today(), dueKey(it)); when = `${fd(dueKey(it), { weekday: "short" })} ${hm(new Date(it.due))}`; sub = n === 1 ? "1 day left" : `${n} days left`; }
   else if (!opts.showDate && st === "open") sub = new Date(it.due) - Date.now() < 86400000 ? sideStatus(it) : "";
   return `<div class="row ${st}${late ? " late" : ""}${soon ? " soon" : ""}" data-id="${esc(it.id)}">
     <button class="cb ${st === "done" ? "on" : ""}" data-toggle="${esc(it.id)}" aria-label="${st === "done" ? "Mark not done" : "Mark done"}"><span>${TICK}</span></button>
     <div class="main"><div class="title">${isNew(it) ? `<span class="newdot" title="New"></span>` : ""}${esc(it.title)}</div>
-      <div class="meta"><span class="dot" style="--c:${color(it.course)}"></span><span>${esc(it.course)}</span><span class="sep">·</span><span>${esc(KIND[it.kind] || it.kind)}</span></div></div>
+      <div class="meta"><span class="dot" style="--c:${color(it.course)}"></span><span>${esc(it.course)}</span><span class="sep">·</span><span>${esc(KIND[it.kind] || it.kind)}</span>${tagSpan(it.due_source)}</div></div>
     <div class="side"><time>${esc(when)}</time>${sub ? `<span class="st">${esc(sub)}</span>` : ""}</div>
   </div>`;
 }
-function group(title, sub, items, cls = "", opts = {}) {
-  if (!items.length) return "";
-  return `<section class="group"><h3 class="dayhead ${cls}"><span>${esc(title)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}<span class="count num">${items.length}</span></h3>${items.map((it) => row(it, opts)).join("")}</section>`;
+// An opening is a moment, not a task: an arrow where the checkbox sits, linked to its item.
+function openRow(o, opts = {}) {
+  const k = opensKey(o), time = o.all_day ? "All day" : hm(new Date(o.opens));
+  return `<div class="row opening" data-id="${esc(o.id)}">
+    <div class="oc">${I.up}</div>
+    <div class="main"><div class="title">${esc(o.title)}</div>
+      <div class="meta"><span class="dot ring" style="--c:${color(o.course)}"></span><span>${esc(o.course)}</span><span class="sep">·</span><span class="op">Opens</span>${shortWindow(o) ? `<span class="sep">·</span><span>${esc(o.window)}</span>` : ""}${tagSpan(o.source)}</div></div>
+    <div class="side"><time>${esc(opts.showDate ? fd(k, { weekday: "short", day: "numeric", month: "short" }) : time)}</time>${opts.showDate && !o.all_day ? `<span class="st num">${esc(time)}</span>` : ""}</div>
+  </div>`;
 }
+function section(title, sub, rows, cls = "") {
+  if (!rows.length) return "";
+  return `<section class="group"><h3 class="dayhead ${cls}"><span>${esc(title)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}<span class="count num">${rows.length}</span></h3>${rows.join("")}</section>`;
+}
+const group = (title, sub, items, cls = "", opts = {}) => section(title, sub, items.map((it) => row(it, opts)), cls);
 function agenda() {
-  const all = DATA.items.filter(visible), t = today(), wkEnd = addDays(weekStart(t), 6), horizon = addDays(wkEnd, 7);
-  const missed = all.filter((it) => status(it) === "missed" && dueKey(it) < t);
-  const overdue = missed.filter((it) => daysBetween(dueKey(it), t) <= 21).sort(byDue).reverse();
-  const older = missed.filter((it) => daysBetween(dueKey(it), t) > 21).sort(byDue).reverse();
+  const all = DATA.items.filter(visible), t = today(), wkEnd = addDays(weekStart(t), 6), horizon = addDays(wkEnd, 7), info = todayInfo(all);
+  const overdue = info.overdue;
+  const older = all.filter((it) => status(it) === "missed" && daysBetween(dueKey(it), t) > 21).sort(byDue).reverse();
   const deferred = all.filter((it) => status(it) === "deferred").sort(byDue);
-  const upcoming = all.filter((it) => dueKey(it) >= t && status(it) !== "deferred" && (S.showDone || !finished(it) || dueKey(it) === t)).sort(byDue);
+  const closing = new Set(info.closing_soon.map((it) => it.id));
+  const upcoming = all.filter((it) => dueKey(it) >= t && !closing.has(it.id) && status(it) !== "deferred" && (S.showDone || !finished(it) || dueKey(it) === t)).sort(byDue);
   const openWeek = all.filter((it) => status(it) === "open" && dueKey(it) <= wkEnd).length;
   const openAll = all.filter((it) => status(it) === "open").length;
 
   let html = `<div class="summary">${overdue.length ? `<span class="od">${overdue.length} overdue</span><span class="sep">·</span>` : ""}<span>${openWeek} this week</span><span class="sep">·</span><span>${openAll} open</span>
-    <button class="showdone${S.showDone ? " on" : ""}" id="showdone" aria-pressed="${S.showDone}"><span class="mini">${TICK}</span>Show done</button></div>`;
+    <span class="acts"><button class="sbtn" data-add>${I.plus}Add</button><button class="sbtn showdone${S.showDone ? " on" : ""}" id="showdone" aria-pressed="${S.showDone}"><span class="mini">${TICK}</span>Done</button></span></div>`;
   html += group("Overdue", "last 3 weeks", overdue, "red", { showDate: true });
+  // What to look at today: what opens, what is due, then short windows closing and what opens next.
+  const todayRows = [...info.opened_today.map((o) => openRow(o)), ...upcoming.filter((it) => dueKey(it) === t).map((it) => row(it))];
+  const todaySub = fd(t, { weekday: "short", day: "numeric", month: "short" });
+  html += todayRows.length ? section("Today", todaySub, todayRows) : `<section class="group"><h3 class="dayhead"><span>Today</span><span class="sub">${esc(todaySub)}</span></h3><div class="empty">Nothing due today.</div></section>`;
+  html += group("Closing soon", "short windows", info.closing_soon, "", { closing: true });
+  html += section("Be ready", "opening this week", info.be_ready.map((o) => openRow(o, { showDate: true })));
+  // Then everything later, one header per day up to the end of next week, then per week.
+  const ready = new Set(info.be_ready);
+  const later = [
+    ...upcoming.filter((it) => dueKey(it) > t).map((it) => ({ at: new Date(it.due), k: dueKey(it), draw: (opts) => row(it, opts) })),
+    ...visibleOpenings().filter((o) => opensKey(o) > addDays(t, 7) && !ready.has(o)).map((o) => ({ at: new Date(o.opens), k: opensKey(o), draw: (opts) => openRow(o, opts) })),
+  ].sort((a, b) => a.at - b.at);
   const buckets = new Map();
-  for (const it of upcoming) {
-    const k = dueKey(it), key = k <= horizon ? k : "w" + weekStart(k);
+  for (const e of later) {
+    const key = e.k <= horizon ? e.k : "w" + weekStart(e.k);
     if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(it);
+    buckets.get(key).push(e);
   }
-  if (!buckets.has(t)) html += `<section class="group"><h3 class="dayhead"><span>Today</span><span class="sub">${esc(fd(t, { weekday: "short", day: "numeric", month: "short" }))}</span></h3><div class="empty">Nothing due today.</div></section>`;
-  for (const [key, items] of buckets) {
+  for (const [key, entries] of buckets) {
     if (key.startsWith("w")) {
       const s = key.slice(1);
-      html += group(range(s, addDays(s, 6)), `week ${isoWeek(s)}`, items, "", { showDate: true });
+      html += section(range(s, addDays(s, 6)), `week ${isoWeek(s)}`, entries.map((e) => e.draw({ showDate: true })));
     } else {
       const n = daysBetween(t, key);
-      html += group(n === 0 ? "Today" : n === 1 ? "Tomorrow" : fd(key, { weekday: "long" }), fd(key, n <= 1 ? { weekday: "short", day: "numeric", month: "short" } : { day: "numeric", month: "short" }) + (n > 1 ? ` · in ${n} days` : ""), items);
+      html += section(n === 1 ? "Tomorrow" : fd(key, { weekday: "long" }), fd(key, n <= 1 ? { weekday: "short", day: "numeric", month: "short" } : { day: "numeric", month: "short" }) + (n > 1 ? ` · in ${n} days` : ""), entries.map((e) => e.draw({})));
     }
   }
   if (deferred.length) html += showDeferred ? group("Not due this round", "", deferred, "", { showDate: true }) : `<section class="group"><button class="quiet" data-more="deferred">${I.down}${deferred.length} not due this round</button></section>`;
@@ -416,12 +453,27 @@ function agenda() {
 
 // ---- month ----
 function onDay(k) { return DATA.items.filter((it) => listed(it) && dueKey(it) === k).sort(byDue); }
+// A day's deadlines and openings, in time order, ready to draw as a chip or a row.
+function entriesOn(k, opening) {
+  return [
+    ...onDay(k).map((it) => ({ at: new Date(it.due), done: finished(it), course: it.course, ring: false, chip: (o) => chip(it, o), row: () => row(it) })),
+    ...opening.filter((o) => opensKey(o) === k).map((o) => ({ at: new Date(o.opens), done: false, course: o.course, ring: true, chip: (x) => chipOpen(o, x), row: () => openRow(o) })),
+  ].sort((a, b) => a.at - b.at);
+}
+function chipOpen(o, opts = {}) {
+  const time = o.all_day ? "" : hm(new Date(o.opens)), mark = tagOf(o.source) ? "~" : "";
+  const label = `<span class="x"><span class="op">Opens</span> ${esc(o.title)}</span>`;
+  const dot = `<span class="dot ring" style="--c:${color(o.course)}"></span>`;
+  const tip = `${o.course} · opens: ${o.title}${o.window ? ` · ${o.window}` : ""}${tagOf(o.source) ? ` · ${tagOf(o.source)}` : ""}`;
+  if (opts.week) return `<button class="chip opening" data-id="${esc(o.id)}" title="${esc(tip)}">${dot}${label}<span class="c"><span class="t">${mark}${time || "All day"}</span> · ${esc(o.course)}${shortWindow(o) ? ` · ${esc(o.window)}` : ""}</span></button>`;
+  return `<button class="chip opening${time ? "" : " allday"}" data-id="${esc(o.id)}" title="${esc(tip)}">${dot}${time ? `<span class="t">${mark}${time}</span>` : ""}${label}</button>`;
+}
 function chip(it, opts = {}) {
   const st = status(it);
-  const time = it.all_day ? "" : hm(new Date(it.due));
-  if (opts.week) return `<button class="chip ${st}${st === "missed" && stillOpen(it) ? " late" : ""}" data-id="${esc(it.id)}"><span class="dot" style="--c:${color(it.course)}"></span><span class="x">${esc(it.title)}</span><span class="c"><span class="t">${it.all_day ? "All day" : time}</span> · ${esc(it.course)}</span></button>`;
+  const time = it.all_day ? "" : hm(new Date(it.due)), mark = tagOf(it.due_source) ? "~" : "";
+  if (opts.week) return `<button class="chip ${st}${st === "missed" && stillOpen(it) ? " late" : ""}" data-id="${esc(it.id)}"><span class="dot" style="--c:${color(it.course)}"></span><span class="x">${esc(it.title)}</span><span class="c"><span class="t">${mark}${it.all_day ? "All day" : time}</span> · ${esc(it.course)}</span></button>`;
   const late = st === "missed" && stillOpen(it);
-  return `<button class="chip ${st}${late ? " late" : ""}${time ? "" : " allday"}" data-id="${esc(it.id)}" title="${esc(`${it.course} · ${it.title}`)}"><span class="dot" style="--c:${color(it.course)}"></span>${time ? `<span class="t">${time}</span>` : ""}<span class="x">${esc(it.title)}</span></button>`;
+  return `<button class="chip ${st}${late ? " late" : ""}${time ? "" : " allday"}" data-id="${esc(it.id)}" title="${esc(`${it.course} · ${it.title}${tagOf(it.due_source) ? ` · ${tagOf(it.due_source)}` : ""}`)}"><span class="dot" style="--c:${color(it.course)}"></span>${time ? `<span class="t">${mark}${time}</span>` : ""}<span class="x">${esc(it.title)}</span></button>`;
 }
 function calhead(title, sub, tag) {
   return `<div class="calhead"><h2>${esc(title)}${sub ? ` <span class="sub">${esc(sub)}</span>` : ""}</h2>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}
@@ -431,34 +483,34 @@ function month() {
   const first = dayKey(cursor).slice(0, 8) + "01", start = weekStart(first), t = today(), mon = first.slice(0, 7);
   const days = new Date(Date.UTC(+mon.slice(0, 4), +mon.slice(5, 7), 0)).getUTCDate();
   const weeks = Math.ceil((daysBetween(start, first) + days) / 7);
-  const maxChips = 3, ph = phone();
+  const maxChips = 3, ph = phone(), opening = visibleOpenings();
   let cells = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="dow">${ph ? d[0] : d}</div>`).join("");
   for (let i = 0; i < weeks * 7; i++) {
-    const k = addDays(start, i), items = onDay(k), out = k.slice(0, 7) !== mon;
+    const k = addDays(start, i), items = entriesOn(k, opening), out = k.slice(0, 7) !== mon;
     const shown = items.length > maxChips ? items.slice(0, maxChips - 1) : items;
     cells += `<div class="cell${out ? " out" : ""}${i % 7 === 6 ? " c7" : ""}${k === t ? " today" : ""}${k === selDay ? " sel" : ""}" data-day="${k}">
-      <span class="n num">${Number(k.slice(8))}</span>${ph ? "" : shown.map((it) => chip(it)).join("")}
+      <span class="n num">${Number(k.slice(8))}</span>${ph ? "" : shown.map((e) => e.chip()).join("")}
       ${!ph && items.length > shown.length ? `<button class="more" data-pop="${k}">+${items.length - shown.length} more</button>` : ""}
-      ${ph ? `<span class="mdots">${items.slice(0, 3).map((it) => `<span class="dot${finished(it) ? " faded" : ""}" style="--c:${color(it.course)}"></span>`).join("")}${items.length > 3 ? `<span class="plus">+${items.length - 3}</span>` : ""}</span>` : ""}</div>`;
+      ${ph ? `<span class="mdots">${items.slice(0, 3).map((e) => `<span class="dot${e.ring ? " ring" : ""}${e.done ? " faded" : ""}" style="--c:${color(e.course)}"></span>`).join("")}${items.length > 3 ? `<span class="plus">+${items.length - 3}</span>` : ""}</span>` : ""}</div>`;
   }
   // Fill the window: rows share the height left under the header and title.
   const rowh = Math.min(148, Math.max(112, Math.floor((window.innerHeight - 105 - 72 - 32 - 24) / weeks)));
   const sel = selDay && selDay.slice(0, 7) === mon ? selDay : t.slice(0, 7) === mon ? t : null;
   let dayList = "";
   if (ph && sel) {
-    const list = onDay(sel);
+    const list = entriesOn(sel, opening);
     const next = DATA.items.filter((it) => listed(it) && dueKey(it) > sel && status(it) === "open").sort(byDue).slice(0, 4);
-    dayList = `<div class="daylist">${list.length ? group(fd(sel, { weekday: "long" }), fd(sel, { day: "numeric", month: "short" }), list)
+    dayList = `<div class="daylist">${list.length ? section(fd(sel, { weekday: "long" }), fd(sel, { day: "numeric", month: "short" }), list.map((e) => e.row()))
       : `<section class="group"><h3 class="dayhead"><span>${esc(fd(sel, { weekday: "long" }))}</span><span class="sub">${esc(fd(sel, { day: "numeric", month: "short" }))} · nothing due</span></h3></section>${group("Next up", "", next, "", { showDate: true })}`}</div>`;
   }
-  return calhead(fd(first, { month: "long" }), first.slice(0, 4)) + `<div class="month" style="--rowh:${rowh}px">${cells}</div>` + dayList;
+  return calhead(fd(first, { month: "long" }), first.slice(0, 4)) + `<div class="month" style="--rowh:${rowh}px">${cells}</div>` + (ph ? "" : `<p class="calnote"><span class="dot ring" style="--c:var(--text-3)"></span>opens<span class="dot" style="--c:var(--text-3)"></span>due<span>~ read from a course page or announcement, not set in Canvas</span></p>`) + dayList;
 }
 function popover(k, anchor) {
   closePop();
-  const items = onDay(k), r = anchor.closest(".cell").getBoundingClientRect();
+  const items = entriesOn(k, visibleOpenings()), r = anchor.closest(".cell").getBoundingClientRect();
   const el = document.createElement("div");
   el.className = "pop"; el.id = "pop";
-  el.innerHTML = `<div class="ph"><span>${esc(fd(k, { weekday: "long" }))}</span><span class="sub">${esc(fd(k, { day: "numeric", month: "short" }))} · ${items.length} items</span><button data-closepop aria-label="Close">${I.x}</button></div>${items.map((it) => chip(it)).join("")}`;
+  el.innerHTML = `<div class="ph"><span>${esc(fd(k, { weekday: "long" }))}</span><span class="sub">${esc(fd(k, { day: "numeric", month: "short" }))} · ${items.length} items</span><button data-closepop aria-label="Close">${I.x}</button></div>${items.map((e) => e.chip()).join("")}`;
   document.body.appendChild(el);
   const w = el.offsetWidth, h = el.offsetHeight;
   el.style.left = Math.max(16, Math.min(window.scrollX + r.left - 1, window.scrollX + document.documentElement.clientWidth - w - 16)) + "px";
@@ -471,16 +523,17 @@ function closePop() { document.getElementById("pop")?.remove(); }
 // ---- week ----
 function week() {
   const start = weekStart(dayKey(cursor)), t = today(), end = addDays(start, 6);
+  const opening = visibleOpenings();
   const head = calhead(range(start, end), start.slice(0, 4) !== t.slice(0, 4) ? start.slice(0, 4) : "", `Week ${isoWeek(start)}`);
   if (phone()) {
     let html = "";
-    for (let i = 0; i < 7; i++) { const k = addDays(start, i); html += group(daysBetween(t, k) === 0 ? "Today" : fd(k, { weekday: "long" }), fd(k, { day: "numeric", month: "short" }), onDay(k)); }
+    for (let i = 0; i < 7; i++) { const k = addDays(start, i); html += section(daysBetween(t, k) === 0 ? "Today" : fd(k, { weekday: "long" }), fd(k, { day: "numeric", month: "short" }), entriesOn(k, opening).map((e) => e.row())); }
     return head + (html || `<div class="empty" style="padding-left:0">Nothing due this week.</div>`);
   }
   let cols = "";
   for (let i = 0; i < 7; i++) {
-    const k = addDays(start, i), items = onDay(k);
-    cols += `<div class="wcol${k === t ? " today" : ""}"><h4>${esc(fd(k, { weekday: "short" }))} <b class="num">${Number(k.slice(8))}</b></h4>${items.map((it) => chip(it, { week: true })).join("")}</div>`;
+    const k = addDays(start, i), items = entriesOn(k, opening);
+    cols += `<div class="wcol${k === t ? " today" : ""}"><h4>${esc(fd(k, { weekday: "short" }))} <b class="num">${Number(k.slice(8))}</b></h4>${items.map((e) => e.chip({ week: true })).join("")}</div>`;
   }
   return head + `<div class="week">${cols}</div>`;
 }
@@ -536,14 +589,22 @@ function drawer(id) {
   if (!it) return closeDrawer();
   const st = status(it), k = dueKey(it), due = new Date(it.due), late = st === "missed";
   const det = it.detail || { facts: [], notes: [], body: "", related: [] };
-  const verb = it.kind === "registration" ? "Closes " : PASSIVE.has(it.kind) ? "" : "Due ";
+  const verb = it.kind === "action" && it.origin !== "manual" ? "Closes " : ["exam", "seminar", "event"].includes(it.kind) ? "" : "Due ";
   const rel = late ? (stillOpen(it) ? `${daysBetween(k, today())} days overdue` : "missed") : st === "open" ? relDays(it) : st === "deferred" ? `moved to ${it.deferred.until || "a later round"}` : st === "done" ? "done" : "passed";
   // One quiet line instead of a table: type, points, how to hand in, Canvas state.
   const f = Object.fromEntries(det.facts);
   const state = it.canvas ? ({ unsubmitted: "Not submitted", submitted: "Submitted", graded: "Graded", pending_review: "Pending review" }[it.canvas.state] || it.canvas.state) : null;
   const meta = [KIND[it.kind] || it.kind, f.Points && `${f.Points} ${f.Points === "1" ? "point" : "points"}`, f["Hand in"] && `hand in: ${f["Hand in"]}`, state && `${state}${it.canvas.grade != null && it.canvas.state === "graded" ? ` (${it.canvas.grade})` : ""}`, f.Closes && `closes ${f.Closes.replace(/ \(.*/, "")}`, f.Where, f.Time].filter(Boolean);
   const autoNote = it.auto_done ? `Canvas: ${esc(it.auto_reason || "done")}` : "";
-  const statusLine = it.done_override !== null ? `Set by you${autoNote ? ` · ${autoNote}` : ""} · <button data-reset="${esc(it.id)}">Use Canvas status</button>` : autoNote;
+  const statusLine = it.origin === "manual" ? `<button data-remove="${esc(it.id)}">Remove this item</button>` : it.done_override !== null ? `Set by you${autoNote ? ` · ${autoNote}` : ""} · <button data-reset="${esc(it.id)}">Use Canvas status</button>` : autoNote;
+  const opened = it.opens && new Date(it.opens) <= Date.now();
+  const opensLine = it.opens && st !== "deferred" ? `<div class="dopens num">${opened ? "Opened" : "Opens"} ${esc(fd(dayKey(new Date(it.opens)), { weekday: "long", day: "numeric", month: "long" }))}${it.opens_all_day ? "" : ", " + hm(new Date(it.opens))}${windowLabel(it) ? ` <span class="rel">· ${esc(windowLabel(it))}</span>` : ""}</div>` : "";
+  // Say plainly which dates did not come from Canvas, with a link to where they were read.
+  const origin = [];
+  if (tagOf(it.opens_source)) origin.push(`Opening ${it.opens_url ? `<a href="${esc(it.opens_url)}" target="_blank" rel="noopener">${esc(tagOf(it.opens_source))}</a>` : esc(tagOf(it.opens_source))}`);
+  if (tagOf(it.due_source)) origin.push(`${it.kind === "action" ? "Closing" : "Deadline"} ${esc(tagOf(it.due_source))}`);
+  if (it.origin === "manual") origin.push(`Added by ${esc(it.added_by || "hand")}`);
+  const originLine = origin.length ? `<div class="dorigin">${origin.join(" · ")}${it.origin === "manual" ? "" : ". Not a date set in Canvas."}</div>` : "";
   const links = it.sources.filter((s) => !/^Announcement/.test(s.label));
   const long = det.body.length > 900 && !expanded;
   d.innerHTML = `<div class="dtop" id="dtop"><button class="iconbtn" data-close aria-label="Close">${phone() ? I.left : I.x}</button><span class="ttl">${esc(it.title)}</span></div>
@@ -551,7 +612,9 @@ function drawer(id) {
       <div class="dcourse"><span class="dot" style="--c:${color(it.course)}"></span>${esc(it.course)} · ${esc(it.course_name)}</div>
       <h1>${esc(it.title)}</h1>
       <div class="ddue num${late ? " late" : ""}">${st === "deferred" ? `Moved to ${esc(it.deferred.until || "a later round")} <span class="rel">· was due ${esc(fd(k, { day: "numeric", month: "short" }))}</span>` : `${verb}${esc(fd(k, { weekday: "long", day: "numeric", month: "long" }))}${it.all_day ? "" : ", " + hm(due)} <span class="rel">· ${esc(rel)}</span>`}</div>
+      ${opensLine}
       <div class="dmeta">${meta.map(esc).join('<span class="sep">·</span>')}</div>
+      ${originLine}
       <div class="dactions">
         <button class="donebtn ${st === "done" ? "on" : ""}" data-toggle="${esc(it.id)}">${TICK.replace("#fff", "currentColor")}${st === "done" ? "Done" : "Mark as done"}</button>
         ${statusLine ? `<span class="dstatus">${statusLine}</span>` : ""}
@@ -559,13 +622,33 @@ function drawer(id) {
       ${it.deferred ? `<div class="note warn"><b class="k">Not due this round</b>${inline(it.deferred.note.replace(/^\*\*Not due this round\.\*\*\s*/, ""))}</div>` : ""}
       ${det.notes.map((n) => `<div class="note"><b class="k">Note</b>${inline(n)}</div>`).join("")}
       ${det.body ? `<h2 class="dsec">Description</h2><div class="md${long ? " clamped" : ""}">${md(det.body)}</div>${long ? `<button class="showmore" data-expand>Show full description ${I.down}</button>` : ""}` : ""}
-      <h2 class="dsec">Sources</h2>
-      <div class="links">${links.map((s) => { const [kk, n0] = sourceKind(s.label, s.url), nn = n0.charAt(0).toUpperCase() + n0.slice(1); return `<a class="link" href="${esc(s.url)}" target="_blank" rel="noopener"><span class="lt">${esc(nn)}</span><span class="lk">${esc(kk)}</span>${I.out}</a>`; }).join("")}</div>
+      ${links.length ? `<h2 class="dsec">Sources</h2>` : ""}
+      <div class="links"${links.length ? "" : " hidden"}>${links.map((s) => { const [kk, n0] = sourceKind(s.label, s.url), nn = n0.charAt(0).toUpperCase() + n0.slice(1); return `<a class="link" href="${esc(s.url)}" target="_blank" rel="noopener"><span class="lt">${esc(nn)}</span><span class="lk">${esc(kk)}</span>${I.out}</a>`; }).join("")}</div>
       ${det.related.length ? `<h2 class="dsec">Announcements</h2><div class="links">${det.related.map((a) => `<a class="ann" href="${esc(a.url)}" target="_blank" rel="noopener"><span class="at">${esc(a.title)}</span><span class="ad num">${esc(fd(dayKey(new Date(a.date)), { weekday: "short", day: "numeric", month: "short" }))}</span><span class="ax">${esc(a.excerpt.replace(/^…\s*/, ""))}</span></a>`).join("")}</div>` : ""}
     </div>`;
   document.getElementById("scrim").classList.add("open");
   d.classList.add("open");
   d.onscroll = () => document.getElementById("dtop").classList.toggle("scrolled", d.scrollTop > 72);
+  document.body.style.overflow = "hidden";
+}
+// A one-off: something Erik or an agent wants on the calendar. Same model as any item.
+function addForm() {
+  const d = document.getElementById("drawer");
+  const courses = [...new Set(DATA.items.map((i) => i.course))].sort();
+  d.innerHTML = `<div class="dtop" id="dtop"><button class="iconbtn" data-close aria-label="Close">${phone() ? I.left : I.x}</button></div>
+    <form class="dbody addform" id="addform">
+      <h1>Add something to do</h1>
+      <label>What<input name="title" required maxlength="200" placeholder="Email the examiner about…" autocomplete="off"></label>
+      <div class="two"><label>Due<input name="date" type="date" required></label><label>Time <em>optional</em><input name="time" type="time"></label></div>
+      <div class="two"><label>Course<select name="course">${courses.map((c) => `<option${c === "KTH" ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label><label>Opens <em>optional</em><input name="opens" type="date"></label></div>
+      <label>Note <em>optional</em><textarea name="note" rows="3"></textarea></label>
+      <label>Link <em>optional</em><input name="url" type="url" placeholder="https://"></label>
+      <p class="formerr" id="formerr" role="alert"></p>
+      <button class="donebtn" type="submit">Add to calendar</button>
+    </form>`;
+  document.getElementById("scrim").classList.add("open");
+  d.classList.add("open");
+  d.onscroll = null;
   document.body.style.overflow = "hidden";
 }
 function closeDrawer() {
@@ -592,6 +675,7 @@ function render() {
 }
 let openId = null;
 function route() {
+  if (location.hash === "#/add") { if (openId !== "add") addForm(); openId = "add"; return; }
   const m = location.hash.match(/^#\/item\/(.+)$/);
   if (m) { const id = decodeURIComponent(m[1]); if (id !== openId) { expanded = false; document.getElementById("drawer").scrollTop = 0; } openId = id; drawer(id); }
   else { openId = null; closeDrawer(); }
@@ -605,12 +689,31 @@ async function setDone(id, done) {
   render();
   await fetch(`/api/items/${encodeURIComponent(id)}/done`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ done }) });
 }
+async function removeCustom(id) {
+  await fetch(`/api/custom/${encodeURIComponent(id)}`, { method: "DELETE" });
+  location.hash = "";
+  await load();
+}
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "addform") return;
+  e.preventDefault();
+  const f = new FormData(e.target), v = (k) => String(f.get(k) || "").trim();
+  const body = { title: v("title"), course: v("course"), due: v("time") ? `${v("date")}T${v("time")}` : v("date"), added_by: "Erik" };
+  for (const k of ["opens", "note", "url"]) if (v(k)) body[k] = v(k);
+  const r = await fetch("/api/custom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const out = await r.json();
+  if (!r.ok) { document.getElementById("formerr").textContent = out.error; return; }
+  await load();
+  location.hash = "#/item/" + encodeURIComponent(out.id);
+});
 function back() { history.length > 1 ? history.back() : (location.hash = ""); }
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-toggle],[data-reset],[data-close],[data-closepop],[data-expand],[data-pop],[data-id],[data-more],[data-day],[data-nav],[data-course],#tabs button,#showdone");
+  const t = e.target.closest("[data-add],[data-remove],[data-toggle],[data-reset],[data-close],[data-closepop],[data-expand],[data-pop],[data-id],[data-more],[data-day],[data-nav],[data-course],#tabs button,#showdone");
   if (!e.target.closest("#pop") && !e.target.closest("[data-pop]")) closePop();
   if (e.target.id === "scrim") return back();
   if (!t) return;
+  if (t.dataset.add !== undefined) { location.hash = "#/add"; return; }
+  if (t.dataset.remove) { removeCustom(t.dataset.remove); return; }
   if (t.dataset.toggle) { e.stopPropagation(); const it = DATA.items.find((x) => x.id === t.dataset.toggle); setDone(it.id, status(it) !== "done"); return; }
   if (t.dataset.reset) { setDone(t.dataset.reset, null); return; }
   if (t.dataset.close !== undefined) return back();

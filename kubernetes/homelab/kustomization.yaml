@@ -90,6 +90,7 @@ configMapGenerator:
       - config/school/server.mjs
       - config/school/index.html
       - config/school/inter.woff2
+      - config/school/logic.mjs
   # The notify gateway: editing it restarts the pod.
   - name: notify-gateway-code
     files:
