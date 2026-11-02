@@ -51,6 +51,8 @@ The Docker-to-k3s migration completed on 2026-07-24:
   launch. Owner login is the `executor-bootstrap` secret; organization "Erik"
   (slug `executor`). Its data is on the `executor-v2-data` PVC. Executor 1.6's
   SQLite data is kept, unmounted, on `executor-data` and cannot be read by v2.
+  It leaks memory (upstream #2216), so the `executor-recycler` CronJob restarts
+  it at 2400Mi; a restart every few days is expected, a liveness kill is not.
   App code may reach the LAN (`EXECUTOR_APPS_ALLOW_PRIVATE_FETCH=true`).
 - The company brain (`apps/brain.yaml`, https://brain.erikfrankling.duckdns.org,
   `lan-and-cluster`) is reached by agents through the Executor app `brain`. Its

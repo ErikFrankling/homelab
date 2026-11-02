@@ -84,12 +84,15 @@ spec:
               path: /health
               port: http
             periodSeconds: 5
+          # A wedged process answers nothing, not slowly, and every new agent
+          # session started meanwhile loses Executor. Kill it after a minute
+          # rather than 2.5 (2026-11-02: not ready 02:46-02:48 UTC).
           livenessProbe:
-            failureThreshold: 5
+            failureThreshold: 6
             httpGet:
               path: /health
               port: http
-            periodSeconds: 30
+            periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             failureThreshold: 3
@@ -145,3 +148,135 @@ spec:
       targetPort: http
   selector:
     app.kubernetes.io/name: executor
+---
+# Upstream leak: executor-selfhost memory grows with uptime until restart
+# (UsefulSoftwareCo/executor#2216, open, no fix in the notes up to beta.34). Here
+# it reached the 3Gi limit after 2-4 days, then reclaim thrashed page cache and
+# /health stopped answering. No OOM kill, so the outage lasted until the liveness
+# probe fired, and agent sessions starting during it lost their tools.
+#
+# executor-recycler restarts it cleanly before it gets there. The threshold is on
+# memory, not a clock, because growth tracks agent traffic (50-140 MB/h) and a
+# restart drops running executions and paused approvals (executor#2449). The data
+# on the PV is untouched. Remove all of this once #2216 is fixed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: executor-recycler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: executor-recycler
+rules:
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [executor]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: executor-recycler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: executor-recycler
+subjects:
+  - kind: ServiceAccount
+    name: executor-recycler
+    namespace: homelab
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: executor-recycler-scripts
+data:
+  recycle.sh: |
+    set -eu
+
+    # Anything but one plain Mi number (metrics down, two pods mid-rollout) fails
+    # the job, which CronJobFailing reports, rather than restarting by accident.
+    usage=$(kubectl top pod -n homelab -l app.kubernetes.io/name=executor --no-headers | awk '{print $3}')
+    mebibytes=${usage%Mi}
+    case "$mebibytes" in
+      "" | *[!0-9]*)
+        echo "cannot read executor memory: '${usage}'" >&2
+        exit 1
+        ;;
+    esac
+
+    if [ "$mebibytes" -lt "$THRESHOLD_MI" ]; then
+      echo "executor at ${mebibytes}Mi, below ${THRESHOLD_MI}Mi"
+      exit 0
+    fi
+
+    echo "executor at ${mebibytes}Mi, restarting"
+    kubectl rollout restart -n homelab deployment/executor ${DRY_RUN:+--dry-run=server}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: executor-recycler
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  schedule: "*/15 * * * *"
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: executor-recycler
+          containers:
+            - name: recycler
+              image: alpine/k8s:1.35.5@sha256:d870622d004031c4e3ddad80d200692792509176db03c346a8526f4f45476e96
+              command:
+                - /bin/sh
+                - /scripts/recycle.sh
+              env:
+                # Working set against the 3Gi limit: over 4 hours of margin at
+                # the fastest growth seen.
+                - name: THRESHOLD_MI
+                  value: "2400"
+                # kubectl's discovery cache; the root filesystem is read-only.
+                - name: HOME
+                  value: /tmp
+              resources:
+                limits:
+                  memory: 128Mi
+                requests:
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: true
+                runAsGroup: 1000
+                runAsNonRoot: true
+                runAsUser: 1000
+              volumeMounts:
+                - mountPath: /scripts
+                  name: scripts
+                  readOnly: true
+                - mountPath: /tmp
+                  name: tmp
+          restartPolicy: Never
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap:
+                defaultMode: 365
+                name: executor-recycler-scripts
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
