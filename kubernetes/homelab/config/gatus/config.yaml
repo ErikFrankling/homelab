@@ -131,6 +131,16 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  # Fleet, the agent platform (route in ingress/external-routes.yaml).
+  - name: fleet
+    group: phone
+    url: https://fleet.erikfrankling.duckdns.org/healthz
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   # How the T3 Code Android app gets JS updates (apps/t3-updates.yaml).
   - name: t3-updates
     group: phone

@@ -34,6 +34,13 @@ spec:
       services:
         - name: external-p9-registry
           port: 80
+    - kind: Rule
+      match: Host(`fleet.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-fleet
+          port: 80
 ---
 # opencode web/agent server runs on the GPU/PC box (192.168.50.232:4096),
 # outside the cluster. Routed here so it is reachable at its own HTTPS origin

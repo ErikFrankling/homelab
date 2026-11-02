@@ -137,3 +137,34 @@ ports:
   - name: http
     port: 4096
     protocol: TCP
+---
+# Fleet (namespace fleet, repo husk-security/fleet) deploys itself, outside this
+# Kustomization, so that a Pending pod of its own can't block the others. Only
+# the route and the health check are here. control's NodePort is in its repo.
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-fleet
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: external-fleet
+  labels:
+    kubernetes.io/service-name: external-fleet
+addressType: IPv4
+endpoints:
+  - addresses:
+      - 192.168.50.100
+    conditions:
+      ready: true
+ports:
+  - name: http
+    port: 30740
+    protocol: TCP
