@@ -69,7 +69,9 @@ The Docker-to-k3s migration completed on 2026-07-24:
   lan-only) is the KTH deadline calendar. Code is `config/school/` (Node, no
   build); done toggles are in `/data/state.json` on PVC `school-data`. The PC
   pushes the items after the daily Canvas archive refresh (dotfiles
-  `modules/home-manager/school-sync`); it never talks to Canvas.
+  `modules/home-manager/school-sync`); it never talks to Canvas. Reminder jobs read
+  `/api/today`; agents add a one-off with `POST /api/custom`. `logic.mjs` holds what
+  the dates mean and is shared by the page and the server.
 - The node allows 200 pods (`max-pods` in `ops/k3s/config.yaml`, 2026-10-23);
   110 was full.
 - Shared Traefik configuration is tracked under
