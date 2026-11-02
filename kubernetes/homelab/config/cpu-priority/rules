@@ -26,6 +26,19 @@ idle homelab time-backup-*
 10000 homelab notify-gateway-*
 10000 homelab ntfy-*
 
+# Search answers agents (the hourly parcel sweep) in seconds: every query is
+# an embedding call (onyx-embed), a model-server call, OpenSearch and Postgres.
+# At the default weight 1 a nightly build starved them: embedding 41 characters
+# took 20-148 s and every MCP call timed out (2026-11-02). Indexing stays idle.
+10000 homelab onyx-api-*
+10000 homelab onyx-mcp-*
+10000 homelab onyx-web-*
+10000 homelab onyx-embed-*
+10000 homelab onyx-model-*
+10000 homelab onyx-db-*
+10000 homelab onyx-cache-*
+10000 homelab onyx-opensearch-*
+
 # The nightly NixOS update builds here and has to finish in under an hour
 # (Erik, 2026-10-23); it waited behind everything else at weight 1. 2000 is
 # still far above the other pods together, but below the services above.
