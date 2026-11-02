@@ -96,7 +96,7 @@ fi
 # The emulator holds the big slot while it runs (heavy-emulator.sh). A big
 # job that uses adb or the emulator runs inside that reservation instead of
 # queueing behind it; other big jobs wait.
-emulator_holds() { [ -f /work/.slots/big.job ] && cut -f3 /work/.slots/big.job | grep -qx .emulator; }
+emulator_holds() { [ -f /work/.slots/big.job ] && cut -f3 /work/.slots/big.job 2> /dev/null | grep -qx .emulator; }
 shared=""
 if [ "$class" = big ] && [ "$ws" != /work/.emulator ] && emulator_holds; then
   uses='\b(adb|emulator)\b'
@@ -158,15 +158,18 @@ if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
     # ahead of this one.
     usual=$(typical "$class")
     left=$usual
-    if [ -f "/work/.slots/$class.job" ]; then
-      ran=$((($(date +%s) - $(stat -c %Y "/work/.slots/$class.job")) / 60))
+    # The running job can end at any moment and take this file with it. No
+    # stat inside the arithmetic: a syntax error there makes bash abandon the
+    # whole `if` around this loop, and the job starts without a slot.
+    if since=$(stat -c %Y "/work/.slots/$class.job" 2> /dev/null); then
+      ran=$((($(date +%s) - since) / 60))
       left=$((usual - ran))
       [ "$left" -ge 1 ] || left=1
     fi
     eta=$((left + ahead * usual))
     state="waiting for the $class-job slot: $ahead $class job(s) ahead of you, about $eta min (a $class job usually takes $usual min)."
     if [ "$class" = big ] && emulator_holds; then
-      state="waiting for the big-job slot: the emulator holds it since $(cut -c1-5 /work/.slots/big.job) (freed by heavy emulator stop, or after 30 idle minutes); $ahead big job(s) ahead of you. Jobs that use adb or the emulator run alongside it instead."
+      state="waiting for the big-job slot: the emulator holds it since $(cut -c1-5 /work/.slots/big.job 2> /dev/null) (freed by heavy emulator stop, or after 30 idle minutes); $ahead big job(s) ahead of you. Jobs that use adb or the emulator run alongside it instead."
     fi
     now=$(date +%s)
     if [ "$state" != "$last" ] && [ $((now - last_at)) -ge 60 ] || [ $((now - last_at)) -ge 300 ]; then
@@ -176,6 +179,12 @@ if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
     sleep 3
   done
   rm -f "$ticket"
+fi
+# Fail closed: however the queue above was left, a job that needed a slot and
+# has none does not start.
+if [ -n "${ticket:-}" ] && [ -z "${slot:-}" ]; then
+  echo "heavy: internal error: left the queue without a job slot; the job was not started" >&2
+  exit 98
 fi
 
 if [ "$develop" != no ] && [ -f "$ws/flake.nix" ] && grep -q devShell "$ws/flake.nix"; then

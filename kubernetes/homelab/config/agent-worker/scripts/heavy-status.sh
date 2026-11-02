@@ -24,7 +24,8 @@ typical() {
 echo "running jobs (one big slot, one small slot; a big job usually takes $(typical big) min, a small one $(typical small)):"
 for i in big small; do
   if [ -f "/work/.slots/$i.job" ] && ! flock -n "/work/.slots/$i" true 2> /dev/null; then
-    ran=$((($(date +%s) - $(stat -c %Y "/work/.slots/$i.job")) / 60))
+    since=$(stat -c %Y "/work/.slots/$i.job" 2> /dev/null) || continue
+    ran=$((($(date +%s) - since) / 60))
     if [ "$(cut -f3 "/work/.slots/$i.job")" = .emulator ]; then
       echo "  [$i] held by the emulator since $(cut -c1-5 "/work/.slots/$i.job") (${ran} min; freed by heavy emulator stop or 30 idle minutes)"
     else

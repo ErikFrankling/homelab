@@ -139,6 +139,7 @@ INI
       -allow-host-audio -grpc "$grpc_port" \
       -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on \
       > "$log" 2>&1 < /dev/null &
+    launcher=$!
     : "$audio_env"
     booted=0
     for _ in $(seq 1 240); do
@@ -146,7 +147,10 @@ INI
         booted=1
         break
       fi
-      running || fail "the emulator died while booting"
+      # The launcher takes a moment to become qemu-system, so it counts too:
+      # checking only for qemu reported a healthy emulator as dead and gave up
+      # the big slot while it went on booting.
+      running || kill -0 "$launcher" 2> /dev/null || fail "the emulator died while booting"
       sleep 2
     done
     [ "$booted" = 1 ] || { pkill -f "qemu-system.*-avd $avd" || true; fail "the emulator did not finish booting in 8 minutes"; }

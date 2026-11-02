@@ -96,6 +96,21 @@ cgroups, sshd, nix.conf, seed) or the Deployment restarts the pod and kills
 every job and the emulator. Check `heavy status` first and warn the agents
 using it.
 
+## When a job ends with status 255 and no message
+
+That is the SSH connection between `heavy` on the PC and the worker going away,
+which also kills the job (see the top of `scripts/heavy-run.sh`). Until
+2026-11-02 every `heavy` client shared one SSH master, which lived in the cgroup
+of whichever session or job connected first, so a session ending dropped every
+job at once. Masters are now per cgroup (dotfiles, `modules/home-manager/heavy`).
+The sshd log in this pod (`kubectl logs`) says whether the worker saw a timeout;
+`journalctl --user` on the PC shows what stopped in the milliseconds before.
+
+Nothing in the queue loop may be able to fail fatally: a bash arithmetic syntax
+error abandons the whole top-level `if` around the loop, which used to start
+the job without a slot. A job that leaves the queue without a slot now exits 98
+instead of starting.
+
 ## Services, secrets and the queue estimate
 
 - `heavy bg NAME -- CMD` is a **service** by default: no job slot, its own
