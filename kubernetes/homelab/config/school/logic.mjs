@@ -32,8 +32,8 @@ export function status(it, now = Date.now()) {
   return "missed";
 }
 export const finished = (it, now = Date.now()) => ["done", "passed"].includes(status(it, now));
-const closedAt = (it) => (it.lock_at && it.lock_at !== it.due ? new Date(it.lock_at) : null);
-export const stillOpen = (it, now = Date.now()) => it.origin === "manual" || (it.canvas && (!closedAt(it) || closedAt(it) > now));
+// Past its deadline but handing in still works. A lock date that has passed means it is closed.
+export const stillOpen = (it, now = Date.now()) => it.origin === "manual" || (it.canvas && (!it.lock_at || new Date(it.lock_at) > now));
 
 // Whole days between opening and deadline; the page also shows hours when under a day.
 export const windowMs = (it) => (it.opens ? new Date(it.due) - new Date(it.opens) : null);

@@ -96,7 +96,7 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .row:hover { background: #121316; }
 .row .main { min-width: 0; padding: 12px 12px 12px 0; }
 .row .title { font-size: 15px; line-height: 20px; font-weight: 500; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.row .meta { margin-top: 4px; font-size: 13px; line-height: 16px; color: var(--text-2); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+.row .meta { margin-top: 4px; font-size: 13px; line-height: 16px; color: var(--text-2); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
 .row .meta .sep { color: var(--text-3); }
 .row .newdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 0 8px 2px 0; vertical-align: middle; }
 .row .side { text-align: right; padding: 12px 4px 12px 8px; }
@@ -119,7 +119,6 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .row.deferred .cb span { border-style: dashed; }
 .oc { width: 44px; height: 44px; display: grid; place-items: center start; color: #b9beff; }
 .oc svg.i { margin-left: 2px; }
-.row.opening .meta { flex-wrap: wrap; white-space: normal; row-gap: 2px; }
 .op { color: #b9beff; font-weight: 500; }
 .row .meta .tag { color: var(--text-3); }
 
@@ -151,6 +150,7 @@ main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); min-height: cal
 .cell.today .n { color: var(--accent); background: var(--accent-bg); font-weight: 600; }
 .chip .op { color: var(--text-3); font-weight: 500; }
 .chip { display: grid; grid-template-columns: 7px 40px 1fr; gap: 0 6px; align-items: baseline; padding: 2px 6px; border-radius: 4px; font-size: 12px; line-height: 16px; cursor: pointer; text-align: left; width: 100%; }
+.cell.dense .chip .x { -webkit-line-clamp: 1; }
 .chip:hover { background: var(--bg-3); }
 .chip .dot { transform: translateY(-1px); }
 .chip .t { color: var(--text-3); }
@@ -487,8 +487,9 @@ function month() {
   let cells = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="dow">${ph ? d[0] : d}</div>`).join("");
   for (let i = 0; i < weeks * 7; i++) {
     const k = addDays(start, i), items = entriesOn(k, opening), out = k.slice(0, 7) !== mon;
-    const shown = items.length > maxChips ? items.slice(0, maxChips - 1) : items;
-    cells += `<div class="cell${out ? " out" : ""}${i % 7 === 6 ? " c7" : ""}${k === t ? " today" : ""}${k === selDay ? " sel" : ""}" data-day="${k}">
+    // Up to three on a busy day, one line each so they fit; quiet days keep two-line titles.
+    const shown = items.slice(0, maxChips);
+    cells += `<div class="cell${items.length >= maxChips ? " dense" : ""}${out ? " out" : ""}${i % 7 === 6 ? " c7" : ""}${k === t ? " today" : ""}${k === selDay ? " sel" : ""}" data-day="${k}">
       <span class="n num">${Number(k.slice(8))}</span>${ph ? "" : shown.map((e) => e.chip()).join("")}
       ${!ph && items.length > shown.length ? `<button class="more" data-pop="${k}">+${items.length - shown.length} more</button>` : ""}
       ${ph ? `<span class="mdots">${items.slice(0, 3).map((e) => `<span class="dot${e.ring ? " ring" : ""}${e.done ? " faded" : ""}" style="--c:${color(e.course)}"></span>`).join("")}${items.length > 3 ? `<span class="plus">+${items.length - 3}</span>` : ""}</span>` : ""}</div>`;
