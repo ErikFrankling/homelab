@@ -295,7 +295,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: model-server
-          image: docker.io/onyxdotapp/onyx-model-server:v4.9.7@sha256:40e0f813144b6cc2365258815efb2150171cc217d22622c4b7cf621d46285bbd
+          image: docker.io/onyxdotapp/onyx-model-server:v4.9.8@sha256:c9c681009a3f43ed6c5a4afa60ec5cb769726c5c93dc8b5e35e3042e8eaf9a60
           envFrom:
             - configMapRef:
                 name: onyx-env
@@ -354,7 +354,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: api
-          image: docker.io/onyxdotapp/onyx-backend:v4.9.7@sha256:c3c8037ef81adc860e021eb43f27a523528e3d5b9f28ab8ab50af8037ae9cbed
+          image: docker.io/onyxdotapp/onyx-backend:v4.9.8@sha256:40d5f27c51a43dc4003a375c65268d41d9683a6a77665b33dd66c34d841bb153
           command:
             - /bin/sh
             - -c
@@ -417,7 +417,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: background
-          image: docker.io/onyxdotapp/onyx-backend:v4.9.7@sha256:c3c8037ef81adc860e021eb43f27a523528e3d5b9f28ab8ab50af8037ae9cbed
+          image: docker.io/onyxdotapp/onyx-backend:v4.9.8@sha256:40d5f27c51a43dc4003a375c65268d41d9683a6a77665b33dd66c34d841bb153
           command: ["/app/scripts/supervisord_entrypoint.sh"]
           envFrom:
             - configMapRef:
@@ -448,7 +448,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: mcp
-          image: docker.io/onyxdotapp/onyx-backend:v4.9.7@sha256:c3c8037ef81adc860e021eb43f27a523528e3d5b9f28ab8ab50af8037ae9cbed
+          image: docker.io/onyxdotapp/onyx-backend:v4.9.8@sha256:40d5f27c51a43dc4003a375c65268d41d9683a6a77665b33dd66c34d841bb153
           command: ["python", "-m", "onyx.mcp_server_main"]
           envFrom:
             - configMapRef:
@@ -498,7 +498,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: web
-          image: docker.io/onyxdotapp/onyx-web-server:v4.9.7@sha256:2fd72d201a6535adaa8e17da9228be6a85ef4ddcb612c3affe2b838cd7ae83e0
+          image: docker.io/onyxdotapp/onyx-web-server:v4.9.8@sha256:a11ae718ec02b15b04570bbf8920219a6c555542e5f5684e3bdfd21aff12c4dd
           envFrom:
             - configMapRef:
                 name: onyx-env
