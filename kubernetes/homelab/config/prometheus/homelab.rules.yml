@@ -269,9 +269,10 @@ groups:
       # Free pages the kernel files as CMA (kernel 7.0 marks about 4.6 GiB
       # that way) only take movable allocations: not the passthrough guest's
       # pinned RAM, not the kernel's own. MemFree minus CmaFree is the real
-      # headroom.
+      # headroom. Page cache fills MemFree by itself and is reclaimed freely, so
+      # count MemAvailable (2026-11-05: 1.1 GiB MemFree-CmaFree, 6.4 GiB available, PSI 0).
       - alert: ProxmoxUsableMemoryLow
-        expr: (node_memory_MemFree_bytes{job="proxmox"} - node_memory_CmaFree_bytes{job="proxmox"}) < 1.5 * 1024^3
+        expr: (node_memory_MemAvailable_bytes{job="proxmox"} - node_memory_CmaFree_bytes{job="proxmox"}) < 1.5 * 1024^3
         for: 15m
         labels: {severity: warning, project: homelab, session: "true", host_name: proxmox}
         annotations:

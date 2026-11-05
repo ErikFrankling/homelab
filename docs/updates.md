@@ -162,7 +162,7 @@ sit in pageblocks typed CMA (`nr_free_cma` in `/proc/vmstat`,
 Only movable allocations (page cache, ordinary process memory) may use them:
 not the guest's pinned RAM and not the kernel. The IOMMU also keeps a 64-byte
 record per pinned 4 KiB page (`dmaengine-unmap-2` in `slabtop`, about
-0.9 GiB for 56 GiB). The real headroom is `MemFree - CmaFree`.
+0.9 GiB for 56 GiB). The real headroom is `MemAvailable - CmaFree` (not `MemFree`: page cache fills it and is reclaimed freely).
 
 At 56 GiB that headroom was about 0.4 GiB. From 2026-10-27 ~07:30 UTC the host
 reclaimed nonstop (memory PSI `full` 40-90%, direct reclaim scanning hundreds
@@ -173,7 +173,7 @@ other ingresses timed out. Since 2026-10-27 VM 200 has **52 GiB**
 (`qm set 200 --memory 53248`), which leaves about 4.6 GiB of non-CMA memory,
 and `ksmtuned` is disabled (`ops/updates/install.sh`). Alerts
 `ProxmoxUsableMemoryLow` (under 1.5 GiB non-CMA free), `ProxmoxMemoryStalled`
-and `NodeCPUSteal` watch it. Keep at least 3 GiB of `MemFree - CmaFree` when
+and `NodeCPUSteal` watch it. Keep at least 3 GiB of `MemAvailable - CmaFree` when
 raising it, and recheck `nr_free_cma` after every kernel change.
 
 ### Supervised kernel reboot
