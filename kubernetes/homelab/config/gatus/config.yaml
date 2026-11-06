@@ -122,6 +122,16 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  # CLIProxyAPI: every Claude Code/Codex session depends on it.
+  - name: cliproxy
+    group: phone
+    url: https://cliproxy.erikfrankling.duckdns.org/
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   - name: brain
     group: phone
     url: https://brain.erikfrankling.duckdns.org/health

@@ -46,6 +46,15 @@ spec:
       services:
         - name: executor
           port: 80
+    # CLIProxyAPI holds every Claude/Codex subscription login (apps/cliproxy.yaml).
+    # lan-only is load-bearing: never expose it.
+    - kind: Rule
+      match: Host(`cliproxy.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: cliproxy
+          port: 8317
     # The company brain: how things are done on these machines. Not secret by
     # design, but internal. lan-and-cluster because Executor's brain app
     # reaches it from inside the cluster by this name.
