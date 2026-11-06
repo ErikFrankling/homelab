@@ -26,19 +26,12 @@ Never print management usage responses unfiltered: they contain upstream tokens.
 
 ## Sign an account in
 
-Logins are OAuth and are stored on the `cliproxy-data` PVC (`/data/auths`).
-From the PC (the browser that finishes the login must reach the callback port):
-
-```sh
-kubectl -n homelab port-forward deploy/cliproxy 54545:54545   # Claude
-kubectl -n homelab port-forward deploy/cliproxy 1455:1455     # Codex
-kubectl -n homelab exec -it deploy/cliproxy -- /CLIProxyAPI/CLIProxyAPI -config /data/config.yaml -claude-login -no-browser
-kubectl -n homelab exec -it deploy/cliproxy -- /CLIProxyAPI/CLIProxyAPI -config /data/config.yaml -codex-device-login
-```
-
-(kubectl runs on naiaclaw: `ssh -L 54545:127.0.0.1:54545 naiaclaw sudo kubectl ...`.)
-Open the printed URL in a browser signed in to that account. To bench an
-account, set `"disabled": true` in its auth JSON.
+Use the built-in panel: https://cliproxy.erikfrankling.duckdns.org/management.html
+(management key: `cat /run/secrets/cliproxy-management-key` on the PC or laptop).
+OAuth login, pick Claude or Codex, open the link in a browser signed in to that
+account, authorize, then paste the localhost callback URL the browser lands on
+back into the panel. Logins are stored on the `cliproxy-data` PVC
+(`/data/auths`). To bench an account, disable it in the panel.
 
 ## Clients
 
