@@ -61,6 +61,12 @@ spec:
           image: ghcr.io/usefulsoftwareco/executor-selfhost:2.0.0-beta.24@sha256:39d8ce360adf86df46e953f43551dad4440d04d7246d30fc7b0d6f3f5cfed3f7
           imagePullPolicy: IfNotPresent
           env:
+            - name: SSO_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: sso-clients, key: SSO_CLIENT_SECRET}
+            - {"name": "SSO_DISCOVERY_URL", "value": "https://auth.erikfrankling.duckdns.org/application/o/executor/.well-known/openid-configuration"}
+            - {"name": "SSO_CLIENT_ID", "value": "homelab-executor"}
+            - {"name": "SSO_ALLOWED_DOMAINS", "value": "frankling.se"}
             # Must match the URL browsers load exactly, or sign-in fails with
             # an invalid-origin error.
             - name: BETTER_AUTH_URL

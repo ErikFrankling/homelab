@@ -44,8 +44,24 @@ spec:
         - name: grafana
           image: docker.io/grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
           env:
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: sso-clients, key: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_ENABLED", "value": "true"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_NAME", "value": "Homelab"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_CLIENT_ID", "value": "homelab-grafana"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_SCOPES", "value": "openid profile email"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_AUTH_URL", "value": "https://auth.erikfrankling.duckdns.org/application/o/authorize/"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_TOKEN_URL", "value": "https://auth.erikfrankling.duckdns.org/application/o/token/"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_API_URL", "value": "https://auth.erikfrankling.duckdns.org/application/o/userinfo/"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN", "value": "true"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP", "value": "true"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_USE_PKCE", "value": "true"}
+            - {"name": "GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH", "value": "contains(groups[*], 'authentik Admins') && 'Admin' || 'Viewer'"}
+            - {"name": "GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION", "value": "30d"}
+            - {"name": "GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION", "value": "90d"}
             - {name: GF_SERVER_ROOT_URL, value: "https://grafana.erikfrankling.duckdns.org/"}
-            - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "true"}
+            - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "false"}
             - {name: GF_AUTH_ANONYMOUS_ORG_ROLE, value: Viewer}
             - {name: GF_USERS_ALLOW_SIGN_UP, value: "false"}
             - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}
