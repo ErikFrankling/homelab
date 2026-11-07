@@ -63,7 +63,7 @@ spec:
         - name: openclaw
           port: 18789
     - kind: Rule
-      match: Host(`executor.erikfrankling.duckdns.org`) && Path(`/login`)
+      match: (Host(`executor.erikfrankling.duckdns.org`) || Host(`fleet.erikfrankling.duckdns.org`)) && Path(`/login`)
       middlewares:
         - name: lan-only
       services:

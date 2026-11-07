@@ -76,6 +76,7 @@ configMapGenerator:
   - name: executor-login
     files:
       - config/executor-login/index.html
+      - config/executor-login/fleet.html
       - config/executor-login/nginx.conf
   - name: authentik-blueprints
     options:

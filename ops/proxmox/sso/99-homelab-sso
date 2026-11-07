@@ -1,0 +1,2 @@
+// Keep the small native-OIDC entry patch after Proxmox package upgrades.
+DPkg::Post-Invoke { "/usr/local/lib/homelab-sso/automatic-entry.py"; };

@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Opening Fleet</title>
+<p id="status">Opening Fleet…</p><button hidden id="retry">Try again</button>
+<script>
+// Fleet's name-only login has no default-owner setting. Use its existing API.
+async function enter() {
+  document.querySelector('#retry').hidden = true;
+  try {
+    const current = await fetch('/api/me', {credentials:'same-origin'});
+    if (!current.ok) {
+      const response = await fetch('/api/login', {
+        method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({user:'erik'})
+      });
+      if (!response.ok) throw new Error('Fleet is unavailable.');
+    }
+    location.replace('/');
+  } catch(error) {
+    document.querySelector('#status').textContent = error.message;
+    document.querySelector('#retry').hidden = false;
+  }
+}
+document.querySelector('#retry').onclick = enter;
+enter();
+</script></html>
