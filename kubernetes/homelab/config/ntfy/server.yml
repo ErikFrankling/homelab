@@ -8,7 +8,7 @@ behind-proxy: true
 cache-file: /var/lib/ntfy/cache.db
 cache-duration: 72h
 auth-file: /var/lib/ntfy/auth.db
-auth-default-access: deny-all
+auth-default-access: read-write # Private network only; no browser password.
 # Erik reads (and may post) on `erik`; senders may only write to it.
 #   agents: the notify-erik CLI on the PCs and the Executor app `notify`
 #   alerts: Alertmanager (docs/observability.md)
@@ -19,7 +19,7 @@ auth-access:
   - "alerts:erik:wo"
   - "time:erik:wo"
 enable-signup: false
-enable-login: true
+enable-login: false
 enable-reservations: false
 
 # A backstop only: the senders rate-limit themselves (a few an hour). This
