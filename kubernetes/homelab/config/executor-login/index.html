@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Opening Executor</title>
+<p id="status">Opening Executor…</p><button hidden id="retry">Try again</button>
+<script>
+// Upstream has optional SSO but no automatic-entry option. Use its supported
+// Better Auth endpoints, preserving the requested local destination and cookies.
+const params = new URLSearchParams(location.search);
+const destination = new URL(params.get('redirect') || '/', location.origin);
+if (destination.origin !== location.origin || destination.pathname === '/login') destination.href = location.origin;
+async function enter() {
+  document.querySelector('#retry').hidden = true;
+  try {
+    if (params.has('error')) throw new Error('Shared sign-in could not be completed.');
+    const sessionResponse = await fetch('/api/auth/get-session', {credentials:'same-origin'});
+    if (!sessionResponse.ok) throw new Error('Could not check your session.');
+    const session = await sessionResponse.json();
+    if (session?.user) { location.replace(destination.href); return; }
+    const response = await fetch('/api/auth/sign-in/social', {
+      method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({provider:'sso', callbackURL:destination.href, errorCallbackURL:'/login?error=sso'})
+    });
+    const result = await response.json();
+    if (!response.ok || !result.url) throw new Error('Shared sign-in is unavailable.');
+    const target = new URL(result.url);
+    if (target.origin !== 'https://auth.erikfrankling.duckdns.org') throw new Error('Unexpected sign-in destination.');
+    location.replace(target.href);
+  } catch(error) {
+    document.querySelector('#status').textContent = error.message;
+    document.querySelector('#retry').hidden = false;
+  }
+}
+document.querySelector('#retry').onclick = () => { params.delete('error'); enter(); };
+enter();
+</script></html>

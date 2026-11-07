@@ -23,6 +23,7 @@ resources:
   - apps/time.yaml
   - apps/time-v2.yaml
   - apps/school.yaml
+  - apps/executor-login.yaml
   - apps/executor.yaml
   - apps/brain.yaml
   - apps/nix-builder.yaml
@@ -71,6 +72,10 @@ resources:
   - secrets/school.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
+  - name: executor-login
+    files:
+      - config/executor-login/index.html
+      - config/executor-login/nginx.conf
   - name: authentik-blueprints
     options:
       disableNameSuffixHash: true

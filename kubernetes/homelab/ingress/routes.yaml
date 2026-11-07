@@ -62,6 +62,13 @@ spec:
       services:
         - name: openclaw
           port: 18789
+    - kind: Rule
+      match: Host(`executor.erikfrankling.duckdns.org`) && Path(`/login`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: executor-login
+          port: 8080
     # Executor holds OAuth tokens for every connected account and proxies the
     # PC's computer-use MCP. lan-only is load-bearing: never expose it.
     - kind: Rule
