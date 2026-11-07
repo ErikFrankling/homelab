@@ -2,12 +2,6 @@ version: 1
 metadata:
   name: Homelab single sign-on
 entries:
-  - model: authentik_blueprints.metaapplyblueprint
-    attrs:
-      identifiers: {name: Default - Authentication flow}
-  - model: authentik_blueprints.metaapplyblueprint
-    attrs:
-      identifiers: {name: Default - Provider authorization flow (implicit consent)}
   - model: authentik_stages_user_login.userloginstage
     identifiers: {name: default-authentication-login}
     attrs: {session_duration: 'days=30', remember_me_offset: 'days=60'}
