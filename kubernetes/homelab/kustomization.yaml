@@ -33,6 +33,8 @@ resources:
   - apps/x-graph-embed.yaml
   - apps/onyx.yaml
   - apps/t3-updates.yaml
+  - apps/cliproxy-management.yaml
+  - secrets/cliproxy-management.enc.yaml
   - apps/cliproxy.yaml
   - apps/cpa-usage-keeper.yaml
   - apps/homepage.yaml

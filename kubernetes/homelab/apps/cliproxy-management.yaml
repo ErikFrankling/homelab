@@ -1,0 +1,60 @@
+# Upstream has no management auth-off setting. Only this private gateway holds
+# the key; the pinned frontend patch uses a non-secret session marker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cliproxy-management
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cliproxy-management
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cliproxy-management
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: management
+          image: docker.io/library/cliproxy-management-network:953fb244-1
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /management.html
+              port: http
+          resources:
+            requests:
+              memory: 8Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: config
+          secret:
+            secretName: cliproxy-management
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cliproxy-management
+spec:
+  selector:
+    app.kubernetes.io/name: cliproxy-management
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

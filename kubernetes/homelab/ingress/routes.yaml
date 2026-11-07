@@ -71,6 +71,13 @@ spec:
       services:
         - name: executor
           port: 80
+    - kind: Rule
+      match: Host(`cliproxy.erikfrankling.duckdns.org`) && (Path(`/management.html`) || PathPrefix(`/v0/management/`) || PathPrefix(`/v8/management/`))
+      middlewares:
+        - name: lan-only
+      services:
+        - name: cliproxy-management
+          port: 8080
     # CLIProxyAPI holds every Claude/Codex subscription login (apps/cliproxy.yaml).
     # lan-only is load-bearing: never expose it.
     - kind: Rule
