@@ -55,6 +55,15 @@ spec:
       services:
         - name: cliproxy
           port: 8317
+    # Usage and quota dashboard for CLIProxyAPI (apps/cpa-usage-keeper.yaml);
+    # it holds the proxy's management key, so lan-only.
+    - kind: Rule
+      match: Host(`cliproxy-usage.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: cpa-usage-keeper
+          port: 80
     # The company brain: how things are done on these machines. Not secret by
     # design, but internal. lan-and-cluster because Executor's brain app
     # reaches it from inside the cluster by this name.

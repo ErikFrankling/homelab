@@ -38,3 +38,12 @@ back into the panel. Logins are stored on the `cliproxy-data` PVC
 Dotfiles `modules/home-manager/cliproxy.nix` sets `ANTHROPIC_BASE_URL` and an
 `apiKeyHelper` in `~/.claude/settings.json`, and the `cliproxy` model provider
 in `~/.codex/config.toml`, on every host.
+
+## Usage and quota dashboard
+
+CPA Usage Keeper (`apps/cpa-usage-keeper.yaml`) at
+https://cliproxy-usage.erikfrankling.duckdns.org (lan-only): cost and tokens
+over time per account and model, and each account's 5-hour and weekly limits
+with reset times. It drains the proxy's usage queue (needs
+`observability.usage.usage-statistics-enabled: true`) into SQLite on its PVC,
+so it is the only consumer of that queue. Log in with the management key.

@@ -28,6 +28,7 @@ resources:
   - apps/onyx.yaml
   - apps/t3-updates.yaml
   - apps/cliproxy.yaml
+  - apps/cpa-usage-keeper.yaml
   - apps/notify-gateway.yaml
   - apps/ntfy.yaml
   - apps/alloy.yaml
@@ -48,6 +49,7 @@ resources:
   - secrets/gatus.enc.yaml
   - secrets/ntfy.enc.yaml
   - secrets/cliproxy.enc.yaml
+  - secrets/cpa-usage-keeper.enc.yaml
   - secrets/alerts-ntfy.enc.yaml
   - secrets/notify-gateway.enc.yaml
   - secrets/time-notify.enc.yaml
