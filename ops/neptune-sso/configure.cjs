@@ -21,7 +21,7 @@ const c=new Client({host:process.env.DB_PSQL_HOST,port:process.env.DB_PSQL_PORT,
  identityMetadata:'https://auth.erikfrankling.duckdns.org/application/o/neptune/.well-known/openid-configuration',
  clientID:'homelab-neptune',clientSecret,scope:'openid profile email',tokenAuth:'basic',prompt:'none',
  redirectUrl:'https://planet9-test.erikfrankling.duckdns.org/user/logon/openid-connect/homelab/callback',
- loginRedirectUrl:'/cockpit',roleAssignment:[],departmentAssignment:[],assignFirstLogin:true,
+ loginRedirectUrl:'/cockpit.html',roleAssignment:[],departmentAssignment:[],assignFirstLogin:true,
  claimsMap:[{id:crypto.randomUUID(),userField:'username',claim:'preferred_username'}]};
  config.idp=[...config.idp.filter(x=>x.path!=='homelab'),provider];
  config.defaultLoginUrl='/user/logon/openid-connect/homelab';
