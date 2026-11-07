@@ -1,0 +1,10 @@
+- datetime:
+    text_size: xl
+    format:
+      dateStyle: long
+      timeStyle: short
+      hour12: false
+- search:
+    provider: custom
+    url: https://search.erikfrankling.duckdns.org/search?q=
+    target: _blank

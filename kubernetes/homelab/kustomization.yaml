@@ -29,6 +29,7 @@ resources:
   - apps/t3-updates.yaml
   - apps/cliproxy.yaml
   - apps/cpa-usage-keeper.yaml
+  - apps/homepage.yaml
   - apps/notify-gateway.yaml
   - apps/ntfy.yaml
   - apps/alloy.yaml
@@ -62,6 +63,17 @@ resources:
   - secrets/school.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
+  # Content-hashed: editing config/homepage/* rolls the homepage deployment.
+  - name: homepage-config
+    files:
+      - config/homepage/settings.yaml
+      - config/homepage/services.yaml
+      - config/homepage/widgets.yaml
+      - config/homepage/bookmarks.yaml
+      - config/homepage/docker.yaml
+      - config/homepage/kubernetes.yaml
+      - config/homepage/custom.css
+      - config/homepage/custom.js
   # Not content-hashed: apply.sh re-reads the rules every 30 s, so edits take
   # effect without restarting the DaemonSet.
   - name: cpu-priority

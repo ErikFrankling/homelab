@@ -1,0 +1,119 @@
+# Every web service Erik runs, one link each. Add new services here when you
+# add a route (ingress/routes.yaml, external-routes.yaml).
+- Daily:
+    - T3 Code:
+        href: https://t3code.erikfrankling.duckdns.org
+        icon: mdi-code-braces
+        description: Coding agents (PC)
+    - Time:
+        href: https://time.erikfrankling.duckdns.org
+        icon: mdi-clock-outline
+        description: Time tracker
+    - School:
+        href: https://school.erikfrankling.duckdns.org
+        icon: mdi-school
+        description: KTH deadlines
+    - X graph:
+        href: https://x.erikfrankling.duckdns.org
+        icon: si-x
+        description: Bookmarks, likes, saved posts
+    - Chat:
+        href: https://chat.erikfrankling.duckdns.org
+        icon: open-webui.png
+        description: Open WebUI
+    - Search:
+        href: https://search.erikfrankling.duckdns.org
+        icon: searxng.png
+        description: SearXNG
+    - Vault:
+        href: https://vault.erikfrankling.duckdns.org
+        icon: vaultwarden.png
+        description: Vaultwarden passwords
+    - Brain:
+        href: https://brain.erikfrankling.duckdns.org
+        icon: mdi-brain
+        description: How things are done here
+- AI:
+    - CLIProxy:
+        href: https://cliproxy.erikfrankling.duckdns.org/management.html
+        icon: mdi-swap-horizontal
+        description: Claude and Codex accounts
+    - CLIProxy usage:
+        href: https://cliproxy-usage.erikfrankling.duckdns.org
+        icon: mdi-chart-line
+        description: Usage, cost, quotas (Keeper)
+    - Executor:
+        href: https://executor.erikfrankling.duckdns.org
+        icon: mdi-connection
+        description: Apps, accounts and MCP tools
+    - OpenClaw:
+        href: https://claw.erikfrankling.duckdns.org
+        icon: mdi-robot
+        description: OpenClaw agent
+    - OpenCode:
+        href: https://opencode.erikfrankling.duckdns.org
+        icon: mdi-console
+        description: OpenCode web
+    - Fleet:
+        href: https://fleet.erikfrankling.duckdns.org
+        icon: mdi-ferry
+        description: Fleet
+    - llama-swap:
+        href: http://192.168.50.232:8000
+        icon: mdi-chip
+        description: Local models on the PC GPU
+- Monitoring:
+    - Health:
+        href: https://health.erikfrankling.duckdns.org
+        icon: gatus.png
+        description: Gatus health checks
+        widget:
+          type: gatus
+          url: http://gatus.homelab.svc.cluster.local
+    - Grafana:
+        href: https://grafana.erikfrankling.duckdns.org
+        icon: grafana.png
+        description: Logs and metrics
+    - Prometheus:
+        href: https://prometheus.erikfrankling.duckdns.org
+        icon: prometheus.png
+    - Alertmanager:
+        href: https://alertmanager.erikfrankling.duckdns.org
+        icon: alertmanager.png
+    - ntfy:
+        href: https://ntfy.erikfrankling.duckdns.org
+        icon: ntfy.png
+        description: Phone notifications
+    - Traefik:
+        href: https://traefik.erikfrankling.duckdns.org
+        icon: traefik.png
+        description: Routes
+    - AdGuard:
+        href: https://adguard.erikfrankling.duckdns.org
+        icon: adguard-home.png
+        description: DNS and ad blocking
+- Infrastructure:
+    - Proxmox:
+        href: https://192.168.50.10:8006
+        icon: proxmox.png
+    - Nix cache:
+        href: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
+        icon: si-nixos
+        description: Binary cache and builder
+    - Registry:
+        href: https://registry.erikfrankling.duckdns.org/v2/_catalog
+        icon: mdi-package-variant
+        description: Container registry
+    - T3 updates:
+        href: https://t3-updates.erikfrankling.duckdns.org/healthz
+        icon: mdi-cellphone-arrow-down
+        description: Android app updates
+    - Naiaclaw API:
+        href: https://naiaclaw-api.erikfrankling.duckdns.org
+        icon: mdi-api
+    - Planet9 test:
+        href: https://planet9-test.erikfrankling.duckdns.org
+        icon: mdi-earth
+    - p9eval:
+        href: https://p9eval.erikfrankling.duckdns.org
+        icon: mdi-clipboard-check-outline

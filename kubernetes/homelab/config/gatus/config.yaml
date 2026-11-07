@@ -132,6 +132,15 @@ endpoints:
       timeout: 20s
     conditions:
       - "[STATUS] == 200"
+  - name: home
+    group: phone
+    url: https://home.erikfrankling.duckdns.org/
+    interval: 5m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   - name: cliproxy-usage
     group: phone
     url: https://cliproxy-usage.erikfrankling.duckdns.org/

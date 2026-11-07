@@ -1,0 +1,19 @@
+title: Home
+theme: dark
+color: slate
+headerStyle: clean
+hideVersion: true
+statusStyle: dot
+layout:
+  Daily:
+    style: row
+    columns: 4
+  AI:
+    style: row
+    columns: 4
+  Monitoring:
+    style: row
+    columns: 4
+  Infrastructure:
+    style: row
+    columns: 4
