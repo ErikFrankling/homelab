@@ -34,9 +34,9 @@ spec:
         - name: openclaw
           image: ghcr.io/openclaw/openclaw:2026.5.28@sha256:dbad4655fb87aa8d8662323daf9f46f4721504324e22c9f99d84849e609f5b2c
           imagePullPolicy: IfNotPresent
-          # Supported private-network mode; ingress is LAN/Tailscale only.
+          # Upstream permits auth=none only on loopback; the sidecar serves the private route.
           command: ["node", "dist/index.js"]
-          args: ["gateway", "--allow-unconfigured", "--bind", "lan", "--auth", "none"]
+          args: ["gateway", "--allow-unconfigured", "--bind", "loopback", "--auth", "none"]
           env:
             - name: OPENCLAW_DISABLE_BONJOUR
               value: "1"
@@ -46,7 +46,7 @@ spec:
             - secretRef:
                 name: openclaw-env
           ports:
-            - containerPort: 18789
+            - containerPort: 18790
               name: http
               protocol: TCP
           livenessProbe:
@@ -88,6 +88,24 @@ spec:
           volumeMounts:
             - mountPath: /home/node/.openclaw
               name: data
+        - name: private-network
+          image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+          command: ["nginx", "-g", "daemon off;"]
+          resources:
+            requests:
+              memory: 8Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: private-network
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
       hostAliases:
         - hostnames:
             - host.docker.internal
@@ -100,6 +118,9 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       terminationGracePeriodSeconds: 60
       volumes:
+        - name: private-network
+          configMap:
+            name: openclaw-private-network
         - name: data
           persistentVolumeClaim:
             claimName: openclaw-data
@@ -118,3 +139,30 @@ spec:
   selector:
     app.kubernetes.io/name: openclaw
   type: LoadBalancer
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-private-network
+data:
+  nginx.conf: |
+    pid /tmp/nginx.pid;
+    events {}
+    http {
+      access_log off;
+      client_body_temp_path /tmp/client;
+      proxy_temp_path /tmp/proxy;
+      map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+      server {
+        listen 18790;
+        location / {
+          proxy_pass http://127.0.0.1:18789;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection $connection_upgrade;
+          proxy_read_timeout 3600s;
+        }
+      }
+    }

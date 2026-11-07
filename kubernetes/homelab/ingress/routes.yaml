@@ -40,7 +40,6 @@ spec:
       match: Host(`adguard.erikfrankling.duckdns.org`)
       middlewares:
         - name: lan-only
-        - name: homelab-sso
       services:
         - name: adguard
           port: 80
@@ -53,7 +52,6 @@ spec:
       match: Host(`chat.erikfrankling.duckdns.org`)
       middlewares:
         - name: lan-only
-        - name: homelab-sso
       services:
         - name: openwebui
           port: 8080
@@ -87,7 +85,6 @@ spec:
       match: Host(`home.erikfrankling.duckdns.org`)
       middlewares:
         - name: lan-only
-        - name: homelab-sso
       services:
         - name: homepage
           port: 80
