@@ -112,7 +112,7 @@ endpoints:
     group: phone
     headers:
       Connection: close
-    url: https://chat.erikfrankling.duckdns.org/
+    url: https://chat.erikfrankling.duckdns.org/health
     interval: 2m
     client:
       proxy-url: http://127.0.0.1:1055
@@ -318,7 +318,7 @@ endpoints:
       - "[CERTIFICATE_EXPIRATION] > 480h"
   - name: open-webui
     group: lan
-    url: https://chat.erikfrankling.duckdns.org/
+    url: https://chat.erikfrankling.duckdns.org/health
     interval: 2m
     conditions:
       - "[STATUS] == 200"

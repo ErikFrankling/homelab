@@ -75,3 +75,23 @@ before maintenance that changes data.
 - https://github.com/UsefulSoftwareCo/executor/blob/v2/apps/hosted/self-host/compose.yaml
 - https://github.com/dani-garcia/vaultwarden/blob/1.37.5/.env.template
 - https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration
+
+## Verification and recovery
+
+Verified on 2026-11-07: one Authentik session completed Grafana login, Keeper
+OIDC administrator login, Executor account linking and a fresh SSO login,
+and authenticated requests to AdGuard `/control/status`, Chat and Homepage.
+Unauthenticated requests, including forged identity headers, redirect to login.
+Direct HTTP from an unrelated pod to AdGuard/Open WebUI is rejected by the
+NetworkPolicies. AdGuard DNS resolution and blocking checks pass.
+
+Open WebUI `/health` is an explicit LAN/cluster-only unauthenticated health
+route; both Gatus checks use it rather than merely checking a login page.
+
+Executor uses `/api/auth/callback/sso` (its social login route), not the generic
+OAuth plugin's alternative callback. Existing password accounts must explicitly
+link SSO first; the owner was linked and verified through the supported API.
+
+Initial PostgreSQL dump: `~/.local/state/homelab-sso/initial-config-2026-11-07.dump`
+on the PC, private permissions, archive checked with `pg_restore --list`. This
+is an initial recovery copy, not a replacement for regular off-machine backups.

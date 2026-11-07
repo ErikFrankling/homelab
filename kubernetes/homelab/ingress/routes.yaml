@@ -6,6 +6,14 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Public-to-private-network health response only; chat content still needs SSO.
+    - kind: Rule
+      match: Host(`chat.erikfrankling.duckdns.org`) && Path(`/health`)
+      middlewares:
+        - name: lan-and-cluster
+      services:
+        - name: openwebui
+          port: 8080
     # Outpost callbacks are authenticated by Authentik, not forwardAuth itself.
     - kind: Rule
       match: (Host(`adguard.erikfrankling.duckdns.org`) || Host(`home.erikfrankling.duckdns.org`) || Host(`chat.erikfrankling.duckdns.org`)) && PathPrefix(`/outpost.goauthentik.io/`)
