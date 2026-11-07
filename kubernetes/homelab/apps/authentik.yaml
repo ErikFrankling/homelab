@@ -82,6 +82,8 @@ spec:
           args:
             - server
           env:
+            - name: HOMELAB_SSO_REVISION
+              value: "2"
           envFrom:
             - secretRef:
                 name: authentik-env
@@ -198,6 +200,8 @@ spec:
           args:
             - worker
           env:
+            - name: HOMELAB_SSO_REVISION
+              value: "2"
           envFrom:
             - secretRef:
                 name: authentik-env
