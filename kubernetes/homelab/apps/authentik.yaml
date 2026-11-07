@@ -131,7 +131,7 @@ spec:
             limits:
               memory: 1Gi
             requests:
-              memory: 256Mi
+              memory: 128Mi
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -250,7 +250,7 @@ spec:
             limits:
               memory: 1Gi
             requests:
-              memory: 256Mi
+              memory: 128Mi
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
