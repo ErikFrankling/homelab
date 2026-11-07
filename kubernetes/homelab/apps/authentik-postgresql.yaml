@@ -110,7 +110,7 @@
             },
             "resources": {
               "requests": {
-                "memory": "128Mi"
+                "memory": "32Mi"
               },
               "limits": {
                 "memory": "512Mi"
