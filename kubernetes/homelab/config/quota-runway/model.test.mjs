@@ -39,3 +39,15 @@ test('cached quota uses usedPercent correctly and a missing 5h limit stays unkno
  assert.equal(accountState(a,'secondary',now).remaining,84);
  assert.equal(accountState(a,'primary',now).remaining,null);
 });
+
+test('a long gap between two valid observations breaks the drawn history line',()=>{
+ const a={points:[{t:now-4*HOUR,p:90,reset:now+HOUR},{t:now,p:50,reset:now+HOUR}]};
+ const values=historicalPool([a],now-4*HOUR,now);
+ assert.ok(values.some(p=>p.value===null));
+ assert.equal(values[0].value,.9);assert.equal(values.at(-1).value,.5);
+});
+
+test('unchanged observations in one reset cycle keep a known depleted plateau',()=>{
+ const a={points:[{t:now-4*HOUR,p:0,reset:now+HOUR,cycle:1},{t:now,p:0,reset:now+HOUR,cycle:1}]};
+ assert.ok(historicalPool([a],now-4*HOUR,now).every(p=>p.value===0));
+});

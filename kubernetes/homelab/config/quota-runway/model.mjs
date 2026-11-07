@@ -49,14 +49,23 @@ export function accountState(account, role, now, lookback=HOUR) {
     beforeReset:exhaustedAt!==null&&reset!==null&&exhaustedAt<reset};
 }
 export function valueAt(points,t) {
-  let previous=null;
-  for(const p of points) {if(p.t>t)break;previous=p;}
+  let previous=null,next=null;
+  for(const p of points) {if(p.t>t){next=p;break;}previous=p;}
+  const plateau=previous&&next&&previous.cycle!==undefined&&previous.cycle===next.cycle&&previous.p===next.p;
   // Missing history is not zero. Do not bridge a cycle boundary or long gap.
-  if(!previous||t-previous.t>2*HOUR||(previous.reset!==null&&t>=previous.reset))return null;
+  if(!previous||(t-previous.t>2*HOUR&&!plateau)||(previous.reset!==null&&t>=previous.reset))return null;
   return previous.p;
 }
 export function historicalPool(accounts,start,end) {
-  const times=[...new Set([start,end,...accounts.flatMap(a=>a.points.map(p=>p.t)).filter(t=>t>=start&&t<=end)])].sort((a,b)=>a-b);
+  if(!accounts.length)return [];
+  const breaks=accounts.flatMap(a=>a.points.flatMap((p,i)=>{
+    const next=a.points[i+1];
+    if(!next)return [];
+    if(p.cycle!==undefined&&p.cycle===next.cycle&&p.p===next.p)return [];
+    const expiry=Math.min(p.t+2*HOUR,p.reset??Infinity);
+    return next.t>expiry?[expiry+1]:[];
+  }));
+  const times=[...new Set([start,end,...breaks,...accounts.flatMap(a=>a.points.map(p=>p.t))].filter(t=>t>=start&&t<=end))].sort((a,b)=>a-b);
   return times.map(t=>{const values=accounts.map(a=>valueAt(a.points,t));return {t,value:values.every(v=>v!==null)?values.reduce((s,v)=>s+v,0)/100:null};});
 }
 export function forecastAccount(a,now,end,multiplier=1) {

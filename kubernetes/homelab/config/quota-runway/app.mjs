@@ -1,6 +1,7 @@
 import {HOUR,accountState,historicalPool,forecastPool,time} from './model.mjs';
 const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
 let data=[],role='secondary',loading=false,chartPoints=[];
+const groupId=a=>a.provider+'|'+a.plan+(a.plan==='Unknown plan'?'|'+a.id:'');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(t,full=false)=>t?new Intl.DateTimeFormat(undefined,{weekday:full?'short':undefined,month:full?'short':undefined,day:full?'numeric':undefined,hour:'2-digit',minute:'2-digit'}).format(t):'Not reported';
 const duration=ms=>ms<=0?'now':ms<HOUR?`${Math.ceil(ms/60000)} min`:ms<48*HOUR?`${(ms/HOUR).toFixed(1)} hours`:`${(ms/(24*HOUR)).toFixed(1)} days`;
@@ -25,9 +26,9 @@ async function load() {
    } catch(e){account.errors.push(e.message);}
    return account;
   }));
-  const selected=$('pool').value,groups=[...new Set(data.map(a=>a.provider+'|'+a.plan))];
-  $('pool').replaceChildren(...groups.map(g=>{const o=document.createElement('option');o.value=g;const [provider,plan]=g.split('|');o.textContent=`${provider==='claude'?'Claude':'Codex'} · ${plan} · ${data.filter(a=>a.provider+'|'+a.plan===g).length} account(s)`;return o;}));
-  if(groups.includes(selected))$('pool').value=selected;
+  const selected=$('pool').value,groups=[...new Set(data.map(groupId))];
+  $('pool').replaceChildren(...groups.map(g=>{const o=document.createElement('option');o.value=g;const [provider,plan]=g.split('|');o.textContent=`${provider==='claude'?'Claude':'Codex'} · ${plan} · ${data.filter(a=>groupId(a)===g).length} account(s)${plan==='Unknown plan'?' · '+data.find(a=>groupId(a)===g).name:''}`;return o;}));
+  if(groups.includes(selected))$('pool').value=selected; else if(selected)$('pool').value=groups.find(g=>g.split('|')[0]===selected.split('|')[0])||groups[0];
   $('updated').textContent='Checked '+fmt(Date.now());$('error').hidden=true;
   try{const s=await api('quota/auto-refresh/settings');$('sampling').textContent=s.enabled?` Keeper samples every ${s.schedule?.value} ${s.schedule?.unit}(s).`:' Keeper background quota refresh is off.';}catch{}
   render();
@@ -37,7 +38,7 @@ async function load() {
 function render() {
  const now=Date.now(),pace=Number($('pace').value)/100,lookback=Number($('lookback').value)*HOUR;
  $('pace-value').textContent=pace===1?'at the same pace':`at ${pace}× the pace`;
- const pool=data.filter(a=>a.provider+'|'+a.plan===$('pool').value),accounts=pool.map(a=>accountState(a,role,now,lookback));
+ const pool=data.filter(a=>groupId(a)===$('pool').value),accounts=pool.map(a=>accountState(a,role,now,lookback));
  const known=accounts.filter(a=>a.remaining!==null&&!a.stale),complete=known.length===accounts.length&&accounts.length>0;
  const total=known.reduce((s,a)=>s+a.remaining/100,0),rates=known.filter(a=>a.rate),rate=rates.reduce((s,a)=>s+a.rate.perHour/100,0)*pace;
  const resets=known.filter(a=>a.reset>now).sort((a,b)=>a.reset-b.reset);
@@ -67,7 +68,7 @@ function draw(accounts,start,now,end,projection) {
  const x=t=>left+(t-start)/(end-start)*(W-left-right),y=v=>H-bottom-v/max*(H-top-bottom);
  svg.append(svgNode('title',{},'Remaining allowance: observed history and projected consumption with provider reset times'));
  for(let i=0;i<=4;i++){const v=max*i/4;svg.append(svgNode('line',{x1:left,x2:W-right,y1:y(v),y2:y(v),stroke:'#30383f'}),svgNode('text',{x:left-10,y:y(v)+4,'text-anchor':'end'},number(v)));}
- for(let i=0;i<=6;i++){const t=start+(end-start)*i/6;svg.append(svgNode('text',{x:x(t),y:H-15,'text-anchor':i===0?'start':i===6?'end':'middle'},new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(t)));}
+ for(let i=0;i<=4;i++){const t=start+(end-start)*i/4,anchor=i===0?'start':i===4?'end':'middle';svg.append(svgNode('text',{x:x(t),y:H-22,'text-anchor':anchor},new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(t)),svgNode('text',{x:x(t),y:H-7,'text-anchor':anchor},fmt(t)));}
  svg.append(svgNode('rect',{x:x(now),y:top,width:x(end)-x(now),height:H-top-bottom,fill:'#8de4bb',opacity:'.025'}),svgNode('line',{x1:x(now),x2:x(now),y1:top,y2:H-bottom,stroke:'#a4b1bc','stroke-dasharray':'3 5'}),svgNode('text',{x:x(now)+6,y:18},'NOW'));
  const history=historicalPool(accounts,start,now);chartPoints=[...history.filter(p=>p.value!==null).map(p=>({...p,kind:'Observed'})),...projection.map(p=>({...p,kind:'Estimated'}))];
  function path(points,dashed) {let d='',active=false;for(const p of points){if(p.value===null){active=false;continue;}d+=`${active?'L':'M'}${x(p.t).toFixed(2)},${y(p.value).toFixed(2)} `;active=true;}if(d)svg.append(svgNode('path',{d,fill:'none',stroke:'#8de4bb','stroke-width':2.5,...(dashed?{'stroke-dasharray':'7 5'}:{})}));}
