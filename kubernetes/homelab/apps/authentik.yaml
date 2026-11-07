@@ -86,7 +86,7 @@ spec:
             - secretRef:
                 name: authentik-env
             - secretRef:
-                name: authentik-env
+                name: sso-extra
           ports:
             - name: http
               containerPort: 9000
@@ -202,7 +202,7 @@ spec:
             - secretRef:
                 name: authentik-env
             - secretRef:
-                name: authentik-env
+                name: sso-extra
           volumeMounts:
             - name: blueprints-cm-authentik-blueprints
               mountPath: /blueprints/mounted/cm-authentik-blueprints

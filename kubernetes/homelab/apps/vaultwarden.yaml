@@ -35,6 +35,21 @@ spec:
           image: vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f
           imagePullPolicy: IfNotPresent
           env:
+            - name: SSO_ENABLED
+              value: "true"
+            - name: SSO_ONLY
+              value: "true"
+            - name: SSO_SIGNUPS_ALLOWED
+              value: "false"
+            - name: SSO_SIGNUPS_MATCH_EMAIL
+              value: "true"
+            - name: SSO_AUTHORITY
+              value: https://auth.erikfrankling.duckdns.org/application/o/vault
+            - name: SSO_CLIENT_ID
+              value: homelab-vault
+            - name: SSO_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: sso-extra, key: VAULT_CLIENT_SECRET}
             - name: DOMAIN
               value: https://vault.erikfrankling.duckdns.org
           ports:

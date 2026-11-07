@@ -8,6 +8,7 @@ resources:
   - secrets/authentik.enc.yaml
   - secrets/authentik-postgresql.enc.yaml
   - secrets/sso-clients.enc.yaml
+  - secrets/sso-extra.enc.yaml
   - config/homelab-config.yaml
   - ingress/middleware.yaml
   - ingress/routes.yaml
