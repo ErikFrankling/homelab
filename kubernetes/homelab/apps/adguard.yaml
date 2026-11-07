@@ -143,10 +143,6 @@ spec:
       port: 53
       protocol: UDP
       targetPort: dns-udp
-    - name: setup
-      port: 3000
-      protocol: TCP
-      targetPort: setup
   selector:
     app.kubernetes.io/name: adguard
   type: LoadBalancer

@@ -187,3 +187,8 @@ entries:
       name: Erik
       email: !Env AUTHENTIK_BOOTSTRAP_EMAIL
       attributes: {homelab_email_verified: true}
+  - model: authentik_stages_authenticator_webauthn.authenticatorwebauthnstage
+    identifiers: {name: default-authenticator-webauthn-setup}
+    attrs:
+      resident_key_requirement: required
+      user_verification: required

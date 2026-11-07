@@ -17,9 +17,7 @@ http:
     enabled: false
   address: 0.0.0.0:80
   session_ttl: 720h
-users:
-  - name: erikf
-    password: __ADGUARD_PASSWORD_HASH__
+users: [] # Authentik at Traefik; NetworkPolicy restricts HTTP to Traefik.
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""

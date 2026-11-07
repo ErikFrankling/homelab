@@ -75,7 +75,7 @@
             "env": [
               {
                 "name": "POSTGRES_DB",
-                "value": "authentik"
+                "value": "homelab_sso"
               },
               {
                 "name": "POSTGRES_USER",

@@ -31,6 +31,17 @@ ui:
 # subnet route arrives otherwise survives indefinitely on the wrong path (403).
 # WebSocket Upgrade uses its own non-pooled connection and retains its headers.
 endpoints:
+  - name: authentik
+    group: phone
+    headers:
+      Connection: close
+    url: https://auth.erikfrankling.duckdns.org/-/health/ready/
+    interval: 2m
+    client:
+      proxy-url: http://127.0.0.1:1055
+      timeout: 20s
+    conditions:
+      - "[STATUS] == 200"
   # ---- phone (through the tailnet) -----------------------------------------
   - name: t3code
     group: phone

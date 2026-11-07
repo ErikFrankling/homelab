@@ -93,6 +93,10 @@
         icon: adguard-home.png
         description: DNS and ad blocking
 - Infrastructure:
+    - Homelab login:
+        href: https://auth.erikfrankling.duckdns.org/if/user/
+        icon: authentik.png
+        description: Shared login, passkeys and account settings
     - Proxmox:
         href: https://192.168.50.10:8006
         icon: proxmox.png
