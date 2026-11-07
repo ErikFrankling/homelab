@@ -64,11 +64,11 @@ function render() {
 }
 function svgNode(tag,attrs,text) {const el=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(text!==undefined)el.textContent=text;return el;}
 function draw(accounts,start,now,end,projection) {
- const svg=$('chart');svg.replaceChildren();const W=1100,H=350,left=54,right=24,top=30,bottom=45,max=Math.max(1,accounts.length);
+ const svg=$('chart');svg.replaceChildren();const W=Math.max(300,svg.clientWidth||1100),H=350,left=42,right=18,top=30,bottom=45,max=Math.max(1,accounts.length);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
  const x=t=>left+(t-start)/(end-start)*(W-left-right),y=v=>H-bottom-v/max*(H-top-bottom);
  svg.append(svgNode('title',{},'Remaining allowance: observed history and projected consumption with provider reset times'));
  for(let i=0;i<=4;i++){const v=max*i/4;svg.append(svgNode('line',{x1:left,x2:W-right,y1:y(v),y2:y(v),stroke:'#30383f'}),svgNode('text',{x:left-10,y:y(v)+4,'text-anchor':'end'},number(v)));}
- for(let i=0;i<=4;i++){const t=start+(end-start)*i/4,anchor=i===0?'start':i===4?'end':'middle';svg.append(svgNode('text',{x:x(t),y:H-22,'text-anchor':anchor},new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(t)),svgNode('text',{x:x(t),y:H-7,'text-anchor':anchor},fmt(t)));}
+ const ticks=W<550?3:4;for(let i=0;i<=ticks;i++){const t=start+(end-start)*i/ticks,anchor=i===0?'start':i===ticks?'end':'middle';svg.append(svgNode('text',{x:x(t),y:H-22,'text-anchor':anchor},new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(t)),svgNode('text',{x:x(t),y:H-7,'text-anchor':anchor},fmt(t)));}
  svg.append(svgNode('rect',{x:x(now),y:top,width:x(end)-x(now),height:H-top-bottom,fill:'#8de4bb',opacity:'.025'}),svgNode('line',{x1:x(now),x2:x(now),y1:top,y2:H-bottom,stroke:'#a4b1bc','stroke-dasharray':'3 5'}),svgNode('text',{x:x(now)+6,y:18},'NOW'));
  const history=historicalPool(accounts,start,now);chartPoints=[...history.filter(p=>p.value!==null).map(p=>({...p,kind:'Observed'})),...projection.map(p=>({...p,kind:'Estimated'}))];
  function path(points,dashed) {let d='',active=false;for(const p of points){if(p.value===null){active=false;continue;}d+=`${active?'L':'M'}${x(p.t).toFixed(2)},${y(p.value).toFixed(2)} `;active=true;}if(d)svg.append(svgNode('path',{d,fill:'none',stroke:'#8de4bb','stroke-width':2.5,...(dashed?{'stroke-dasharray':'7 5'}:{})}));}
@@ -82,5 +82,5 @@ function draw(accounts,start,now,end,projection) {
 }
 for(const id of ['pool','past','future','lookback'])$(id).onchange=render;
 $('pace').oninput=render;$('refresh').onclick=load;
-for(const button of document.querySelectorAll('[data-role]'))button.onclick=()=>{role=button.dataset.role;document.querySelectorAll('[data-role]').forEach(b=>b.classList.toggle('active',b===button));render();};
-load();setInterval(load,60000);
+for(const button of document.querySelectorAll('[data-role]'))button.onclick=()=>{role=button.dataset.role;$('future').value=role==='primary'?'12':'168';document.querySelectorAll('[data-role]').forEach(b=>b.classList.toggle('active',b===button));render();};
+window.addEventListener('resize',render);load();setInterval(load,60000);
