@@ -95,7 +95,34 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+        # Keeper stores the quota observations; this static view adds forecasts.
+        # Upstream has per-cycle charts, but no pooled remaining-capacity runway.
+        - name: runway
+          image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+          command: ["nginx", "-g", "daemon off;"]
+          ports:
+            - containerPort: 8081
+              name: runway
+          readinessProbe:
+            httpGet: {path: /runway/, port: runway}
+          resources:
+            requests: {memory: 8Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: runway
+              mountPath: /srv
+              readOnly: true
+            - name: runway
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
       volumes:
+        - name: runway
+          configMap:
+            name: quota-runway
         - name: data
           persistentVolumeClaim:
             claimName: cpa-usage-keeper-data
@@ -108,6 +135,9 @@ spec:
   selector:
     app.kubernetes.io/name: cpa-usage-keeper
   ports:
+    - name: runway
+      port: 8081
+      targetPort: runway
     - name: http
       port: 80
       targetPort: http

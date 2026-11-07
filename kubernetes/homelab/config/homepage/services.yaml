@@ -38,6 +38,10 @@
         href: https://cliproxy.erikfrankling.duckdns.org/management.html
         icon: mdi-swap-horizontal
         description: Claude and Codex accounts
+    - Quota runway:
+        href: https://cliproxy-usage.erikfrankling.duckdns.org/runway/
+        icon: mdi-chart-timeline-variant
+        description: Allowance left, burn rate and resets
     - CLIProxy usage:
         href: https://cliproxy-usage.erikfrankling.duckdns.org
         icon: mdi-chart-line

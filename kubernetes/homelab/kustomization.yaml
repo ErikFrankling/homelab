@@ -73,6 +73,13 @@ resources:
   - secrets/school.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
+  - name: quota-runway
+    files:
+      - config/quota-runway/index.html
+      - config/quota-runway/app.mjs
+      - config/quota-runway/model.mjs
+      - config/quota-runway/style.css
+      - config/quota-runway/nginx.conf
   - name: executor-login
     files:
       - config/executor-login/index.html

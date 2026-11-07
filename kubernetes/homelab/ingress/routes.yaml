@@ -102,6 +102,13 @@ spec:
       services:
         - name: homepage
           port: 80
+    - kind: Rule
+      match: Host(`cliproxy-usage.erikfrankling.duckdns.org`) && PathPrefix(`/runway`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: cpa-usage-keeper
+          port: 8081
     # Usage and quota dashboard for CLIProxyAPI (apps/cpa-usage-keeper.yaml);
     # it holds the proxy's management key, so lan-only.
     - kind: Rule
