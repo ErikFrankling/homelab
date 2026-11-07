@@ -167,7 +167,7 @@ entries:
       signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
       redirect_uris:
         - matching_mode: strict
-          url: https://executor.erikfrankling.duckdns.org/api/auth/oauth2/callback/sso
+          url: https://executor.erikfrankling.duckdns.org/api/auth/callback/sso
       property_mappings:
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
         - !KeyOf owner-email
