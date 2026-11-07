@@ -168,8 +168,8 @@ spec:
       services:
         - name: ntfy
           port: 80
-    # Observability (docs/observability.md). Grafana: read-only without a
-    # login for the phone. Prometheus and Alertmanager: health-watch on the pc
+    # Observability (docs/observability.md). Grafana uses native SSO.
+    # Prometheus and Alertmanager: health-watch on the pc
     # polls Alertmanager's API.
     - kind: Rule
       match: Host(`grafana.erikfrankling.duckdns.org`)

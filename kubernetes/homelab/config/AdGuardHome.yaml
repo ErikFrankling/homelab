@@ -1,16 +1,7 @@
-# AdGuard Home configuration -- source of truth.
-#
-# Rendered into the adguard-data PVC by the deployment's render-config
-# initContainer on every pod start: the placeholder in users[0].password is
-# substituted from the sops-encrypted adguard-env secret (the repo is
-# public, so even the bcrypt hash stays out of plaintext git). Changes made in
-# the web UI only live in the PVC copy and are OVERWRITTEN by this file on the
-# next restart -- edit here, not in the UI. The kustomize configMapGenerator
-# gives the ConfigMap a content-hash name, so editing this file automatically
-# rolls the deployment.
-#
-# Captured from the live PVC copy on 2026-08-13 (schema_version 33,
-# AdGuard Home v0.107.73).
+# AdGuard Home configuration; source of truth, copied to the PVC on startup.
+# Authentik protects HTTP at Traefik; NetworkPolicy permits HTTP only from
+# Traefik. The existing encrypted password hash is retained for rollback.
+# Changes made in the web UI are overwritten on restart; edit this file.
 http:
   pprof:
     port: 6060

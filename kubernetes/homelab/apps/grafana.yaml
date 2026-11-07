@@ -1,7 +1,6 @@
-# Grafana for the homelab stack (docs/observability.md). Datasources and
-# dashboards come from git (config/grafana/). Anyone on the LAN/tailnet sees
-# dashboards read-only without logging in (the phone); the admin password is
-# in secrets/grafana.enc.yaml.
+# Grafana for the homelab stack (docs/observability.md, docs/sso.md).
+# Native OIDC automatically reuses the Authentik session. Local admin
+# recovery login remains available at /login?disableAutoLogin=true.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
