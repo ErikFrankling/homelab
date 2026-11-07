@@ -92,3 +92,60 @@ entries:
       target: !KeyOf keeper-app
       group: !Find [authentik_core.group, [name, authentik Admins]]
       order: 0
+  - model: authentik_providers_proxy.proxyprovider
+    id: adguard-provider
+    identifiers: {name: AdGuard}
+    attrs:
+      mode: forward_single
+      external_host: https://adguard.erikfrankling.duckdns.org
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+  - model: authentik_core.application
+    id: adguard-app
+    identifiers: {slug: adguard}
+    attrs: {name: AdGuard, provider: !KeyOf adguard-provider}
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf adguard-app
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+      order: 0
+  - model: authentik_providers_proxy.proxyprovider
+    id: home-provider
+    identifiers: {name: Home}
+    attrs:
+      mode: forward_single
+      external_host: https://home.erikfrankling.duckdns.org
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+  - model: authentik_core.application
+    id: home-app
+    identifiers: {slug: home}
+    attrs: {name: Home, provider: !KeyOf home-provider}
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf home-app
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+      order: 0
+  - model: authentik_providers_proxy.proxyprovider
+    id: chat-provider
+    identifiers: {name: Chat}
+    attrs:
+      mode: forward_single
+      external_host: https://chat.erikfrankling.duckdns.org
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+  - model: authentik_core.application
+    id: chat-app
+    identifiers: {slug: chat}
+    attrs: {name: Chat, provider: !KeyOf chat-provider}
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf chat-app
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+      order: 0
+  - model: authentik_outposts.outpost
+    identifiers: {managed: goauthentik.io/outposts/embedded}
+    attrs:
+      providers: [!KeyOf adguard-provider, !KeyOf home-provider, !KeyOf chat-provider]
+      config:
+        authentik_host: https://auth.erikfrankling.duckdns.org
