@@ -76,6 +76,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: school
     group: phone
+    headers:
+      Connection: close
     url: https://school.erikfrankling.duckdns.org/api/items
     interval: 2m
     client:
@@ -142,6 +144,8 @@ endpoints:
   # CLIProxyAPI: every Claude Code/Codex session depends on it.
   - name: cliproxy
     group: phone
+    headers:
+      Connection: close
     url: https://cliproxy.erikfrankling.duckdns.org/
     interval: 2m
     client:
@@ -151,6 +155,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: home
     group: phone
+    headers:
+      Connection: close
     url: https://home.erikfrankling.duckdns.org/
     interval: 5m
     client:
@@ -160,6 +166,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: cliproxy-usage
     group: phone
+    headers:
+      Connection: close
     url: https://cliproxy-usage.erikfrankling.duckdns.org/
     interval: 5m
     client:
@@ -181,6 +189,8 @@ endpoints:
   # Fleet, the agent platform (route in ingress/external-routes.yaml).
   - name: fleet
     group: phone
+    headers:
+      Connection: close
     url: https://fleet.erikfrankling.duckdns.org/healthz
     interval: 2m
     client:
@@ -271,6 +281,7 @@ endpoints:
     method: POST
     body: "{}"
     headers:
+      Connection: close
       Content-Type: application/json
     interval: 5m
     client:
