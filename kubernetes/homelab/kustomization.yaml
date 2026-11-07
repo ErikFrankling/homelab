@@ -2,6 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: homelab
 resources:
+  - apps/authentik.yaml
+  - apps/authentik-postgresql.yaml
+  - secrets/authentik.enc.yaml
+  - secrets/authentik-postgresql.enc.yaml
+  - secrets/sso-clients.enc.yaml
   - config/homelab-config.yaml
   - ingress/middleware.yaml
   - ingress/routes.yaml
@@ -63,6 +68,11 @@ resources:
   - secrets/school.enc.yaml
   - backup/backup.yaml
 configMapGenerator:
+  - name: authentik-blueprints
+    options:
+      disableNameSuffixHash: true
+    files:
+      - config/authentik/homelab.yaml
   # Content-hashed: editing config/homepage/* rolls the homepage deployment.
   - name: homepage-config
     files:

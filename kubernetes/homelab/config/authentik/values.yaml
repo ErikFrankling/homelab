@@ -1,0 +1,31 @@
+# Upstream chart 2026.8.5; render with the command in docs/sso.md.
+authentik:
+  existingSecret:
+    secretName: authentik-env
+serviceAccount:
+  create: false
+server:
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  resources:
+    requests: {memory: 256Mi}
+    limits: {memory: 1Gi}
+worker:
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  resources:
+    requests: {memory: 256Mi}
+    limits: {memory: 1Gi}
+global:
+  image:
+    digest: sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
+  envFrom:
+    - secretRef: {name: authentik-env}
+  deploymentStrategy: {type: Recreate}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+blueprints:
+  configMaps: [authentik-blueprints]
