@@ -248,7 +248,7 @@ spec:
             timeoutSeconds: 3
           resources:
             limits:
-              memory: 1Gi
+              memory: 2Gi
             requests:
               memory: 64Mi
       affinity:
