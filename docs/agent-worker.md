@@ -156,7 +156,18 @@ From the PC, `heavy emulator start` also tunnels 8554.
 workspaces untouched for 3 days are deleted, then the least recently used
 while all of them use more than 15 GB (never one with a running job),
 the caches in `/nix/var/worker/home` (linked into `/root`: `.gradle`, `.cache`
-for pip/uv, `.local` for the pnpm store, `.npm`, `.cargo`, `.bun`,
-`.android`) are pruned to size budgets by least recent use, old devShell
+for pip/uv, nix and Fleet's cargo builds, `.local` for the pnpm store, `.npm`,
+`.cargo`, `.bun`, `.android`) are pruned to size budgets, old devShell
 profile generations go, and dead store paths are collected while the node has
-under 45 GB free. Log: `/nix/var/worker/housekeeping.log`.
+under 155 GB free. Log: `/nix/var/worker/housekeeping.log`.
+
+A cache is removed whole, one entry at a time (`.cache/fleet-build`,
+`.cache/nix`, `.local/share/pnpm`, `.gradle/caches/modules-2`, ...), least
+recently used first, and never one used in the last 2 days. Until
+2026-11-07 it deleted single files by atime plus every empty directory. That
+broke Fleet's builds every hour: unpacked crate sources keep their archive's
+1970/2006 atime, so cargo found crates marked complete with files missing
+("can't find dotenvy bin", "no targets specified"), and nix's tarball-cache
+git repository lost its empty `refs/` ("could not find repository"). Pruning
+holds both job slots while it removes anything, because housekeeping starts
+when a job does; while a job runs it waits for the next hour.
