@@ -27,10 +27,15 @@ ui:
   title: Homelab health
   header: Homelab health
 
+# Re-dial each HTTP phone probe. A CONNECT tunnel opened before Tailscale's
+# subnet route arrives otherwise survives indefinitely on the wrong path (403).
+# WebSocket Upgrade uses its own non-pooled connection and retains its headers.
 endpoints:
   # ---- phone (through the tailnet) -----------------------------------------
   - name: t3code
     group: phone
+    headers:
+      Connection: close
     url: https://t3code.erikfrankling.duckdns.org/
     interval: 1m
     client:
@@ -60,6 +65,8 @@ endpoints:
       - "[STATUS] == 101"
   - name: x-graph
     group: phone
+    headers:
+      Connection: close
     url: https://x.erikfrankling.duckdns.org/api/stats
     interval: 2m
     client:
@@ -79,6 +86,8 @@ endpoints:
       - "[RESPONSE_TIME] < 5000"
   - name: vaultwarden
     group: phone
+    headers:
+      Connection: close
     url: https://vault.erikfrankling.duckdns.org/alive
     interval: 2m
     client:
@@ -88,6 +97,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: open-webui
     group: phone
+    headers:
+      Connection: close
     url: https://chat.erikfrankling.duckdns.org/
     interval: 2m
     client:
@@ -97,6 +108,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: openclaw
     group: phone
+    headers:
+      Connection: close
     url: https://claw.erikfrankling.duckdns.org/
     interval: 2m
     client:
@@ -106,6 +119,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: executor
     group: phone
+    headers:
+      Connection: close
     url: https://executor.erikfrankling.duckdns.org/health
     interval: 2m
     client:
@@ -115,6 +130,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: search
     group: phone
+    headers:
+      Connection: close
     url: https://search.erikfrankling.duckdns.org/api/health
     interval: 2m
     client:
@@ -152,6 +169,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: brain
     group: phone
+    headers:
+      Connection: close
     url: https://brain.erikfrankling.duckdns.org/health
     interval: 2m
     client:
@@ -172,6 +191,8 @@ endpoints:
   # How the T3 Code Android app gets JS updates (apps/t3-updates.yaml).
   - name: t3-updates
     group: phone
+    headers:
+      Connection: close
     url: https://t3-updates.erikfrankling.duckdns.org/healthz
     interval: 5m
     client:
@@ -183,6 +204,8 @@ endpoints:
   # codes, agents asking for his attention.
   - name: ntfy
     group: phone
+    headers:
+      Connection: close
     url: https://ntfy.erikfrankling.duckdns.org/v1/health
     interval: 2m
     client:
@@ -193,6 +216,8 @@ endpoints:
       - "[BODY].healthy == true"
   - name: time
     group: phone
+    headers:
+      Connection: close
     url: https://time.erikfrankling.duckdns.org/
     interval: 2m
     client:
@@ -205,6 +230,8 @@ endpoints:
       - "[RESPONSE_TIME] < 5000"
   - name: nix-cache
     group: phone
+    headers:
+      Connection: close
     url: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
     interval: 5m
     client:
@@ -216,6 +243,8 @@ endpoints:
   # and the phone opens Grafana.
   - name: grafana
     group: phone
+    headers:
+      Connection: close
     url: https://grafana.erikfrankling.duckdns.org/api/health
     interval: 2m
     client:
@@ -225,6 +254,8 @@ endpoints:
       - "[STATUS] == 200"
   - name: alertmanager
     group: phone
+    headers:
+      Connection: close
     url: https://alertmanager.erikfrankling.duckdns.org/-/healthy
     interval: 2m
     client:
