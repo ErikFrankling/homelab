@@ -23,6 +23,11 @@ const c=new Client({host:process.env.DB_PSQL_HOST,port:process.env.DB_PSQL_PORT,
  redirectUrl:'https://planet9-test.erikfrankling.duckdns.org/user/logon/openid-connect/homelab/callback',
  loginRedirectUrl:'/cockpit.html',roleAssignment:[],departmentAssignment:[],assignFirstLogin:true,
  claimsMap:[{id:crypto.randomUUID(),userField:'username',claim:'preferred_username'}]};
+ // Link the existing owner instead of creating a second account. Keep its ID,
+ // password hash, admin flag, data and role relations; only change IDP metadata.
+ const owners=(await c.query(`SELECT id,admin,"idpSource" FROM "${schema}".users WHERE username=$1 FOR UPDATE`,['admin'])).rows;
+ if(owners.length!==1 || !owners[0].admin || !['local','openid-connect'].includes(owners[0].idpSource)) throw new Error('Unexpected existing owner');
+ await c.query(`UPDATE "${schema}".users SET "idpSource"=$1,"idpSourceId"=$2,"idpSourceKey"=$3 WHERE id=$4`,['openid-connect',provider.id,'homelab',owners[0].id]);
  config.idp=[...config.idp.filter(x=>x.path!=='homelab'),provider];
  config.defaultLoginUrl='/user/logon/openid-connect/homelab';
  // Recovery/API authentication stays available; the browser enters OIDC directly.

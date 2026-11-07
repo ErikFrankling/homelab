@@ -7,23 +7,25 @@ encrypted. The route is LAN/tailnet/cluster only. No public enrollment.
 
 ## Application support
 
-| Application | Integration / limitation |
+| Application | Private-network entry |
 | --- | --- |
-| Grafana | Native OIDC, automatic redirect, admin role only for Authentik Admins. Local login fallback: `/login?disableAutoLogin=true`. |
-| CLIProxy usage (Keeper 2.0.3) | `AUTH_ENABLED=false`: opens directly on LAN/Tailscale. No separate login, as required by AGENTS.md. |
-| Executor | Native OIDC, existing owner email, SSO button. Existing password and MCP credentials retained. |
-| AdGuard Home | No native SSO. Supported `users: []` behind Authentik forward-auth; NetworkPolicy allows HTTP only from Traefik. DNS stays reachable. Unused setup LoadBalancer port removed. |
-| Open WebUI | Already `WEBUI_AUTH=false`; shared login at Traefik protects its existing single-user account without creating a second chat history. NetworkPolicy blocks direct HTTP access. |
-| Homepage | Shared login at Traefik. |
-| Vaultwarden 1.37.5 | Supports OIDC, but vault decryption still needs an unlock. Existing login remains available. |
-| CLIProxy management | Management key is mandatory, including localhost; not native SSO. Do not remove API authentication or inject the management key into public frontend assets. |
-| T3 Code | Existing device pairing/session retained. Do not wrap API/WebSocket routes in browser redirects. |
-| OpenClaw | Existing gateway token/device approval retained. |
-| ntfy | Existing user/token authentication retained for native notification clients. |
-| Proxmox | Supports OpenID realms; existing host login retained. |
-| Time, School, X graph, Brain, Search, Health, Prometheus, Alertmanager, Traefik, llama-swap | Already usable without a separate browser login on their private routes. No extra login gate added to machine-facing APIs. |
-| Fleet, OpenCode, Naiaclaw, Planet9, p9eval | Separate applications; no unsupported SSO claims or changes to their authentication. |
-| Nix cache, registry, T3 updates | Machine-facing endpoints; leave their existing access controls and clients intact. |
+| Keeper | Upstream `AUTH_ENABLED=false`; dashboard opens directly. |
+| AdGuard | Upstream `users: []`; opens directly. HTTP NetworkPolicy still restricts backend access; DNS stays reachable. |
+| Open WebUI | Upstream `WEBUI_AUTH=false`; existing single-user history retained. Opens directly. |
+| Homepage | Opens directly; LAN/Tailscale route restriction remains. |
+| OpenClaw | Upstream `--auth none --bind loopback`, with nginx in the same pod. Upstream refuses `none` on a LAN bind. WebSocket upgrade supported; no key in the browser. |
+| ntfy | `enable-login: false`, `auth-default-access: read-write`. Existing sender tokens remain valid. |
+| CLIProxy management | Pinned upstream frontend with a small automatic-session patch. nginx supplies the management key server-side, only on `/v0/management/` and `/v8/management/`. Model APIs still require API keys. |
+| Grafana | Native OIDC, automatic redirect, owner-only administrator role. Recovery: `/login?disableAutoLogin=true`. |
+| Executor | Native OIDC linked to the existing owner. `/login` automatically starts the supported SSO API; account data and MCP grants retained. |
+| Fleet | `/login` automatically calls its existing name-only login as `erik`; existing sessions are retained. |
+| Proxmox | Native default OpenID realm `homelab`; owner `akadmin@homelab` has Administrator at `/`. Small UI patch automatically starts OIDC. `?manual=1` retains recovery realms. |
+| Vaultwarden | Native OIDC, `SSO_ONLY=true`, existing account matched by verified email, no new-account signup. Vault **decryption** remains: enroll device/biometric unlock with Erik rather than weakening encryption. |
+| Neptune test | Native OpenID Connect, `defaultLoginUrl` starts shared login automatically. Owner maps to existing `admin`. Existing machine/test authentication retained. |
+| T3 Code | Existing device pairing/session; no application password added. API/WebSocket routes stay direct. |
+| Time, School, X graph, Brain, Search, Health, Prometheus, Alertmanager, Traefik, llama-swap, OpenCode, Naiaclaw | Existing direct private-network entry; no extra login gate. |
+| Nix cache, registry, T3 updates | Machine endpoints retain existing access controls; no browser password added. |
+| p9eval | Existing dead route to NodePort 30080; HTTP 502 predates this task (also recorded in cutover-runbook.md). No running service to configure or authenticate. |
 
 All configured Authentik applications bind access to `authentik Admins`.
 The initial owner is `akadmin`, display name Erik, with the same email as
@@ -78,15 +80,20 @@ before maintenance that changes data.
 
 ## Verification and recovery
 
-Verified on 2026-11-07: one Authentik session completed Grafana login, Keeper
-OIDC administrator login, Executor account linking and a fresh SSO login,
-and authenticated requests to AdGuard `/control/status`, Chat and Homepage.
-Unauthenticated requests, including forged identity headers, redirect to login.
-Direct HTTP from an unrelated pod to AdGuard/Open WebUI is rejected by the
-NetworkPolicies. AdGuard DNS resolution and blocking checks pass.
+Verified on 2026-11-07: Keeper dashboard in a fresh incognito session; subsequent
+protocol checks use a fresh cookie jar. One shared session completes Executor
+login as the existing owner, Proxmox login as `akadmin@homelab`, and Vaultwarden's
+OIDC round trip to its SSO connector. Neptune uses its existing `admin` account
+through native OIDC. OpenClaw accepts a protocol-4 operator
+WebSocket connection with no credentials. CLIProxy v0/v8 management config
+responds 200 without a browser key; `/v1/models` still returns 401 without an API
+key. ntfy config disables login and an anonymous topic poll returns 200.
 
-Open WebUI `/health` is an explicit LAN/cluster-only unauthenticated health
-route; both Gatus checks use it rather than merely checking a login page.
+Homepage, Chat and AdGuard return their application directly without SSO
+redirects. Their previous forward-auth gates were removed to follow Erik's
+preference for auth-off settings. The LAN/Tailscale ingress restriction and
+AdGuard/Open WebUI backend NetworkPolicies remain. Open WebUI `/health` is a
+LAN/cluster-only health route used by Gatus.
 
 Executor uses `/api/auth/callback/sso` (its social login route), not the generic
 OAuth plugin's alternative callback. Existing password accounts must explicitly
@@ -95,3 +102,56 @@ link SSO first; the owner was linked and verified through the supported API.
 Initial PostgreSQL dump: `~/.local/state/homelab-sso/initial-config-2026-11-07.dump`
 on the PC, private permissions, archive checked with `pg_restore --list`. This
 is an initial recovery copy, not a replacement for regular off-machine backups.
+
+## Small compatibility changes
+
+`config/cliproxy-management/network-login.mjs` patches only the upstream auth
+store, and fails its build if the expected source markers change. Upstream SHA
+is `953fb2444350c6c36052dda46cac0abce6b23ea6`. To rebuild after a node replacement
+or an upstream update, copy that directory to naiaclaw, then run there:
+
+```sh
+docker build -t docker.io/library/cliproxy-management-network:953fb244-1 .
+docker save docker.io/library/cliproxy-management-network:953fb244-1 | sudo k3s ctr -n k8s.io images import -
+```
+
+Use sudo for Docker where required. Bump the image tag in the deployment after
+changing the patch. Its nginx configuration is SOPS-encrypted because it holds
+the server-side management key. Rotate it with `CPA_MANAGEMENT_KEY`; never put
+that key in the HTML. Inference routes continue to use the original server.
+
+`config/executor-login/` contains the automatic-entry pages for Executor and
+Fleet, served by upstream nginx. They use supported same-origin APIs and hold
+no secrets. The specific `/login` routes leave callbacks, APIs and WebSockets
+on the original services. Executor sign-out reloads `/`, returning through this
+entry page. Errors show a retry button rather than entering a redirect loop.
+
+Proxmox configuration is in `ops/proxmox/sso/`: copy `configure.py` to the host
+and pipe the decrypted `PROXMOX_CLIENT_SECRET` from `sso-extra.enc.yaml` to it.
+It backs up `/etc/pve/domains.cfg` and `user.cfg` under
+`/root/homelab-sso-backups/` before adding/modifying the native realm. Install
+`automatic-entry.py` at `/usr/local/lib/homelab-sso/automatic-entry.py` (0755)
+and `99-homelab-sso` at `/etc/apt/apt.conf.d/99-homelab-sso`. The package hook
+reapplies the guarded patch on updates and fails if upstream changes the target.
+No Proxmox password is stored in a browser or proxy.
+
+Neptune configuration uses `ops/neptune-sso/configure.cjs`, run from `/app` in
+the `p9-mcp-test` container with `NEPTUNE_CLIENT_SECRET` on stdin. It updates
+its IDP/default-login settings and links the existing owner account, encrypting the client secret with Neptune's own
+stored encryption key. Its existing settings backup is private on the PC at
+`~/.local/state/homelab-sso/neptune-config-before-sso.json`; the existing owner
+row is backed up beside it as `neptune-admin-before-sso.json`. The owner keeps
+its ID, admin flag, roles and password hash. Its `idpSource`, `idpSourceId` and
+`idpSourceKey` switch to the native OpenID provider (Neptune keys user lookup by
+username **and** IDP). Restore those three fields from the private backup for
+local-login recovery; do not create a duplicate owner. Apply the tracked
+`readiness-patch.yaml` with `kubectl -n p9 patch deploy p9-mcp-test --type=strategic
+--patch-file ops/neptune-sso/readiness-patch.yaml`, and restart after changing
+settings so Passport registers the provider. This namespace is managed outside
+homelab Flux. The readiness probe must not follow the root's SSO redirect.
+
+Vaultwarden's verified pre-change SQLite backup is on naiaclaw at
+`/home/ubuntu/homelab-sso/backups/vaultwarden-before-sso.sqlite3` (0600).
+Authentik's issuer has a trailing slash: `SSO_AUTHORITY` must match it exactly,
+despite Vaultwarden's generic `.env.template` advice. Otherwise discovery fails
+with an issuer mismatch. The owner email is shared with the existing vault.
