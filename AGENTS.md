@@ -3,6 +3,30 @@
 Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
 `ssh docker`, and `ssh naiaclaw`.
 
+## Hard rule: no separate app passwords on Erik's private network
+
+Erik (2026-11-07): nothing on his LAN or Tailscale may force him through a
+separate application password screen. Use shared login or no login.
+
+- Prefer an upstream setting that disables application authentication when
+  the service is restricted to Erik's private network.
+- Where accounts are needed, use the shared Authentik identity and automatic
+  SSO entry. A password form with an optional SSO button is not the finished
+  experience; route directly into shared login or remove the form.
+- If upstream has neither a suitable setting nor SSO/trusted-proxy support,
+  maintain the smallest patch, fork or proxy integration needed. Erik has
+  explicitly authorized this for removing homelab login friction. Document
+  the patch and keep it applied across upgrades.
+- Keep the private-network boundary enforced. Do not expose an auth-disabled
+  administration UI to the public internet or put server credentials into
+  public frontend assets. Machine API credentials may remain transparent to
+  Erik; they must not turn into browser password prompts.
+- Do not add login screens to services that already open directly. Test from
+  a fresh browser session, not only an agent's pre-authenticated cookie jar.
+- Preserve existing accounts and data. Encrypted vault unlocking is distinct
+  from application login: use supported device/biometric unlock and never
+  remove encryption or discard vault data to hide a prompt.
+
 ## Working Rules
 
 - This public repo and GitHub `main` are the active homelab source. Check Flux

@@ -10,7 +10,7 @@ encrypted. The route is LAN/tailnet/cluster only. No public enrollment.
 | Application | Integration / limitation |
 | --- | --- |
 | Grafana | Native OIDC, automatic redirect, admin role only for Authentik Admins. Local login fallback: `/login?disableAutoLogin=true`. |
-| CLIProxy usage (Keeper 2.0.3) | Native OIDC; use its OIDC button. `AUTH_OIDC_PROMPT_LOGIN=false` reuses the shared session; password fallback retained. |
+| CLIProxy usage (Keeper 2.0.3) | `AUTH_ENABLED=false`: opens directly on LAN/Tailscale. No separate login, as required by AGENTS.md. |
 | Executor | Native OIDC, existing owner email, SSO button. Existing password and MCP credentials retained. |
 | AdGuard Home | No native SSO. Supported `users: []` behind Authentik forward-auth; NetworkPolicy allows HTTP only from Traefik. DNS stays reachable. Unused setup LoadBalancer port removed. |
 | Open WebUI | Already `WEBUI_AUTH=false`; shared login at Traefik protects its existing single-user account without creating a second chat history. NetworkPolicy blocks direct HTTP access. |
