@@ -44,6 +44,7 @@ function render() {
  const resets=known.filter(a=>a.reset>now).sort((a,b)=>a.reset-b.reset);
  const end=now+Number($('future').value)*HOUR,start=now-Number($('past').value)*HOUR;
  const projection=complete?forecastPool(accounts,now,end,pace):[];
+ const ceiling=complete&&!projection.length?forecastPool(accounts.map(a=>({...a,rate:{perHour:0}})),now,end):[];
  const empty=projection.find(p=>p.value<=0.000001);
  const stat=(label,value,note,warn=false)=>`<article class="stat"><small>${label}</small><strong class="${warn?'warning':''}">${esc(value)}</strong><p>${esc(note)}</p></article>`;
  $('stats').innerHTML=stat('Remaining in this pool',known.length?`${number(total)} / ${known.length}`:'Unknown',`Full account allowances · ${role==='primary'?'5-hour':'weekly'}${complete?'':' · partial coverage'}`,known.length>0&&total===0)+
@@ -51,8 +52,8 @@ function render() {
  stat('Pool runs out',complete&&total===0?'Already depleted':empty?fmt(empty.t,true):projection.length?'Beyond this view':'No reliable estimate',complete&&total===0?'Waiting for a reset':empty?'If this pace continues, including known resets':projection.length?'No zero crossing in the selected horizon':'Missing, stale or insufficient rate history',complete&&total===0||!!empty)+
  stat('Next refill',resets.length?fmt(resets[0].reset,true):'Not reported',resets.length?`${duration(resets[0].reset-now)} · ${resets[0].name}`:'Provider reset time unavailable');
  $('chart-note').textContent=`${role==='primary'?'5-hour':'Weekly'} allowance · one unit = one full account limit · ${known.length}/${accounts.length} current readings`;
- $('method').textContent=projection.length?`Projection assumes each account keeps its measured last-${$('lookback').value}-hour pace (${pace}×). Reset jumps are scheduled, not yet observed. Other quota windows can still block access.`:'No descending forecast is drawn without usable rate history for every account. Scheduled reset markers still show when allowance returns. Missing history stays blank.';
- draw(accounts,start,now,end,projection);
+ $('method').textContent=projection.length?`Projection assumes each account keeps its measured last-${$('lookback').value}-hour pace (${pace}×). Reset jumps are scheduled, not yet observed. Other quota windows can still block access.`:ceiling.length?'The dotted purple reset-only ceiling assumes no further spending. There is not enough observed burn history yet for a consumption forecast. Missing history stays blank.':'Missing or stale quota data prevents a pooled forecast. Scheduled reset markers show the next reported reset times.';
+ draw(accounts,start,now,end,projection,ceiling);
  $('coverage').textContent=complete?'All readings current':`${accounts.length-known.length} missing or stale reading(s)`;
  $('accounts').innerHTML=accounts.map(a=>{
   const other=accountState(a,role==='primary'?'secondary':'primary',now,lookback);
@@ -63,16 +64,16 @@ function render() {
  }).join('')||'<p class="empty">Waiting for account data.</p>';
 }
 function svgNode(tag,attrs,text) {const el=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(text!==undefined)el.textContent=text;return el;}
-function draw(accounts,start,now,end,projection) {
+function draw(accounts,start,now,end,projection,ceiling=[]) {
  const svg=$('chart');svg.replaceChildren();const W=Math.max(300,svg.clientWidth||1100),H=350,left=42,right=18,top=30,bottom=45,max=Math.max(1,accounts.length);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
  const x=t=>left+(t-start)/(end-start)*(W-left-right),y=v=>H-bottom-v/max*(H-top-bottom);
  svg.append(svgNode('title',{},'Remaining allowance: observed history and projected consumption with provider reset times'));
  for(let i=0;i<=4;i++){const v=max*i/4;svg.append(svgNode('line',{x1:left,x2:W-right,y1:y(v),y2:y(v),stroke:'#30383f'}),svgNode('text',{x:left-10,y:y(v)+4,'text-anchor':'end'},number(v)));}
  const ticks=W<550?3:4;for(let i=0;i<=ticks;i++){const t=start+(end-start)*i/ticks,anchor=i===0?'start':i===ticks?'end':'middle';svg.append(svgNode('text',{x:x(t),y:H-22,'text-anchor':anchor},new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(t)),svgNode('text',{x:x(t),y:H-7,'text-anchor':anchor},fmt(t)));}
  svg.append(svgNode('rect',{x:x(now),y:top,width:x(end)-x(now),height:H-top-bottom,fill:'#8de4bb',opacity:'.025'}),svgNode('line',{x1:x(now),x2:x(now),y1:top,y2:H-bottom,stroke:'#a4b1bc','stroke-dasharray':'3 5'}),svgNode('text',{x:x(now)+6,y:18},'NOW'));
- const history=historicalPool(accounts,start,now);chartPoints=[...history.filter(p=>p.value!==null).map(p=>({...p,kind:'Observed'})),...projection.map(p=>({...p,kind:'Estimated'}))];
- function path(points,dashed) {let d='',active=false;for(const p of points){if(p.value===null){active=false;continue;}d+=`${active?'L':'M'}${x(p.t).toFixed(2)},${y(p.value).toFixed(2)} `;active=true;}if(d)svg.append(svgNode('path',{d,fill:'none',stroke:'#8de4bb','stroke-width':2.5,...(dashed?{'stroke-dasharray':'7 5'}:{})}));}
- path(history,false);path(projection,true);
+ const history=historicalPool(accounts,start,now);chartPoints=[...history.filter(p=>p.value!==null).map(p=>({...p,kind:'Observed'})),...projection.map(p=>({...p,kind:'Estimated'})),...ceiling.map(p=>({...p,kind:'Reset-only ceiling'}))];
+ function path(points,dashed,color='#8de4bb') {let d='',active=false;for(const p of points){if(p.value===null){active=false;continue;}d+=`${active?'L':'M'}${x(p.t).toFixed(2)},${y(p.value).toFixed(2)} `;active=true;}if(d)svg.append(svgNode('path',{d,fill:'none',stroke:color,'stroke-width':2.5,...(dashed?{'stroke-dasharray':'7 5'}:{})}));}
+ path(history,false);path(projection,true);path(ceiling,true,'#9d9bff');
  const current=accounts.every(a=>a.remaining!==null&&!a.stale)?accounts.reduce((n,a)=>n+a.remaining/100,0):null;
  if(current!==null)svg.append(svgNode('circle',{cx:x(now),cy:y(current),r:4,fill:'#8de4bb'}));
  accounts.filter(a=>a.reset>now&&a.reset<=end).forEach((a,i)=>{svg.append(svgNode('line',{x1:x(a.reset),x2:x(a.reset),y1:top+16,y2:H-bottom,stroke:'#697de3','stroke-dasharray':'2 6',opacity:'.7'}),svgNode('text',{x:x(a.reset)+5,y:top+12+(i%3)*15,fill:'#9aaaff'},`↥ ${a.name.split('@')[0].slice(0,20)} reset`));});

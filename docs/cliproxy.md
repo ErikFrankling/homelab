@@ -77,8 +77,8 @@ minutes of usable observations are required. The default lookback is six hours.
 The resulting rate is a conditional recent unblocked pace, not guaranteed
 wall-clock throughput. Both the forecast and exhaustion time respond to the
 pace slider. Only the next provider-reported reset is projected, with a reset
-to full quota; later reset times are not invented. Unknown rates show scheduled
-reset markers without an invented burn curve. Old readings (>15 minutes),
+to full quota; later reset times are not invented. Unknown rates show a dotted purple reset-only ceiling (no spending assumed),
+with scheduled reset markers and no invented burn curve. Old readings (>15 minutes),
 missing data and elapsed resets are marked stale. History begins where Keeper
 actually observed the quota, not at an invented full starting balance.
 
