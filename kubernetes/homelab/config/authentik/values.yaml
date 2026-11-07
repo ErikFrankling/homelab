@@ -14,7 +14,7 @@ worker:
   serviceAccountName: default
   automountServiceAccountToken: false
   resources:
-    requests: {memory: 128Mi}
+    requests: {memory: 64Mi}
     limits: {memory: 1Gi}
 global:
   image:
