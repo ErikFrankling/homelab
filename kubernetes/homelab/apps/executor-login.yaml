@@ -17,7 +17,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: management
-          image: docker.io/library/executor-login-network:953fb244-1
+          image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
           imagePullPolicy: IfNotPresent
           command: ["nginx", "-g", "daemon off;"]
           ports:
