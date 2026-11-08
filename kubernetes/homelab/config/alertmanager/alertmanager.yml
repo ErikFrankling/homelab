@@ -14,6 +14,10 @@ route:
   group_interval: 10m
   repeat_interval: 24h
   routes:
+    # This legacy rule measures elapsed downtime, never a human-only action.
+    # Route by name too, so old session=false alerts and resolutions stay quiet.
+    - matchers: ['alertname="HealthCheckStillFailing"']
+      receiver: none
     - matchers: ['session="true"']
       receiver: none
     - matchers: ['project="naiaclaw"']

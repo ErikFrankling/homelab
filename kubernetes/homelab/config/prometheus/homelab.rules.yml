@@ -195,12 +195,13 @@ groups:
           description: "Check the node and the host first: ssh naiaclaw 'vmstat 3 3' (st = host steal), ssh proxmox 'cat /proc/pressure/memory'. Gatus: http://192.168.50.100:18080"
       # health-watch already starts sessions for failing Gatus checks. This
       # only tells Erik when one is still failing after 3 hours of that.
+      # Audit-only: Gatus already owns repair detection; no second retry at 3h.
       - alert: HealthCheckStillFailing
         expr: gatus_results_endpoint_success == 0
         for: 3h
         labels: {severity: warning, project: homelab, session: "false"}
         annotations:
-          summary: "{{ $labels.group }}/{{ $labels.name }} failing for 3 h; repair sessions did not fix it"
+          summary: "{{ $labels.group }}/{{ $labels.name }} has failed checks for 3 h (automation backlog)"
           description: "Gatus: http://192.168.50.100:18080"
       - alert: CertificateExpiring
         expr: min by (key) (gatus_results_certificate_expiration_seconds) < 20 * 86400
