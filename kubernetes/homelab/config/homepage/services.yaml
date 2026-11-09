@@ -1,3 +1,5 @@
+# Historical Homepage configuration, retained for reference.
+# The live links are now in index.html; edit that file when adding a route.
 # Every web service Erik runs, one link each. Add new services here when you
 # add a route (ingress/routes.yaml, external-routes.yaml).
 - Daily:

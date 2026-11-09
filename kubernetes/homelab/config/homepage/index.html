@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Erik's services, all in one place.">
+<link rel="icon" href="data:,">
+<title>Home</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#10151e;color:#eef2f8}
+*{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:40px 24px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:34px}
+h1{font-size:28px;letter-spacing:-1px;margin:0}header p{color:#9baac0;margin:6px 0 0;font-size:14px}
+form{display:flex;gap:8px;width:min(100%,390px)}input,button{font:inherit;border:1px solid #344258;border-radius:9px;padding:12px;background:#1a2331;color:inherit}
+input{min-width:0;flex:1}input::placeholder{color:#9baac0}button{cursor:pointer;background:#253950}button:hover{background:#304965}
+section{margin-top:28px}h2{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#9baac0;margin:0 0 12px}
+ul{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;list-style:none;margin:0;padding:0}
+li{min-width:0}a{display:flex;flex-direction:column;justify-content:center;min-height:84px;height:100%;padding:15px 16px;border:1px solid #293447;border-radius:10px;background:#19222f;color:inherit;text-decoration:none}
+a:hover{background:#223146;border-color:#708bac}a:focus-visible,input:focus-visible,button:focus-visible{outline:3px solid #a6cbff;outline-offset:3px}
+a strong{font-size:15px;font-weight:600}a span{font-size:12px;line-height:1.5;color:#aab7ca;margin-top:5px}
+@media(max-width:760px){main{padding:26px 18px}header{align-items:flex-start;flex-direction:column;gap:20px;margin-bottom:28px}form{width:100%}ul{grid-template-columns:repeat(2,minmax(0,1fr))}a{padding:14px 12px}}
+@media(max-width:340px){ul{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<header><div><h1>Home</h1><p>Everything in one place.</p></div>
+<form action="https://search.erikfrankling.duckdns.org/search" method="get" role="search"><input type="search" name="q" aria-label="Search" placeholder="Search…" required><button type="submit">Search</button></form>
+</header>
+<section aria-labelledby="daily"><h2 id="daily">Daily</h2>
+<ul>
+<li><a href="https://t3code.erikfrankling.duckdns.org"><strong>T3 Code</strong><span>Coding agents (PC)</span></a></li>
+<li><a href="https://time.erikfrankling.duckdns.org"><strong>Time</strong><span>Time tracker</span></a></li>
+<li><a href="https://school.erikfrankling.duckdns.org"><strong>School</strong><span>KTH deadlines</span></a></li>
+<li><a href="https://x.erikfrankling.duckdns.org"><strong>X graph</strong><span>Bookmarks, likes, saved posts</span></a></li>
+<li><a href="https://chat.erikfrankling.duckdns.org"><strong>Chat</strong><span>Open WebUI</span></a></li>
+<li><a href="https://search.erikfrankling.duckdns.org"><strong>Search</strong><span>SearXNG</span></a></li>
+<li><a href="https://vault.erikfrankling.duckdns.org"><strong>Vault</strong><span>Vaultwarden passwords</span></a></li>
+<li><a href="https://brain.erikfrankling.duckdns.org"><strong>Brain</strong><span>How things are done here</span></a></li>
+</ul>
+</section>
+<section aria-labelledby="ai"><h2 id="ai">AI</h2>
+<ul>
+<li><a href="https://cliproxy.erikfrankling.duckdns.org/management.html"><strong>CLIProxy</strong><span>Claude and Codex accounts</span></a></li>
+<li><a href="https://cliproxy-usage.erikfrankling.duckdns.org/runway/"><strong>Quota runway</strong><span>Allowance left, burn rate and resets</span></a></li>
+<li><a href="https://cliproxy-usage.erikfrankling.duckdns.org"><strong>CLIProxy usage</strong><span>Usage, cost, quotas (Keeper)</span></a></li>
+<li><a href="https://executor.erikfrankling.duckdns.org"><strong>Executor</strong><span>Apps, accounts and MCP tools</span></a></li>
+<li><a href="https://claw.erikfrankling.duckdns.org"><strong>OpenClaw</strong><span>OpenClaw agent</span></a></li>
+<li><a href="https://opencode.erikfrankling.duckdns.org"><strong>OpenCode</strong><span>OpenCode web</span></a></li>
+<li><a href="https://fleet.erikfrankling.duckdns.org"><strong>Fleet</strong><span>Fleet</span></a></li>
+<li><a href="http://192.168.50.232:8000"><strong>llama-swap</strong><span>Local models on the PC GPU</span></a></li>
+</ul>
+</section>
+<section aria-labelledby="monitoring"><h2 id="monitoring">Monitoring</h2>
+<ul>
+<li><a href="https://health.erikfrankling.duckdns.org"><strong>Health</strong><span>Gatus health checks</span></a></li>
+<li><a href="https://grafana.erikfrankling.duckdns.org"><strong>Grafana</strong><span>Logs and metrics</span></a></li>
+<li><a href="https://prometheus.erikfrankling.duckdns.org"><strong>Prometheus</strong></a></li>
+<li><a href="https://alertmanager.erikfrankling.duckdns.org"><strong>Alertmanager</strong></a></li>
+<li><a href="https://ntfy.erikfrankling.duckdns.org"><strong>ntfy</strong><span>Phone notifications</span></a></li>
+<li><a href="https://traefik.erikfrankling.duckdns.org"><strong>Traefik</strong><span>Routes</span></a></li>
+<li><a href="https://adguard.erikfrankling.duckdns.org"><strong>AdGuard</strong><span>DNS and ad blocking</span></a></li>
+</ul>
+</section>
+<section aria-labelledby="infrastructure"><h2 id="infrastructure">Infrastructure</h2>
+<ul>
+<li><a href="https://auth.erikfrankling.duckdns.org/if/user/"><strong>Homelab login</strong><span>Shared login, passkeys and account settings</span></a></li>
+<li><a href="https://192.168.50.10:8006"><strong>Proxmox</strong></a></li>
+<li><a href="https://nix-cache.erikfrankling.duckdns.org/nix-cache-info"><strong>Nix cache</strong><span>Binary cache and builder</span></a></li>
+<li><a href="https://registry.erikfrankling.duckdns.org/v2/_catalog"><strong>Registry</strong><span>Container registry</span></a></li>
+<li><a href="https://t3-updates.erikfrankling.duckdns.org/healthz"><strong>T3 updates</strong><span>Android app updates</span></a></li>
+<li><a href="https://naiaclaw-api.erikfrankling.duckdns.org"><strong>Naiaclaw API</strong></a></li>
+<li><a href="https://planet9-test.erikfrankling.duckdns.org"><strong>Planet9 test</strong></a></li>
+<li><a href="https://p9eval.erikfrankling.duckdns.org"><strong>p9eval</strong></a></li>
+</ul>
+</section>
+</main>
+</body>
+</html>
