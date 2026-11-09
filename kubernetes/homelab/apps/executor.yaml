@@ -218,7 +218,7 @@ spec:
   successfulJobsHistoryLimit: 1
   jobTemplate:
     spec:
-      activeDeadlineSeconds: 120
+      activeDeadlineSeconds: 150
       backoffLimit: 1
       template:
         spec:
