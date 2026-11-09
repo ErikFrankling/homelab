@@ -60,6 +60,14 @@ idle homelab time-backup-*
 200 fleet harness-*
 100 fleet store-*
 100 fleet postgres-*
+# The 100-agent run (2026-11-09): with load ~78 the Rivet engine at weight 1 got
+# about 0.15 cores; every agent start and actor save goes through it, and it
+# answered "filesystem_overloaded" and deadline errors, so 91 of 100 agents sat
+# queued. Control (scheduler, Postgres pool) and Bifrost (every model call) sat
+# at weight 1 beside it. Same weight as the store.
+100 fleet rivet-engine-*
+100 fleet control-*
+100 fleet bifrost-*
 
 # Agents' `heavy` jobs (pod agent-worker): tests, lint and APK builds that a
 # session waits on. At weight 1, with its jobs at cpu.idle, a node at load ~200
