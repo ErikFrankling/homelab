@@ -76,6 +76,14 @@ spec:
               value: Europe/Stockholm
             - name: HOME
               value: /data
+            # Each in-flight /v1/messages holds the whole request body (Claude
+            # Code sends multi-MB contexts) plus its parsed and translated
+            # copies. At 512Mi a fleet of ~16 Opus agents with sub-agents
+            # (2026-11-09 20:45) OOM-killed it every few minutes, dropping
+            # every stream (502/503). The soft limit makes Go collect hard
+            # before the cgroup limit instead of overshooting it.
+            - name: GOMEMLIMIT
+              value: 1536MiB
           ports:
             - containerPort: 8317
               name: http
@@ -91,9 +99,9 @@ spec:
             periodSeconds: 30
           resources:
             limits:
-              memory: 512Mi
+              memory: 2Gi
             requests:
-              memory: 64Mi
+              memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
