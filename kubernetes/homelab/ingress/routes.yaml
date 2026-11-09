@@ -158,11 +158,13 @@ spec:
           port: 80
     # Nix binary cache (apps/nix-builder.yaml).
     # Everything in it is signed and none of it is secret, but the store holds
-    # private configuration, so it stays on the LAN and the tailnet.
+    # private configuration, so it stays on the LAN, the tailnet and the
+    # cluster: the agent-worker pod substitutes from it first, and lan-only
+    # answered its pod address with 403 (2026-11-09).
     - kind: Rule
       match: Host(`nix-cache.erikfrankling.duckdns.org`)
       middlewares:
-        - name: lan-only
+        - name: lan-and-cluster
       services:
         - name: nix-builder
           port: 5000
