@@ -183,7 +183,14 @@ data:
 
     # Anything but one plain Mi number (metrics down, two pods mid-rollout) fails
     # the job, which CronJobFailing reports, rather than restarting by accident.
-    usage=$(kubectl top pod -n homelab -l app.kubernetes.io/name=executor --no-headers | awk '{print $3}')
+    # The Metrics API drops out for a minute or two when the node is saturated by
+    # builds (kubelet scrape timeouts, 2026-11-09), so retry before giving up.
+    usage=
+    for _ in 1 2 3 4 5 6; do
+      usage=$(kubectl top pod -n homelab -l app.kubernetes.io/name=executor --no-headers 2>/dev/null | awk '{print $3}') || usage=
+      [ -n "$usage" ] && break
+      sleep 15
+    done
     mebibytes=${usage%Mi}
     case "$mebibytes" in
       "" | *[!0-9]*)
