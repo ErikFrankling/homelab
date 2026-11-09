@@ -114,6 +114,10 @@ metadata:
   name: executor-recycler
   namespace: homelab
 rules:
+  # kubectl top pod -l resolves the label selector through the core pods API.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
   - apiGroups: [metrics.k8s.io]
     resources: [pods]
     verbs: [list]
