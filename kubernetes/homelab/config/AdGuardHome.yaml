@@ -154,33 +154,8 @@ filtering:
   blocking_mode: default
   parental_block_host: family-block.dns.adguard.com
   safebrowsing_block_host: standard-block.dns.adguard.com
-  # Husk application hostnames are Cloudflare-Gateway-internal (no public DNS
-  # records). WARP clients run tunnel-only mode (no Gateway DNS), so AdGuard
-  # answers these with the private ingress VIPs; the WARP split-tunnel IP
-  # entries then route the traffic. Exact entries beat the wildcard, which is
-  # how the -staging names land on the staging ingress.
-  rewrites:
-    - domain: husk-security.dev
-      answer: 10.0.127.250
-      enabled: true
-    - domain: '*.husk-security.dev'
-      answer: 10.0.127.250
-      enabled: true
-    - domain: staging.husk-security.dev
-      answer: 10.0.127.251
-      enabled: true
-    - domain: auth-staging.husk-security.dev
-      answer: 10.0.127.251
-      enabled: true
-    - domain: admin-staging.husk-security.dev
-      answer: 10.0.127.251
-      enabled: true
-    - domain: grafana-staging.husk-security.dev
-      answer: 10.0.127.251
-      enabled: true
-    - domain: analytics-staging.husk-security.dev
-      answer: 10.0.127.251
-      enabled: true
+  # Husk retired; use normal upstream DNS instead of retired ingress VIPs.
+  rewrites: []
   safe_fs_patterns:
     - /opt/adguardhome/work/userfilters/*
   safebrowsing_cache_size: 1048576
