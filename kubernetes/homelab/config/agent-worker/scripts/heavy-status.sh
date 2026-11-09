@@ -48,7 +48,7 @@ for t in /work/.queue/*; do
 done
 echo "background jobs (services: at most 3, capped, stop when idle):"
 bash /scripts/heavy-bg.sh list | sed 's/^/  /'
-echo "workspaces:"
-# Bounded: on a saturated node a full du took minutes and hung `heavy status`.
-timeout 10 du -sh /work/*/ 2> /dev/null | sort -rh | head -8 | sed 's/^/  /'
-[ "${PIPESTATUS[0]}" = 124 ] && echo "  (sizes skipped: du took over 10 s)"
+# Sizes from the last housekeeping run: a du of /work here took over half an
+# hour under IO pressure (2026-11-09) and hung `heavy status`.
+echo "workspaces (as of the last hourly housekeeping):"
+sed 's/^/  /' /work/.stats/workspaces 2> /dev/null || echo "  not measured yet"

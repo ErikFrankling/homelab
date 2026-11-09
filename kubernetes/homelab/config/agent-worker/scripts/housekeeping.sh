@@ -25,14 +25,31 @@ for ws in /work/*/; do
 done
 
 # All workspaces together: at most 15 GB, least recently used go first.
+# Sizes are measured once, in the idle IO class, and subtracted as workspaces
+# go: a du of all of /work per removal took an hour under IO pressure on
+# 2026-11-09. `heavy status` shows what is left (/work/.stats/workspaces)
+# instead of running its own du.
 work_budget=15
+declare -A ws_kb=()
+used_kb=0
+while IFS=$'\t' read -r kb ws; do
+  ws_kb[$ws]=$kb
+  used_kb=$((used_kb + kb))
+done < <(ionice -c3 du -sk /work/*/ 2> /dev/null)
 for ws in $(ls -1dtr /work/*/ 2> /dev/null); do
-  used=$(du -s -BG /nix/var/worker/work 2> /dev/null | cut -f1 | tr -d G)
-  [ "${used:-0}" -gt "$work_budget" ] || break
+  [ $((used_kb / 1048576)) -gt "$work_budget" ] || break
   busy "$ws" && continue
-  echo "removing workspace $ws (workspaces use ${used}G > ${work_budget}G; least recently used)"
+  echo "removing workspace $ws (workspaces use $((used_kb / 1048576))G > ${work_budget}G; least recently used)"
   rm -rf "$ws"
+  used_kb=$((used_kb - ${ws_kb[$ws]:-0}))
+  unset "ws_kb[$ws]"
 done
+mkdir -p /work/.stats
+{
+  echo "measured $(date '+%F %H:%M'), $((used_kb / 1048576))G in all"
+  for ws in "${!ws_kb[@]}"; do printf '%s\t%s\n' "${ws_kb[$ws]}" "$ws"; done \
+    | sort -rn | head -8 | awk -F'\t' '{ printf "%.1fG\t%s\n", $1 / 1048576, $2 }'
+} > /work/.stats/workspaces.new && mv /work/.stats/workspaces.new /work/.stats/workspaces
 
 # Caches go whole: each entry of the directories below is one tool's or one
 # project's cache (.cache/fleet-build, .cache/nix, .local/share/pnpm,

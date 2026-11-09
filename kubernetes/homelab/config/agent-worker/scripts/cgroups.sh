@@ -86,9 +86,11 @@ for cache in .gradle .cache .local .npm .android .cargo .bun; do
   fi
 done
 
-# Housekeeping (housekeeping.sh) at most hourly, in the background.
+# Housekeeping (housekeeping.sh) at most hourly, in the background. It must
+# not inherit fd 8: on 2026-11-09 it held this lock for an hour (a slow du
+# under IO pressure) and every heavy job waited in `flock 8` behind it.
 stamp=$state/housekeeping.stamp
 if [ ! -f "$stamp" ] || [ -n "$(find "$stamp" -mmin +60)" ]; then
   touch "$stamp"
-  setsid bash /scripts/housekeeping.sh >> "$state/housekeeping.log" 2>&1 < /dev/null &
+  setsid bash /scripts/housekeeping.sh >> "$state/housekeeping.log" 2>&1 < /dev/null 8>&- &
 fi
