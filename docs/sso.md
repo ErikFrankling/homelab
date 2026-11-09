@@ -105,7 +105,7 @@ is an initial recovery copy, not a replacement for regular off-machine backups.
 `config/cliproxy-management/network-login.mjs` patches only the upstream auth
 store, and fails its build if the expected source markers change. Upstream SHA
 is `953fb2444350c6c36052dda46cac0abce6b23ea6`. To rebuild after a node replacement
-or an upstream update, copy that directory to naiaclaw, then run there:
+or an upstream update, copy that directory to k8s, then run there:
 
 ```sh
 docker build -t docker.io/library/cliproxy-management-network:953fb244-1 .
@@ -132,7 +132,7 @@ and `99-homelab-sso` at `/etc/apt/apt.conf.d/99-homelab-sso`. The package hook
 reapplies the guarded patch on updates and fails if upstream changes the target.
 No Proxmox password is stored in a browser or proxy.
 
-Vaultwarden's verified pre-change SQLite backup is on naiaclaw at
+Vaultwarden's verified pre-change SQLite backup is on k8s at
 `/home/ubuntu/homelab-sso/backups/vaultwarden-before-sso.sqlite3` (0600).
 Authentik's issuer has a trailing slash: `SSO_AUTHORITY` must match it exactly,
 despite Vaultwarden's generic `.env.template` advice. Otherwise discovery fails

@@ -1,7 +1,7 @@
 # Homelab Notes for Agents
 
 Last verified: 2026-07-24 from the local repo, GitHub, `ssh proxmox`,
-`ssh docker`, and `ssh naiaclaw`.
+`ssh docker`, and `ssh k8s`.
 
 ## Hard rule: no separate app passwords on Erik's private network
 
@@ -57,7 +57,7 @@ The Docker-to-k3s migration completed on 2026-07-24:
   intact. VM 200 now owns `192.168.50.100`.
 - The obsolete `husk` Helm release and namespace were removed on 2026-07-24.
   A verified logical PostgreSQL dump is retained privately under
-  `/home/ubuntu/retired-husk` on `naiaclaw`.
+  `/home/ubuntu/retired-husk` on `k8s`.
 - VM 200's disk was expanded online from 80 GiB to 160 GiB. The root filesystem
   had about 76 GiB free after migration and image pulls. VM RAM is 12 GiB,
   reduced from 13 GiB on 2026-08-06 when the GTX 1060 was passed through: PCI
@@ -108,14 +108,14 @@ The Docker-to-k3s migration completed on 2026-07-24:
   ServiceLB publishes it for every LoadBalancer and Traefik sees real LAN
   client addresses. It used to be `.200` plus a `.100` VIP, which needed
   `node-external-ip` and an `advertise-address` pin. Never start VM 100.
-- Because ServiceLB owns host port 53, `/etc/resolv.conf` on `naiaclaw` points
+- Because ServiceLB owns host port 53, `/etc/resolv.conf` on `k8s` points
   to `/run/systemd/resolve/resolv.conf` instead of the intercepted local stub.
   `ops/sysctl/99-homelab.conf` raises inotify capacity for cluster workloads.
-  `ops/ca-trust/distrust.sh` distrusts roots on proxmox and naiaclaw before
+  `ops/ca-trust/distrust.sh` distrusts roots on proxmox and k8s before
   Debian/Ubuntu ship the removal (emSign ECC Root CA - G3 since 2026-10-21);
   rerun it after a node rebuild.
 - Updates (since 2026-10-25, `docs/updates.md`): unattended-upgrades on
-  proxmox (Debian, Proxmox, Tailscale) at 04:30 and naiaclaw; reboots only in
+  proxmox (Debian, Proxmox, Tailscale) at 04:30 and k8s; reboots only in
   the 05:15 window (`homelab-maintenance-reboot` on proxmox), which opens an
   Alertmanager silence that health-watch also honours; Renovate bumps the
   cluster images at 04:45 UTC. Failures alert (`updates` rule group).
@@ -135,7 +135,7 @@ TP-Link Archer AX12 at `192.168.50.1`. A factory reset strands the homelab on
 
 - `ssh proxmox`: Proxmox VE host, IP `192.168.50.10/24` on `vmbr0`.
 - `ssh docker`: Debian Docker VM, IP configured in Proxmox as `192.168.50.100/24`.
-- `ssh naiaclaw`: Ubuntu k3s VM, IP configured in Proxmox as `192.168.50.100/24`.
+- `ssh k8s`: Ubuntu k3s VM, IP configured in Proxmox as `192.168.50.100/24`.
 
 ## Physical Host
 
@@ -193,7 +193,7 @@ Primary spec sources:
 
 - VM `100` named `docker`: stopped, 6144 MB RAM, 150 GB boot disk, 4 vCPUs,
   `onboot=0`.
-- VM `200` named `naiaclaw`: running, 13312 MB RAM, 160 GB boot disk, 4
+- VM `200` named `k8s`: running, 13312 MB RAM, 160 GB boot disk, 4
   vCPUs, onboot enabled.
 - VM `9000`: stopped template/VM, 2048 MB RAM, 3 GB disk.
 
@@ -229,12 +229,12 @@ totals about 3.8 GiB.
 
 ## k3s VM
 
-- Hostname: `naiaclaw`.
+- Hostname: `k8s`.
 - OS: Ubuntu 24.04.4 LTS, kernel `6.8.0-136-generic`.
 - Proxmox config: 4 vCPUs, 13312 MB RAM, 160 GB disk, IP
   `192.168.50.100/24`, gateway `192.168.50.1`.
 - k3s: `v1.35.5+k3s1`.
-- Kubernetes node: single node `naiaclaw`, role `control-plane`, container runtime `containerd://2.2.3-k3s1`.
+- Kubernetes node: single node `naiaclaw` (the pre-rename hostname, pinned by `node-name` in `ops/k3s/config.yaml` because every local-path PV is bound to it), role `control-plane`, container runtime `containerd://2.2.3-k3s1`.
 - `kubectl` needs sudo for `/etc/rancher/k3s/k3s.yaml` on this VM.
 - Node address: internal `192.168.50.100`, no external IP.
 - Root is about 154 GiB total with about 76 GiB available after migration.
@@ -271,10 +271,10 @@ not place media on the root-backed storage class.
 ssh proxmox 'free -h; qm list; pvesm status'
 ssh proxmox 'dmidecode -t system -t baseboard -t memory'
 ssh proxmox 'qm config 100; qm config 200'
-ssh naiaclaw 'ip -brief address show eth0'
-ssh naiaclaw 'free -h; df -h /; sudo kubectl top nodes'
-ssh naiaclaw 'sudo kubectl -n homelab get kustomization,pods,pvc'
-ssh naiaclaw 'sudo kubectl get nodes -o wide; sudo kubectl get pods -A'
+ssh k8s 'ip -brief address show eth0'
+ssh k8s 'free -h; df -h /; sudo kubectl top nodes'
+ssh k8s 'sudo kubectl -n homelab get kustomization,pods,pvc'
+ssh k8s 'sudo kubectl get nodes -o wide; sudo kubectl get pods -A'
 ```
 
 ## Hard rule: no communication with people without Erik's approval

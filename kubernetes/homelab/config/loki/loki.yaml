@@ -49,7 +49,7 @@ limits_config:
   otlp_config:
     resource_attributes:
       attributes_config:
-        # host_name="pc" / "framework" / "naiaclaw" as a stream label.
+        # host_name="pc" / "framework" / "k8s" as a stream label.
         - action: index_label
           attributes: [host.name]
 ruler:

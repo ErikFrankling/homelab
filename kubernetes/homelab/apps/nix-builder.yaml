@@ -191,7 +191,7 @@ spec:
 ---
 # SSH into the builder for `--store ssh-ng://`. Key-only, root, into a
 # privileged container: whoever holds an authorized key effectively has root on
-# the node, which the PC's key already has through `ssh naiaclaw`. Keep
+# the node, which the PC's key already has through `ssh k8s`. Keep
 # config/nix-builder/authorized_keys to that one key.
 apiVersion: v1
 kind: Service

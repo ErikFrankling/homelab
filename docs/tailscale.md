@@ -211,7 +211,7 @@ From a remote client (off Wi-Fi, e.g. phone on mobile data, Tailscale on):
   and disabling expiry must be redone in the console for the new machine
   entry; delete the stale machine from the Machines page.
 - **Redundancy option (not currently done)**: the same subnet route may
-  additionally be advertised from `naiaclaw` or a cluster pod; Tailscale
+  additionally be advertised from `k8s` or a cluster pod; Tailscale
   fails over between routers advertising identical routes.
 
 ## Updates and security

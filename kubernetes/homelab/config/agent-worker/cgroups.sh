@@ -25,7 +25,7 @@ if [ -w "$cg/cgroup.subtree_control" ]; then
   cores 1 > "$cg/light/cpu.max"
   echo "$WORKER_EMULATOR_MEMORY" > "$cg/emulator/memory.max"
   cores "$WORKER_EMULATOR_CPUS" > "$cg/emulator/cpu.max"
-  # Swap would only slow the node down; there is none on naiaclaw anyway.
+  # Swap would only slow the node down; there is none on k8s anyway.
   for sub in jobs light emulator; do echo 0 > "$cg/$sub/memory.swap.max" 2> /dev/null || true; done
   echo "$cg" > /nix/var/worker/cgroup
   echo "cgroups: jobs $WORKER_JOBS_MEMORY/${WORKER_JOBS_CPUS} cores, emulator $WORKER_EMULATOR_MEMORY/${WORKER_EMULATOR_CPUS} cores, light $WORKER_LIGHT_MEMORY"

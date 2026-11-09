@@ -98,9 +98,9 @@ groups:
         annotations:
           summary: "{{ $labels.host_name }}: {{ $labels.probe }} health check failing"
 
-  # Unattended upgrades on proxmox and naiaclaw (ops/updates/install.sh,
+  # Unattended upgrades on proxmox and k8s (ops/updates/install.sh,
   # docs/updates.md). The hosts write homelab_updates.prom after every run
-  # and hourly; upgrades run at 04:30 on proxmox, ~06:00-07:00 on naiaclaw.
+  # and hourly; upgrades run at 04:30 on proxmox, ~06:00-07:00 on k8s.
   - name: updates
     rules:
       - alert: HostUpdateFailed
@@ -171,7 +171,7 @@ groups:
         labels: {severity: critical, project: homelab, session: "false"}
         annotations:
           summary: "{{ $value }} homelab ingresses failing or slower than 5 s through the tailnet"
-          description: "Check the node and the host first: ssh naiaclaw 'vmstat 3 3' (st = host steal), ssh proxmox 'cat /proc/pressure/memory'. Gatus: http://192.168.50.100:18080"
+          description: "Check the node and the host first: ssh k8s 'vmstat 3 3' (st = host steal), ssh proxmox 'cat /proc/pressure/memory'. Gatus: http://192.168.50.100:18080"
       # health-watch already starts sessions for failing Gatus checks. This
       # only tells Erik when one is still failing after 3 hours of that.
       # Audit-only: Gatus already owns repair detection; no second retry at 3h.
@@ -268,14 +268,14 @@ groups:
       - alert: NodeMemoryStalled
         expr: rate(node_pressure_memory_stalled_seconds_total{job="node"}[5m]) > 0.1
         for: 5m
-        labels: {severity: critical, project: homelab, session: "true", host_name: naiaclaw}
+        labels: {severity: critical, project: homelab, session: "true", host_name: k8s}
         annotations:
-          summary: "naiaclaw: tasks stalled on memory {{ $value | humanizePercentage }} of the time"
-          description: "The node is thrashing and earlyoom has not cleared it. ssh naiaclaw 'free -m; cat /proc/pressure/memory; journalctl -u earlyoom -n 20; ps -eo rss,comm --sort=-rss | head -20'"
+          summary: "k8s: tasks stalled on memory {{ $value | humanizePercentage }} of the time"
+          description: "The node is thrashing and earlyoom has not cleared it. ssh k8s 'free -m; cat /proc/pressure/memory; journalctl -u earlyoom -n 20; ps -eo rss,comm --sort=-rss | head -20'"
       - alert: NodeCPUSteal
         expr: sum(rate(node_cpu_seconds_total{job="node", mode="steal"}[5m])) > 1
         for: 15m
-        labels: {severity: warning, project: homelab, session: "true", host_name: naiaclaw}
+        labels: {severity: warning, project: homelab, session: "true", host_name: k8s}
         annotations:
-          summary: "naiaclaw: {{ $value | humanize }} cores stolen by the Proxmox host"
+          summary: "k8s: {{ $value | humanize }} cores stolen by the Proxmox host"
           description: "The host itself is busy (reclaim, KSM, another VM). ssh proxmox 'top -bn1 | head -20; cat /proc/pressure/memory'"

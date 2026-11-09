@@ -155,7 +155,7 @@ loki.source.kubernetes "pods" {
 loki.process "pods" {
 	stage.static_labels {
 		values = {
-			host_name = "naiaclaw",
+			host_name = "k8s",
 		}
 	}
 	forward_to = [loki.write.local.receiver]

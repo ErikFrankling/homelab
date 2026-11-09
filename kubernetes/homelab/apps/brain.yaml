@@ -5,7 +5,7 @@
 # here are what Executor's `skills` tool serves.
 #
 # Source: husk-security/agent-company, apps/brain (private). There is no
-# registry: apps/brain/deploy/homelab-image.sh builds the image on naiaclaw and
+# registry: apps/brain/deploy/homelab-image.sh builds the image on k8s and
 # imports it into k3s's containerd, hence imagePullPolicy Never. After a node
 # rebuild, run that script again before the pod can start.
 apiVersion: v1

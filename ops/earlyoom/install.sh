@@ -1,7 +1,7 @@
 #!/bin/sh
-# Kills the biggest expendable process on naiaclaw before the node starts to
+# Kills the biggest expendable process on k8s before the node starts to
 # thrash. Idempotent; run as root:
-#   ssh naiaclaw 'sudo sh -s' < ops/earlyoom/install.sh
+#   ssh k8s 'sudo sh -s' < ops/earlyoom/install.sh
 #
 # The node has 52 GiB, no swap, and memory limits adding up to over 300% of it.
 # When it fills up, the kernel drops all page cache and keeps reclaiming long

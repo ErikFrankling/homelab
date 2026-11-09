@@ -2,17 +2,17 @@
 # Unattended updates for the Debian/Ubuntu hosts, with metrics for the alerts
 # and one nightly reboot window. Idempotent; run as root (docs/updates.md):
 #   ssh proxmox 'sh -s proxmox' < ops/updates/install.sh
-#   ssh naiaclaw 'sudo sh -s naiaclaw' < ops/updates/install.sh
+#   ssh k8s 'sudo sh -s k8s' < ops/updates/install.sh
 #
 # proxmox:  unattended-upgrades for Debian (security and point releases),
 #           Proxmox (pve-no-subscription) and Tailscale at 04:30; a
 #           node-exporter on 192.168.50.10:9100 that Prometheus scrapes; the
 #           05:15 reboot window for the host and VM 200.
-# naiaclaw: keeps Ubuntu's own unattended-upgrades (security pocket, nvidia
+# k8s: keeps Ubuntu's own unattended-upgrades (security pocket, nvidia
 #           blacklisted by 52-nvidia-no-auto-upgrade) and adds the metrics,
 #           read by the node-exporter DaemonSet (apps/node-exporter.yaml).
 set -eu
-role=${1:?usage: install.sh proxmox|naiaclaw}
+role=${1:?usage: install.sh proxmox|k8s}
 textfile=/var/lib/prometheus/node-exporter
 export DEBIAN_FRONTEND=noninteractive
 
@@ -363,7 +363,7 @@ fi
 if [ "$host" = 1 ]; then
   what="proxmox host into pinned kernel $pinned ($reasons); VM 200 restarts with it"
 else
-  what="VM 200 naiaclaw (Ubuntu asked for it)"
+  what="VM 200 k8s (Ubuntu asked for it)"
 fi
 if [ "$dry" = 1 ]; then
   say "would open a 60-minute window and reboot: $what"
@@ -428,7 +428,7 @@ EOF
   systemctl restart prometheus-node-exporter
 fi
 
-if [ "$role" = naiaclaw ]; then
+if [ "$role" = k8s ]; then
   # Keep the SSH host keys when Proxmox changes the cloud-init instance-id
   # (any edit to VM 200's cloud-init settings does). The first boot after the
   # 2026-10-18 ipconfig change regenerated them (2026-10-26 05:20), which

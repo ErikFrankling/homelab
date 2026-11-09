@@ -65,7 +65,7 @@ Alertmanager -> Discord, ntfy mirror), no repair session. Arrives in about 2 min
 itself after 15 minutes.
 
 ```sh
-ssh naiaclaw 'cat <<EOF | sudo kubectl apply -f -
+ssh k8s 'cat <<EOF | sudo kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -136,7 +136,7 @@ pc:             health-watch polls Gatus + Alertmanager
 - **Apps:** T3 Code (fork), local-stt, time-agent, brain and executor emit OTel
   logs and metrics to the local Alloy. Logs must carry a `level` so error
   rules work. Instrumenting the T3 fork happens there, not here.
-- **Labels kept small:** `host` (pc, framework, naiaclaw), `service`
+- **Labels kept small:** `host` (pc, framework, k8s), `service`
   (`service.name`), `level`. No per-request labels.
 
 ### 2. Health checks

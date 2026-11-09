@@ -1,6 +1,6 @@
 # GPU passthrough for text-to-speech
 
-Last verified: 2026-08-06 from `ssh proxmox` and `ssh naiaclaw`.
+Last verified: 2026-08-06 from `ssh proxmox` and `ssh k8s`.
 
 ## Why
 
@@ -26,7 +26,7 @@ should be scheduled onto this GPU.
 | Host RAM | 15952 MiB usable |
 | GPU | NVIDIA GP106 GeForce GTX 1060 3GB, `10de:1c02` |
 | GPU audio | GP106 HD Audio, `10de:10f1` |
-| Guest | VM 200 `naiaclaw`, Ubuntu 24.04, k3s v1.35.5 |
+| Guest | VM 200 `k8s`, Ubuntu 24.04, k3s v1.35.5 |
 
 ## Host preparation
 
@@ -196,7 +196,7 @@ is not used here.
 
 ### Do not taint the node
 
-`naiaclaw` is a single-node cluster. The conventional
+This is a single-node cluster. The conventional
 `nvidia.com/gpu:NoSchedule` taint exists to keep general workloads off dedicated
 GPU nodes in multi-node clusters. Applying it here would leave CoreDNS, Traefik,
 local-path-provisioner, Flux, cert-manager, Kyverno and every application
@@ -276,7 +276,7 @@ The loaded `nvidia` kernel module must match the installed driver. On
 2026-10-09 unattended-upgrades moved the driver from 580.173 to 580.178 while
 the old module stayed loaded, and NVML failed with "Driver/library version
 mismatch" until 2026-10-18. NVIDIA packages are therefore blacklisted in
-`/etc/apt/apt.conf.d/52-nvidia-no-auto-upgrade` on naiaclaw.
+`/etc/apt/apt.conf.d/52-nvidia-no-auto-upgrade` on k8s.
 
 To upgrade deliberately without rebooting: open a health-watch maintenance
 window, `apt upgrade` the `nvidia-*-580-server` packages, then

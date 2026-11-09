@@ -68,7 +68,7 @@ a bad pin fails the rollout instead of building harmonia on the node.
 ```bash
 curl -s https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
 nix store info --store ssh-ng://root@192.168.50.100:2222
-ssh naiaclaw 'sudo kubectl -n homelab get pod -l app.kubernetes.io/name=nix-builder; df -h /'
+ssh k8s 'sudo kubectl -n homelab get pod -l app.kubernetes.io/name=nix-builder; df -h /'
 ```
 
 ## Nested user namespaces

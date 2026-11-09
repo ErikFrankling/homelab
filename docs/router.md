@@ -5,7 +5,7 @@ TP-Link **Archer AX12** (AX1500), LAN MAC `20:e1:5d:e4:2e:e0`, firmware
 Wi-Fi name are not recorded here.
 
 The homelab uses static addresses on `192.168.50.0/24`. A factory-reset router
-comes back on `192.168.0.1/24`, which strands Proxmox and naiaclaw (`.100`)
+comes back on `192.168.0.1/24`, which strands Proxmox and k8s (`.100`)
 until the settings below are restored. This happened on 2026-08-05
 and again on 2026-10-17.
 
@@ -40,7 +40,7 @@ pool below `.110`.**
 | Static | Address | MAC |
 |---|---|---|
 | Proxmox host | `192.168.50.10` | `1C-1B-0D-A4-40-C0` |
-| naiaclaw (VM 200): Traefik, AdGuard DNS, nix-builder, binary cache | `192.168.50.100` | `BC-24-11-37-6C-2C` |
+| k8s (VM 200): Traefik, AdGuard DNS, nix-builder, binary cache | `192.168.50.100` | `BC-24-11-37-6C-2C` |
 
 No port forwards are needed. `*.erikfrankling.duckdns.org` points at the private
 `192.168.50.100` and is only reachable at home or over Tailscale. Do not recreate

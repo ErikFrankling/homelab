@@ -10,8 +10,8 @@ session, then Discord if still firing after 3 h.
 | Proxmox host (Debian 13 + PVE, sshd, pveproxy, tailscaled) | unattended-upgrades: Debian security and point releases, Proxmox `pve-no-subscription`, Tailscale stable | 04:30 daily |
 | Proxmox reboots for anything but a kernel | `homelab-maintenance-reboot.timer` reboots the host, only into the pinned known-good kernel | 05:15, only when needed |
 | Proxmox kernel | installed by unattended-upgrades, booted only in a supervised reboot (see Kernels); `HostKernelAwaitingSupervisedReboot` says when one waits | when someone is home |
-| naiaclaw (Ubuntu 24.04, VM 200) | Ubuntu's unattended-upgrades, security pocket; nvidia packages held (`52-nvidia-no-auto-upgrade`) | ~06:00–07:00 UTC daily |
-| naiaclaw reboot | the same 05:15 window, `qm reboot 200` | only when needed |
+| k8s (Ubuntu 24.04, VM 200) | Ubuntu's unattended-upgrades, security pocket; nvidia packages held (`52-nvidia-no-auto-upgrade`) | ~06:00–07:00 UTC daily |
+| k8s reboot | the same 05:15 window, `qm reboot 200` | only when needed |
 | Cluster images | Renovate (`.github/renovate.json5`, `.github/workflows/renovate.yml`): digest, patch and minor bumps go to main as one grouped commit and Flux applies them; majors (and minors of postgres, redis, opensearch, onyx) open a PR. GitHub Actions versions are not updated (a `GITHUB_TOKEN` cannot push workflow files) | 04:45 UTC daily |
 | Tailscale on Proxmox | apt (above) plus Tailscale's own auto-update (`AutoUpdate.Apply`) | daily |
 | Tailscale on the framework | dotfiles `nixpkgs_unstable` input, moved by the nightly flake update; never held back with nixpkgs | nightly |
@@ -36,7 +36,7 @@ All host-side files come from one idempotent script:
 
 ```bash
 ssh proxmox 'sh -s proxmox' < ops/updates/install.sh
-ssh naiaclaw 'sudo sh -s naiaclaw' < ops/updates/install.sh
+ssh k8s 'sudo sh -s k8s' < ops/updates/install.sh
 ```
 
 On Proxmox it installs `unattended-upgrades`, `apt-listchanges` and
@@ -48,7 +48,7 @@ seeds `/var/lib/homelab/booted-kernels` with the running kernel when VM 200
 answers. On both hosts it
 installs `homelab-update-metrics` (hourly, and after every
 `apt-daily-upgrade` run) which writes
-`/var/lib/prometheus/node-exporter/homelab_updates.prom`. On naiaclaw it also
+`/var/lib/prometheus/node-exporter/homelab_updates.prom`. On k8s it also
 sets cloud-init `ssh_deletekeys: false`: a changed instance-id (any edit to
 VM 200's cloud-init settings in Proxmox) otherwise regenerates the SSH host
 keys on the next boot, as on 2026-10-26. That boot also re-runs Proxmox's
@@ -217,7 +217,7 @@ reboot
 | `HostKernelPinUnsafe` | an unattended host reboot would be refused: no known-good kernel is pinned |
 
 Prometheus scrapes the Proxmox host at `192.168.50.10:9100` (job `proxmox`)
-and naiaclaw's textfile through the node-exporter DaemonSet. A dead exporter
+and k8s's textfile through the node-exporter DaemonSet. A dead exporter
 raises the existing `ScrapeTargetDown`.
 
 ## Checking by hand

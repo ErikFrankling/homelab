@@ -1,3 +1,7 @@
+# The VM's hostname is k8s. The node keeps its original name because every
+# local-path PersistentVolume is pinned to node `naiaclaw` by nodeAffinity.
+node-name: naiaclaw
+
 # The VM has a single address, 192.168.50.100, which DuckDNS points at. With it
 # as the node IP, ServiceLB publishes it as every LoadBalancer ingress IP, so
 # kube-proxy delivers LAN traffic on the source-preserving LoadBalancer path and

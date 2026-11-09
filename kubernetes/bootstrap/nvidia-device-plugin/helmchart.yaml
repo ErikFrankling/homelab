@@ -3,7 +3,7 @@
 # Cluster infrastructure, deliberately outside the namespace-scoped Flux
 # boundary, installed through the k3s Helm controller like Traefik.
 #
-# No node taint and no node label. naiaclaw is a single-node cluster, so an
+# No node taint and no node label. This is a single-node cluster, so an
 # nvidia.com/gpu:NoSchedule taint would make every unrelated workload
 # unschedulable. See docs/gpu-passthrough.md.
 #

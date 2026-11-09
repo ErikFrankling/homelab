@@ -6,7 +6,7 @@
 |---|---|---|
 | Proxmox | `192.168.50.10` | Physical host |
 | Legacy Docker VM | `192.168.50.100` | Powered-off rollback source, `onboot=0` |
-| k3s VM (`naiaclaw`) | `192.168.50.100` | Single Kubernetes node, 8 vCPU (all host threads), 52 GiB RAM, GTX 1060 passed through |
+| k3s VM (`k8s`) | `192.168.50.100` | Single Kubernetes node, 8 vCPU (all host threads), 52 GiB RAM, GTX 1060 passed through |
 | GPU machine | `192.168.50.232` | Reached as `gpu` by Hermes/OpenClaw |
 
 DuckDNS resolves the apex and wildcard to `192.168.50.100`, the VM's only
@@ -18,7 +18,7 @@ source-preserving path; Traefik's `lan-only` allowlist depends on that. Until
 with `.100` and must never run.
 
 K3s ServiceLB owns host port 53 for AdGuard. That host-port rule also intercepts
-the systemd-resolved stub address, so `/etc/resolv.conf` on `naiaclaw` points to
+the systemd-resolved stub address, so `/etc/resolv.conf` on `k8s` points to
 `/run/systemd/resolve/resolv.conf` (the uplink resolver file), not
 `stub-resolv.conf`.
 

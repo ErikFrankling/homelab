@@ -45,7 +45,7 @@ scrape_configs:
     static_configs:
       - targets: [192.168.50.100:9101]
         labels:
-          host_name: naiaclaw
+          host_name: k8s
   # The Proxmox host: Debian's prometheus-node-exporter on the LAN address,
   # with homelab_updates.prom (ops/updates/install.sh, docs/updates.md).
   - job_name: proxmox
