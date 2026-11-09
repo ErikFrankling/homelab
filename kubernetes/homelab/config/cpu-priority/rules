@@ -16,6 +16,7 @@ idle homelab time-backup-*
 # the builds almost nothing; it only stops a build from starving them.
 10000 kube-system traefik-*
 10000 kube-system coredns-*
+10000 kube-system metrics-server-*
 10000 homelab adguard-*
 10000 homelab time-*
 10000 homelab school-*
