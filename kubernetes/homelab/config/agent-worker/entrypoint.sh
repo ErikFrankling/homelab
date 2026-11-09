@@ -22,7 +22,9 @@ getent group kvm > /dev/null || groupadd --system kvm
 
 mkdir -p /etc/nix /root/.ssh /root/.config/nixpkgs /var/empty /run/sshd \
   "$state/ssh" "$state/build" "$state/work" "$state/android"
-cp /config/nix.conf /etc/nix/nix.conf
+# A link into the unhashed scripts ConfigMap: a nix.conf edit reaches running
+# jobs in about a minute instead of restarting the pod and killing them.
+ln -sfn /scripts/nix.conf /etc/nix/nix.conf
 # Jobs over SSH do not see the container environment.
 echo "$NIXPKGS_REV" > "$state/nixpkgs-rev"
 echo "$WORKER_BIG_MEMORY" > "$state/memory-big"

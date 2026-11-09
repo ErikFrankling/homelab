@@ -32,8 +32,10 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
   (`ops/earlyoom/install.sh`) kills nix-builder's processes before this pod's.
 - **CPU:** no request and no limit, so it gets the smallest share under
   contention. `max-jobs = 2`, `cores = 4` for Nix builds here.
-- **Disk:** same node disk as nix-builder. `min-free` = 155 GiB, so it collects
-  before nix-builder (150 GiB). An hourly janitor removes workspaces untouched
+- **Disk:** same node disk as nix-builder. Hourly housekeeping collects dead
+  store paths when the disk has under 155 GiB free. `min-free` (90 GiB, before
+  nix-builder's 80) is only an emergency backstop: at 155 GiB every
+  `nix develop` in every job ran its own full GC and waited on the GC lock. An hourly janitor removes workspaces untouched
   for 7 days, then the oldest while the disk has under 35 GiB free; a workspace
   with a running job is never touched. Devshells are rooted (`nix develop
   --profile <workspace>/.heavy/shell-NAME`) so collection keeps them.

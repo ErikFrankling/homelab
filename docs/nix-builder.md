@@ -43,9 +43,12 @@ client needs the new public key before it will accept anything built here.
   gets most of the node, and when it is idle it costs nothing. `max-jobs` and
   `cores` in `config/nix-builder/nix.conf` are sized to use the node fully.
 - **Disk:** the volume is the node's root disk and local-path enforces no
-  quota. `min-free` in `nix.conf` makes Nix collect garbage when that disk
-  drops below 150 GiB free (just above the 20% `DiskFillingUp` alert) and
-  collect until 175 GiB is free. The nightly job keeps GC roots under
+  quota. The nightly job (dotfiles auto-update) collects garbage after its
+  builds when the disk has under 150 GiB free. `min-free` in `nix.conf` is
+  only an emergency backstop: below 80 GiB free, collect until 90 GiB. Keep
+  it well under the free space live data leaves: a threshold the store
+  cannot reach makes every Nix operation run a full GC under the GC lock
+  (2026-11-09: remote builds hung for 20 minutes). The nightly job keeps GC roots under
   `/nix/var/nix/gcroots/auto-update` for the closures worth keeping; anything
   not rooted is fair game.
 

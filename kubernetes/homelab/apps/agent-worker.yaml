@@ -18,8 +18,8 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      # Cosmetic: local-path enforces no quota. min-free in nix.conf and the
-      # janitor in entrypoint.sh are the real bounds.
+      # Cosmetic: local-path enforces no quota. Hourly housekeeping (and the
+      # min-free backstop in scripts/nix.conf) are the real bounds.
       storage: 80Gi
   storageClassName: local-path
 ---

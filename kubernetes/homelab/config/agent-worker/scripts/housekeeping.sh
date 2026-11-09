@@ -6,8 +6,8 @@
 #   - each cache is pruned to a size budget, whole entries (one tool's cache),
 #     least recently used first, never one used in the last 2 days
 #   - old devShell profile generations go, then dead Nix store paths whenever
-#     the node has less than 155 GB free (nix.conf's min-free does the same
-#     during builds)
+#     the node has less than 155 GB free. This is the worker's routine
+#     collection; nix.conf's min-free is only an emergency backstop at 90 GiB
 set -u
 exec 7> /run/heavy-housekeeping.lock
 flock -n 7 || exit 0

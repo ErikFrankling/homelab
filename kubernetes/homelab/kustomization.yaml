@@ -142,7 +142,6 @@ configMapGenerator:
       - config/agent-worker/seed.sh
       - config/agent-worker/entrypoint.sh
       - config/agent-worker/sshd_config
-      - config/agent-worker/nix.conf
       - config/agent-worker/cgroups.sh
       - config/agent-worker/heavy-run.sh
       - config/agent-worker/heavy-status.sh
@@ -165,6 +164,7 @@ configMapGenerator:
       - config/agent-worker/scripts/heavy-emulator.sh
       - config/agent-worker/scripts/android.nix
       - config/agent-worker/scripts/nixpkgs-config.nix
+      - config/agent-worker/scripts/nix.conf
   # And the health checks: editing the list restarts Gatus.
   - name: gatus-config
     files:
