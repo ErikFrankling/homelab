@@ -38,6 +38,15 @@ spec:
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
+          # Model load outlasted liveness on the saturated node (260 restarts
+          # in 23h on 2026-11-09). Liveness starts once this passes (20 min max).
+          startupProbe:
+            failureThreshold: 120
+            httpGet:
+              path: /v1/audio/voices
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             failureThreshold: 5
             httpGet:
