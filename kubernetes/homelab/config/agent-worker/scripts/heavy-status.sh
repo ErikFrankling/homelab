@@ -49,4 +49,6 @@ done
 echo "background jobs (services: at most 3, capped, stop when idle):"
 bash /scripts/heavy-bg.sh list | sed 's/^/  /'
 echo "workspaces:"
-du -sh /work/*/ 2> /dev/null | sort -rh | head -8 | sed 's/^/  /'
+# Bounded: on a saturated node a full du took minutes and hung `heavy status`.
+timeout 10 du -sh /work/*/ 2> /dev/null | sort -rh | head -8 | sed 's/^/  /'
+[ "${PIPESTATUS[0]}" = 124 ] && echo "  (sizes skipped: du took over 10 s)"

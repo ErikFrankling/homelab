@@ -136,6 +136,7 @@ following `kubernetes/homelab/config/cpu-priority/rules`:
 |---|---|
 | `10000` for Traefik, CoreDNS, AdGuard, Time, school, Vaultwarden, Authentik (server, worker, db), Executor, brain, Gatus, notify-gateway, ntfy, the Onyx query path (api, mcp, web, embed, model, db, cache, opensearch) | What Erik uses answers first. They need little CPU, so the weight costs the builds almost nothing (2026-10-27). Onyx was missing until 2026-11-02: a build at 2000 against Onyx at 1 made embedding a 41-character query take 20-148 s and every search time out |
 | `2000 homelab nix-builder-*` | The builder still takes nearly all CPU the other pods compete for, but never ahead of the services above |
+| `200 homelab agent-worker-*` | Agents' `heavy` jobs, which sessions wait on: about half a core while the nightly builds, most of what is free otherwise (2026-11-09) |
 | `idle homelab time-backup-*`, `idle homelab onyx-background-*`, `idle nc-* *`, `idle e2e-* *` | Run only on CPU nobody else wants |
 | everything else | Kubelet default, weight 1 |
 
@@ -146,8 +147,10 @@ load. On 2026-10-27 that let kine queries take 49 s; leases expired and Flux,
 Kyverno and the sandbox controller restarted together.
 
 Inside `agent-worker`, `heavy` jobs (Gradle/APK builds, tests) run in a
-`jobs/` cgroup with `cpu.idle` (`config/agent-worker/scripts/cgroups.sh`), so
-they yield to the emulator and `heavy bg` servers in the same pod.
+`jobs/` cgroup at the normal weight 100 (`config/agent-worker/scripts/cgroups.sh`),
+and the pod has weight 200 (`rules`). Until 2026-11-09 the pod had weight 1 and
+the jobs `cpu.idle`; with the node at load ~200 jobs got no CPU at all and a
+one-second command sat for over 6 minutes.
 
 A weight reserves nothing: the scheduler never sees it, and an idle builder
 costs nobody anything. Edits to `rules` apply within a minute. Taking a pod

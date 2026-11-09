@@ -53,6 +53,13 @@ idle homelab time-backup-*
 100 fleet store-*
 100 fleet postgres-*
 
+# Agents' `heavy` jobs (pod agent-worker): tests, lint and APK builds that a
+# session waits on. At weight 1, with its jobs at cpu.idle, a node at load ~200
+# gave them no CPU at all; a one-second `command -v` sat for 6+ minutes
+# (2026-11-09). 200 is a tenth of the builder: about half a core while the
+# nightly build runs, most of what is free when it does not.
+200 homelab agent-worker-*
+
 # Batch work that can wait: Onyx indexing, sandbox tenants and e2e runs.
 idle homelab onyx-background-*
 idle nc-* *
