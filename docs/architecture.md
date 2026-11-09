@@ -51,14 +51,12 @@ through DuckDNS DNS-01.
 | OpenClaw | `openclaw-data` | `claw.*`, direct 18789 |
 
 The Traefik dashboard, AdGuard, OpenClaw, and experiment passthrough routes use
-`lan-only`. The registry alone uses `lan-and-cluster`, adding pod/service CIDRs
-so containerd can pull through the node-IP hairpin. Vaultwarden and Open WebUI
+`lan-only`. `lan-and-cluster` adds the pod/service CIDRs for routes that cluster
+workloads call through the node-IP hairpin. Vaultwarden and Open WebUI
 preserve their previous non-LAN-restricted behavior.
 
 External experiment routes remain in Kubernetes as selectorless Services plus
-EndpointSlices targeting the node's existing NodePorts. `p9eval` was already
-unavailable on port 30080 before migration; it remains represented so the
-pre-existing failure is explicit.
+EndpointSlices targeting the node's existing NodePorts.
 
 `opencode.*` is an external route to the opencode web/agent server on the
 GPU/PC box (`192.168.50.232:4096`), also modelled as a selectorless Service plus
@@ -77,15 +75,15 @@ also pinned to upstream commit
 
 Erik's rule: CPU never gates scheduling on the homelab; only RAM does. Slow is
 fine, `Pending` is not. On 2026-10-23 the node sat at 99% requested CPU (Onyx,
-alloy, the naiaclaw sandboxes' 500m init containers) and the rollout of
+alloy) and the rollout of
 `time-v2` stayed `Pending`, taking Time down.
 
 - `kubernetes/bootstrap/policies/zero-cpu-requests.yaml` is a Kyverno
   ClusterPolicy that rewrites every container's CPU request to `0` at pod
   creation, in every namespace except `kube-system`, `kyverno`, `flux-system`
   and `cert-manager` (their small requests are the CPU weight that keeps DNS,
-  ingress and the controllers ahead of everything else). It covers Helm charts,
-  naiaclaw sandboxes and anything added later. It is cluster-scoped, so
+  ingress and the controllers ahead of everything else). It covers Helm charts
+  and anything added later. It is cluster-scoped, so
   the `homelab-policies` Flux Kustomization (`kubernetes/bootstrap/flux.yaml`,
   service account `homelab-policy-reconciler`, which can write only
   ClusterPolicies and PriorityClasses) applies it from Git; after a node rebuild
@@ -95,21 +93,6 @@ alloy, the naiaclaw sandboxes' 500m init containers) and the rollout of
   `kubectl patch pod P --subresource resize --type=strategic -p '{"spec":{"containers":[{"name":"C","resources":{"requests":{"cpu":"0"}}}]}}'`.
   **Init containers cannot be resized**, and the scheduler still counts a running
   pod's init-container request. Only recreating the pod clears it.
-- Recreating a long-running naiaclaw sandbox needs care: its pod template keeps
-  the image it was created with and its ConfigMap the config of that time, so a
-  plain pod delete can pair an old gateway with a newer config (`byoproof` went
-  into `CrashLoopBackOff`, `Invalid config ... gateway.auth`). The safe way is
-  what naiaclaw's own restart does: snapshot the workspace directory
-  (`/var/lib/rancher/k3s/storage/<pv>_<ns>_workspace-<name>`), rewrite the
-  ConfigMaps with the API's own code from inside the API pod that owns the
-  tenant (`rematerializeInstance(account, name)` after
-  `AppDataSource.initialize()`; `naiaclaw-api` for `nc-acme-*`, a different
-  deployment and database for `nc-oc96-*`, `nc-web-*`, `nc-portal-*`), move the
-  image to that API's `OPENCLAW_SANDBOX_IMAGE`, then delete the pod. Never run
-  it with the wrong API for a namespace, and never move a volume already
-  migrated by a newer OpenClaw (state schema 18) back to an older image. The
-  `nc-acme-*` sandboxes were recreated this way on 2026-10-23; every new pod
-  carries `0` CPU requests from the policy.
 - Core services (`time`, `time-v2`, `notify-gateway`, `executor`, `brain`,
   `gatus`, `grafana`) run with `priorityClassName: homelab-core`, so when memory
   is short they preempt batch and search workloads. `low-priority` (-100) is for
@@ -123,7 +106,7 @@ alloy, the naiaclaw sandboxes' 500m init containers) and the rollout of
 Zero requests have a side effect: every pod gets the minimum cgroup
 `cpu.weight` (1), so under contention each busy pod gets the same share. On
 2026-10-23 the node sat at load 36 on 8 CPUs (APK builds in `agent-worker`,
-Onyx indexing, sandboxes), the nix builder got about one core, and the nightly
+Onyx indexing), the nix builder got about one core, and the nightly
 NixOS update took 3h26. Erik: an update should take at most an hour. Priority
 is fine; reservations that gate scheduling are not.
 
@@ -138,14 +121,14 @@ following `kubernetes/homelab/config/cpu-priority/rules`:
 | `2000 homelab nix-builder-*` | The builder still takes nearly all CPU the other pods compete for, but never ahead of the services above |
 | `10000 flux-system *` | Flux deploys every fix, this file included. At weight 1 its controllers missed their 1 s liveness probes at load ~200, restarted ~2000 times and applied nothing (2026-11-09) |
 | `200 homelab agent-worker-*` | Agents' `heavy` jobs, which sessions wait on: about half a core while the nightly builds, most of what is free otherwise (2026-11-09) |
-| `idle homelab time-backup-*`, `idle homelab onyx-background-*`, `idle nc-* *`, `idle e2e-* *` | Run only on CPU nobody else wants |
+| `idle homelab time-backup-*`, `idle homelab onyx-background-*` | Run only on CPU nobody else wants |
 | everything else | Kubelet default, weight 1 |
 
 k3s itself (apiserver, kine, kubelet, containerd) runs in `system.slice`,
 which `ops/systemd/system-slice-cpu.conf` gives the same weight as
 `kubepods.slice` (313). At the default 100 it got about 2 of 8 cores under
-load. On 2026-10-27 that let kine queries take 49 s; leases expired and Flux,
-Kyverno and the sandbox controller restarted together.
+load. On 2026-10-27 that let kine queries take 49 s; leases expired and Flux
+and Kyverno restarted together.
 
 Inside `agent-worker`, `heavy` jobs (Gradle/APK builds, tests) run in a
 `jobs/` cgroup at the normal weight 100 (`config/agent-worker/scripts/cgroups.sh`),
@@ -193,8 +176,7 @@ as this stack allows:
   logical CPU count, so 8 is the hardware ceiling. vCPUs are ordinary host
   threads, not reservations — the Proxmox host (which only routes Tailscale)
   needs nothing carved out and is never starved. This doubles the request
-  ledger, which only runtime-stamped workloads draw from (naiaclaw Sandboxes,
-  ~500m each); nothing deployed from this repository requests CPU at all.
+  ledger; nothing deployed from this repository requests CPU at all.
 
 There is no software switch that disables CPU-request accounting entirely —
 verified empirically on this cluster on 2026-08-15. The scheduler's
@@ -204,8 +186,8 @@ independently re-checks fit with hard-coded defaults at bind time (the same
 pod pinned via `nodeName` to bypass the scheduler was rejected `OutOfcpu`).
 The only software workaround is rewriting requests at admission, which was first
 rejected as pod-fiddling and is now done by the Kyverno policy above. If the 8-CPU ledger ever
-fills again, the honest options are lowering the sandbox catalog's CPU
-requests at their source or more hardware.
+fills again, the honest options are lowering CPU requests at their
+source or more hardware.
 
 Rules that go with this choice:
 

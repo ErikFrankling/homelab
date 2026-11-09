@@ -5,7 +5,6 @@ procedure.
 
 ## Invariants
 
-- Do not stop VM 100 before the registry route works through cluster Traefik.
 - Never activate `192.168.50.100` on both VMs.
 - Never start stateful applications against the same copied data in both
   environments.
@@ -23,8 +22,8 @@ procedure.
    `kubernetes/bootstrap/flux.yaml`.
 7. Apply `ops/migration-helper.yaml`; wait for every PVC to bind.
 8. Validate the cluster routes against `.200` with `curl --resolve`. At this
-   stage application routes should be unavailable, but dashboard, TLS issuance,
-   and external registry/Naiaclaw/P9 routes must behave as expected.
+   stage application routes should be unavailable, but dashboard and TLS issuance
+   must behave as expected.
 
 ## Copy and switch
 
@@ -44,15 +43,14 @@ procedure.
 5. Push the commit that changes application replicas to one and Flux
    `wait: true`.
 6. Test all applications against `.200` using `curl --resolve`, including
-   registry `/v2/`, wildcard SAN/issuer/expiry, data presence, and authentication
+   wildcard SAN/issuer/expiry, data presence, and authentication
    state.
 7. Install `ops/k3s/config.yaml`, the sysctl file, and the disabled VIP unit.
 8. Shut down VM 100, set `onboot=0`, then enable the VIP unit on VM 200.
 9. Increase VM 200 to 13 GiB, reboot it, and verify that `.100` is the node
    external IP and all LoadBalancer Services advertise it.
 10. Re-test using normal DuckDNS resolution to `.100`.
-11. Pull a known private-registry digest through the normal registry hostname.
-12. Patch the five dynamically provisioned application PVs to reclaim policy
+11. Patch the five dynamically provisioned application PVs to reclaim policy
     `Retain`.
 
 ## Verification matrix
@@ -64,10 +62,6 @@ procedure.
 | `vault.*` | 200 and existing vault data |
 | `chat.*` | 200 and existing Open WebUI data |
 | `claw.*` | 200 and existing OpenClaw state, LAN only |
-| `naiaclaw-api.*` | 200, LAN only |
-| `planet9-test.*` | 200, LAN only |
-| `registry.*` | `/v2/` reachable, LAN only |
-| `p9eval.*` | Pre-existing 502; still 502 after migration |
 
 Also verify DNS 53 over TCP and UDP, direct OpenClaw port 18789, pod
 readiness/restarts, node memory, root disk, Flux readiness, and Traefik ACME
@@ -78,6 +72,6 @@ logs.
 1. Suspend the Flux Kustomization, then scale homelab Deployments to zero.
 2. Remove `/etc/netplan/60-homelab-vip.yaml` and run `netplan apply`; verify `.100` is absent from VM 200.
 3. Start VM 100 and run its Compose project.
-4. Verify `.100`, wildcard TLS, registry, DNS, and application routes.
+4. Verify `.100`, wildcard TLS, DNS, and application routes.
 5. Do not copy Kubernetes data back without a deliberate conflict-free restore
    plan; choose one environment as authoritative.

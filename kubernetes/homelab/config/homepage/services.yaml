@@ -110,20 +110,7 @@
         href: https://nix-cache.erikfrankling.duckdns.org/nix-cache-info
         icon: si-nixos
         description: Binary cache and builder
-    - Registry:
-        href: https://registry.erikfrankling.duckdns.org/v2/_catalog
-        icon: mdi-package-variant
-        description: Container registry
     - T3 updates:
         href: https://t3-updates.erikfrankling.duckdns.org/healthz
         icon: mdi-cellphone-arrow-down
         description: Android app updates
-    - Naiaclaw API:
-        href: https://naiaclaw-api.erikfrankling.duckdns.org
-        icon: mdi-api
-    - Planet9 test:
-        href: https://planet9-test.erikfrankling.duckdns.org
-        icon: mdi-earth
-    - p9eval:
-        href: https://p9eval.erikfrankling.duckdns.org
-        icon: mdi-clipboard-check-outline

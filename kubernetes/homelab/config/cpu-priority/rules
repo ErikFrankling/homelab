@@ -68,7 +68,5 @@ idle homelab time-backup-*
 # nightly build runs, most of what is free when it does not.
 200 homelab agent-worker-*
 
-# Batch work that can wait: Onyx indexing, sandbox tenants and e2e runs.
+# Batch work that can wait: Onyx indexing.
 idle homelab onyx-background-*
-idle nc-* *
-idle e2e-* *

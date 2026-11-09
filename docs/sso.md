@@ -21,11 +21,9 @@ encrypted. The route is LAN/tailnet/cluster only. No public enrollment.
 | Fleet | `/login` automatically calls its existing name-only login as `erik`; existing sessions are retained. |
 | Proxmox | Native default OpenID realm `homelab`; owner `akadmin@homelab` has Administrator at `/`. Small UI patch automatically starts OIDC. `?manual=1` retains recovery realms. |
 | Vaultwarden | Native OIDC, `SSO_ONLY=true`, existing account matched by verified email, no new-account signup. Vault **decryption** remains: enroll device/biometric unlock with Erik rather than weakening encryption. |
-| Neptune test | Native OpenID Connect, `defaultLoginUrl` starts shared login automatically. Owner maps to existing `admin`. Existing machine/test authentication retained. |
 | T3 Code | Existing device pairing/session; no application password added. API/WebSocket routes stay direct. |
-| Time, School, X graph, Brain, Search, Health, Prometheus, Alertmanager, Traefik, llama-swap, OpenCode, Naiaclaw | Existing direct private-network entry; no extra login gate. |
-| Nix cache, registry, T3 updates | Machine endpoints retain existing access controls; no browser password added. |
-| p9eval | Existing dead route to NodePort 30080; HTTP 502 predates this task (also recorded in cutover-runbook.md). No running service to configure or authenticate. |
+| Time, School, X graph, Brain, Search, Health, Prometheus, Alertmanager, Traefik, llama-swap, OpenCode | Existing direct private-network entry; no extra login gate. |
+| Nix cache, T3 updates | Machine endpoints retain existing access controls; no browser password added. |
 
 All configured Authentik applications bind access to `authentik Admins`.
 The initial owner is `akadmin`, display name Erik, with the same email as
@@ -83,8 +81,7 @@ before maintenance that changes data.
 Verified on 2026-11-07: Keeper dashboard in a fresh incognito session; subsequent
 protocol checks use a fresh cookie jar. One shared session completes Executor
 login as the existing owner, Proxmox login as `akadmin@homelab`, and Vaultwarden's
-OIDC round trip to its SSO connector. Neptune uses its existing `admin` account
-through native OIDC. OpenClaw accepts a protocol-4 operator
+OIDC round trip to its SSO connector. OpenClaw accepts a protocol-4 operator
 WebSocket connection with no credentials. CLIProxy v0/v8 management config
 responds 200 without a browser key; `/v1/models` still returns 401 without an API
 key. ntfy config disables login and an anonymous topic poll returns 200.
@@ -134,21 +131,6 @@ It backs up `/etc/pve/domains.cfg` and `user.cfg` under
 and `99-homelab-sso` at `/etc/apt/apt.conf.d/99-homelab-sso`. The package hook
 reapplies the guarded patch on updates and fails if upstream changes the target.
 No Proxmox password is stored in a browser or proxy.
-
-Neptune configuration uses `ops/neptune-sso/configure.cjs`, run from `/app` in
-the `p9-mcp-test` container with `NEPTUNE_CLIENT_SECRET` on stdin. It updates
-its IDP/default-login settings and links the existing owner account, encrypting the client secret with Neptune's own
-stored encryption key. Its existing settings backup is private on the PC at
-`~/.local/state/homelab-sso/neptune-config-before-sso.json`; the existing owner
-row is backed up beside it as `neptune-admin-before-sso.json`. The owner keeps
-its ID, admin flag, roles and password hash. Its `idpSource`, `idpSourceId` and
-`idpSourceKey` switch to the native OpenID provider (Neptune keys user lookup by
-username **and** IDP). Restore those three fields from the private backup for
-local-login recovery; do not create a duplicate owner. Apply the tracked
-`readiness-patch.yaml` with `kubectl -n p9 patch deploy p9-mcp-test --type=strategic
---patch-file ops/neptune-sso/readiness-patch.yaml`, and restart after changing
-settings so Passport registers the provider. This namespace is managed outside
-homelab Flux. The readiness probe must not follow the root's SSO redirect.
 
 Vaultwarden's verified pre-change SQLite backup is on naiaclaw at
 `/home/ubuntu/homelab-sso/backups/vaultwarden-before-sso.sqlite3` (0600).

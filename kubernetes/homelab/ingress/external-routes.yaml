@@ -7,34 +7,6 @@ spec:
     - websecure
   routes:
     - kind: Rule
-      match: Host(`naiaclaw-api.erikfrankling.duckdns.org`)
-      middlewares:
-        - name: lan-only
-      services:
-        - name: external-naiaclaw-api
-          port: 80
-    - kind: Rule
-      match: Host(`p9eval.erikfrankling.duckdns.org`)
-      middlewares:
-        - name: lan-only
-      services:
-        - name: external-p9-eval
-          port: 80
-    - kind: Rule
-      match: Host(`planet9-test.erikfrankling.duckdns.org`)
-      middlewares:
-        - name: lan-and-cluster
-      services:
-        - name: external-p9-mcp-test
-          port: 80
-    - kind: Rule
-      match: Host(`registry.erikfrankling.duckdns.org`)
-      middlewares:
-        - name: lan-and-cluster
-      services:
-        - name: external-p9-registry
-          port: 80
-    - kind: Rule
       match: Host(`fleet.erikfrankling.duckdns.org`)
       middlewares:
         - name: lan-only

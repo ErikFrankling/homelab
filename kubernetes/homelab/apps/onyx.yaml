@@ -19,8 +19,7 @@
 # Upgrade: bump the three onyx images together (same tag); the api pod runs the
 # alembic migrations on start.
 #
-# CPU requests are 2m on purpose: the node is ~99% CPU-requested (mostly
-# naiaclaw tenant pods), and a Pending pod blocks the whole Kustomization.
+# CPU requests are 2m on purpose: a Pending pod blocks the whole Kustomization.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

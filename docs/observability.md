@@ -42,8 +42,6 @@ All routes are `lan-only` (LAN and tailnet).
    still failing after 3 h, Time heartbeats). Erik hears directly in Discord
    (#notifications); only critical alerts @mention him. The ntfy mirror
    keeps the priorities 5 critical, 4 warning, 3 info.
-5. `project="naiaclaw"`: Erik's work project. Alert only, priority 2, at
-   most once a day per alert; never a session.
 
 What is watched today:
 
@@ -300,29 +298,19 @@ single 400-day metrics retention covers Time's "at least a year".
 - Metrics: low-cardinality attributes only (`provider`, `model`,
   `input_mode`, `host`). Thread ids, SHAs and similar go on log events.
 
-## What happens to the naiaclaw-old stack
-
-It keeps running untouched until the new stack works, since it backs the
-OpenClaw/naiaclaw dashboards. After that Erik decides whether naiaclaw still
-needs it. If not, `helm uninstall` (Flux HelmReleases `alloy`, `grafana`,
-`loki`) and the Mimir StatefulSet go, and their PVCs with them.
-
 ## Decisions (Erik, 2026-10-21)
 
-1. A new stack owned by this repo, not the hand-applied naiaclaw one.
+1. A new stack owned by this repo.
 2. Phone alerts through the self-hosted ntfy (docs/notifications.md); since
    06:50 delivered through Discord, ntfy kept as a mirror (Erik will not
    install the ntfy app).
 3. Erik hears only about incidents a session could not fix.
 4. Repair sessions share health-watch's limit (1 an hour, 6 a day) and run
    on Sonnet 5.5, escalating hard parts to Opus.
-5. Failing naiaclaw work-project jobs: alert only.
-6. Window titles stay in the 5-year Loki copy of Time's events.
+5. Window titles stay in the 5-year Loki copy of Time's events.
 
 ## Still to do
 
-- Retire the naiaclaw-old stack (namespaces `grafana`, `loki`, `mimir`,
-  `alloy`, `monitoring`) once naiaclaw no longer needs its dashboards.
 - Backups: the Loki volume (`loki-data`, the raw copy of Time's events) and
   Time's database, off the node, with a restore test. Time v2 does not go
   live before that (docs/backups.md; the Time session owns it).

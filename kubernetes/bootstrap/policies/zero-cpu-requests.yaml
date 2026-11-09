@@ -1,6 +1,6 @@
 # Homelab policy (docs/architecture.md, "CPU requests"): CPU never gates
 # scheduling. Every pod's CPU requests are rewritten to 0 at admission, so
-# no workload (ours, Helm charts, naiaclaw sandboxes, anything added later)
+# no workload (ours, Helm charts, anything added later)
 # can use up the node's allocatable CPU and leave pods Pending. Memory is the
 # real constraint and is left alone.
 #

@@ -244,17 +244,9 @@ totals about 3.8 GiB.
 Namespaces/workloads observed include:
 
 - Core/platform: `kube-system`, `cert-manager`, `flux-system`, `kyverno`, `local-path-provisioner`, `traefik`, `metrics-server`.
-- Observability: `grafana`, `loki`, `mimir`, `alloy`, `kube-state-metrics`, `monitoring`.
 - Husk: removed on 2026-07-24; do not recreate it on this cluster.
-- Naiaclaw: `naiaclaw-system` with `naiaclaw-api`, `naiaclaw-postgres`, `dns-monitor`, and `squid`.
-  `naiaclaw-github-delivery-drain-oc96` and `naiaclaw-teams-delivery-drain-oc96`
-  are suspended by hand since 2026-10-27 (not in this repo): the oc96 API image
-  `tp-e280544b` has no drain endpoints, so they failed every minute.
-- P9/OpenClaw-related: `p9` and tenant namespace `nc-acme-822b33ad`.
-
-The `p9` registry local-path volume actually consumes about 29 GiB despite a
-20 GiB request. Local-path does not enforce capacity. Watch both memory and
-disk, and do not place media on the root-backed storage class.
+Local-path does not enforce PVC capacity. Watch both memory and disk, and do
+not place media on the root-backed storage class.
 
 ## Repo Contents
 

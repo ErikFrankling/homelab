@@ -1,7 +1,7 @@
 # Alert rules (docs/observability.md, "Alerts and incidents").
 # Every alert carries:
 #   severity: critical | warning | info
-#   project:  homelab | machines | naiaclaw | time
+#   project:  homelab | machines | time
 #   session:  "true"  -> health-watch on the pc starts a repair session; Erik
 #                        is told only if it still fires 3 h later
 #             "false" -> no session; Alertmanager tells Erik directly
@@ -13,7 +13,7 @@ groups:
       # schedule, and clears on the next good run.
       - alert: CronJobFailing
         expr: |
-          (kube_cronjob_status_last_schedule_time{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"}
+          (kube_cronjob_status_last_schedule_time
             - on (namespace, cronjob) kube_cronjob_status_last_successful_time > 600)
           unless on (namespace, cronjob) kube_cronjob_spec_suspend == 1
         for: 15m
@@ -21,20 +21,10 @@ groups:
         annotations:
           summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }}: latest run failed"
           description: "Its last scheduled run has not succeeded. Logs: kubectl -n {{ $labels.namespace }} logs job/<latest {{ $labels.cronjob }} job>."
-      - alert: NaiaclawCronJobFailing
-        expr: |
-          (kube_cronjob_status_last_schedule_time{namespace=~"naiaclaw-system|nc-.*|p9|openshell|openclaw"}
-            - on (namespace, cronjob) kube_cronjob_status_last_successful_time > 600)
-          unless on (namespace, cronjob) kube_cronjob_spec_suspend == 1
-        for: 30m
-        labels: {severity: info, project: naiaclaw, session: "false"}
-        annotations:
-          summary: "naiaclaw: CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} failing"
-          description: "Work project; alert only, no repair session."
       # Never succeeded at all (no last_successful_time) but has been scheduled.
       - alert: CronJobNeverSucceeded
         expr: |
-          (kube_cronjob_status_last_schedule_time{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"} > 0)
+          (kube_cronjob_status_last_schedule_time > 0)
           unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
           unless on (namespace, cronjob) kube_cronjob_spec_suspend == 1
         for: 1h
@@ -44,32 +34,21 @@ groups:
       - alert: PodNotStarting
         expr: |
           max by (namespace, pod, container, reason) (
-            kube_pod_container_status_waiting_reason{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw",
-              reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|CreateContainerError"}) == 1
+            kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|CreateContainerError"}) == 1
         for: 15m
         labels: {severity: warning, project: homelab, session: "true"}
         annotations:
           summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}): {{ $labels.reason }}"
-      - alert: NaiaclawPodNotStarting
-        expr: |
-          max by (namespace, pod, container, reason) (
-            kube_pod_container_status_waiting_reason{namespace=~"naiaclaw-system|nc-.*|p9|openshell|openclaw",
-              reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|CreateContainerError"}) == 1
-        for: 1h
-        labels: {severity: info, project: naiaclaw, session: "false"}
-        annotations:
-          summary: "naiaclaw: {{ $labels.namespace }}/{{ $labels.pod }}: {{ $labels.reason }}"
-          description: "Work project; alert only, no repair session."
       - alert: DeploymentUnavailable
         expr: |
-          kube_deployment_spec_replicas{namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"}
+          kube_deployment_spec_replicas
             > kube_deployment_status_replicas_available
         for: 15m
         labels: {severity: warning, project: homelab, session: "true"}
         annotations:
           summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas"
       - alert: PersistentVolumeClaimPending
-        expr: kube_persistentvolumeclaim_status_phase{phase="Pending",namespace!~"naiaclaw-system|nc-.*|p9|openshell|openclaw"} == 1
+        expr: kube_persistentvolumeclaim_status_phase{phase="Pending"} == 1
         for: 30m
         labels: {severity: warning, project: homelab, session: "true"}
         annotations:
