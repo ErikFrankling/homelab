@@ -32,7 +32,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: openwebui
-          image: ghcr.io/open-webui/open-webui:latest-slim@sha256:39e80e4dce63dd00a163f2d56c0b9a7f5cd43bdde2120534706556f793808ea7
+          image: ghcr.io/open-webui/open-webui:latest-slim@sha256:85d0453be8ca086896ddcc496190ad5a78f79d6e15f4be8c0fb80e4a9aaba2b0
           imagePullPolicy: IfNotPresent
           env:
             - name: ENABLE_RAG_WEB_SEARCH
