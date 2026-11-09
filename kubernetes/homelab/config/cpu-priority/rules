@@ -25,6 +25,7 @@ idle homelab time-backup-*
 10000 homelab gatus-*
 10000 homelab notify-gateway-*
 10000 homelab ntfy-*
+10000 homelab authentik-*
 
 # Search answers agents (the hourly parcel sweep) in seconds: every query is
 # an embedding call (onyx-embed), a model-server call, OpenSearch and Postgres.
