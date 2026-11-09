@@ -40,6 +40,11 @@ idle homelab time-backup-*
 10000 homelab onyx-cache-*
 10000 homelab onyx-opensearch-*
 
+# Flux deploys every fix, including edits to this file. At weight 1 its
+# controllers missed their 1 s liveness probes at load ~200, restarted ~2000
+# times and never finished a reconcile (2026-11-09). They idle otherwise.
+10000 flux-system *
+
 # The nightly NixOS update builds here and has to finish in under an hour
 # (Erik, 2026-10-23); it waited behind everything else at weight 1. 2000 is
 # still far above the other pods together, but below the services above.
