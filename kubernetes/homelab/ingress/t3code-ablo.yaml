@@ -1,0 +1,45 @@
+# Laptop stays on loopback; Tailscale Serve forwards tailnet TCP 3773.
+# The k3s host routes this tailnet address through Proxmox (see ops/network).
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-t3code-ablo
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: external-t3code-ablo
+  labels:
+    kubernetes.io/service-name: external-t3code-ablo
+addressType: IPv4
+endpoints:
+  - addresses:
+      - 100.76.35.74
+    conditions:
+      ready: true
+ports:
+  - name: http
+    port: 3773
+    protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: t3code-ablo
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`t3code-ablo.erikfrankling.duckdns.org`)
+      middlewares:
+        - name: lan-only
+      services:
+        - name: external-t3code-ablo
+          port: 80

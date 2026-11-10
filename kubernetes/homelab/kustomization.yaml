@@ -15,6 +15,7 @@ resources:
   - ingress/external-services.yaml
   - ingress/external-routes.yaml
   - ingress/dev-preview.yaml
+  - ingress/t3code-ablo.yaml
   - apps/adguard.yaml
   - apps/vaultwarden.yaml
   - apps/hermes.yaml

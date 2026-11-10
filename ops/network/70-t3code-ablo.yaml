@@ -1,0 +1,9 @@
+# Install on k3s VM as /etc/netplan/70-t3code-ablo.yaml, mode 0600.
+# Proxmox is the existing Tailscale subnet router. Preserve the default route.
+network:
+  version: 2
+  ethernets:
+    eth0:
+      routes:
+        - to: 100.76.35.74/32
+          via: 192.168.50.10
