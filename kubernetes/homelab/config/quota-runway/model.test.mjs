@@ -51,3 +51,14 @@ test('unchanged observations in one reset cycle keep a known depleted plateau',(
  const a={points:[{t:now-4*HOUR,p:0,reset:now+HOUR,cycle:1},{t:now,p:0,reset:now+HOUR,cycle:1}]};
  assert.ok(historicalPool([a],now-4*HOUR,now).every(p=>p.value===0));
 });
+
+test('model-specific weekly rows never masquerade as the all-model allowance',()=>{
+ const a={provider:'claude',histories:{},cache:{refreshed_at:iso(now),quota:{quota:[
+  {key:'limits.weekly_scoped.Fable',scope:'model',usedPercent:0,window:{seconds:604800}},
+  {key:'seven_day_oauth_apps',scope:'window',usedPercent:20,window:{seconds:604800}},
+  {key:'seven_day',scope:'window',usedPercent:100,window:{seconds:604800}}
+ ]}}};
+ assert.equal(accountState(a,'secondary',now).remaining,0);
+ a.cache.quota.quota.pop();
+ assert.equal(accountState(a,'secondary',now).remaining,null);
+});

@@ -64,23 +64,55 @@ APIs with `x-cpa-usage-keeper-request: fetch`. It never reads proxy credentials,
 creates another queue consumer, or fabricates missing historical observations.
 All routes remain LAN/Tailscale-only. No image build or additional database.
 
-Select provider/plan, 5-hour or weekly limit, history period and forecast
-horizon. One full account allowance = 100% of the selected limit on one account.
-Only matching provider/plan accounts are summed; unknown plans stay isolated
-until Keeper reports them. Short and weekly quotas are independent constraints;
-the account cards show the other window so an available weekly allowance does
-not imply a usable account while its short window is depleted.
+The default graph compares Claude and Codex on one percentage axis with separate
+lines per provider/plan. Each line averages matching account allowances; it does
+not claim that different subscriptions have equal token budgets. The selector
+filters chart lines only: all accounts remain visible underneath, including
+disabled accounts. Cards list every normalized quota row (including model-scoped
+Fable), provider reset times, inactive/restricted states, and explicit missing
+readings. Main graph windows use exact quota keys, never the first weekly row.
+
+When a cache is empty, failed, older than five minutes, or past reset, the page
+POSTs `/quota/refresh` and polls `/quota/refresh/:auth_index` to completion
+(up to 45 seconds). Provider attempts have a one-minute cooldown. Cache/history
+reads repeat every minute, with bounded retry after network errors and immediate
+recovery on reconnect/focus. Last good readings retain their original timestamps.
+Account cards appear before a slow provider refresh completes. Refresh buttons
+force provider reads rather than merely rereading the cache.
+
+Reset usage reads current `/quota/claude-reset-grants/:id` or
+`/quota/reset-credits/:id`. Claude presents every usable grant and its cleared
+limits, then posts `auth_index`, `grant_id` and `organization_id` to `/quota/reset`.
+Codex confirms consuming one credit. No reset request is retried: an ambiguous
+response can still have consumed a credit. Result codes and routing recovery
+failure remain visible while quota is refreshed. No-credit and unavailable-grant
+states are explicit.
 
 Rate calculation uses observed percentage-point drops inside cycles, excluding
 resets, intervals blocked at zero, and gaps longer than two hours. At least five
-minutes of usable observations are required. The default lookback is six hours.
-The resulting rate is a conditional recent unblocked pace, not guaranteed
-wall-clock throughput. Both the forecast and exhaustion time respond to the
-pace slider. Only the next provider-reported reset is projected, with a reset
-to full quota; later reset times are not invented. Unknown rates show a dotted purple reset-only ceiling (no spending assumed),
-with scheduled reset markers and no invented burn curve. Old readings (>15 minutes),
-missing data and elapsed resets are marked stale. History begins where Keeper
-actually observed the quota, not at an invented full starting balance.
+minutes of usable observations are required. Only the next provider reset is
+projected. Missing rates show current dots and reset markers without invented
+burn. Old readings (>15 minutes), missing data and elapsed resets are marked stale.
+
+### Claude scoped limits compatibility
+
+Upstream Keeper 2.1.0 discards Anthropic's `limits[]`. The provider currently puts
+Fable in `weekly_scoped` with `scope.model.display_name`, `percent`, `resets_at`
+and `is_active`; it may report 0% used while inactive. Legacy `five_hour` can be
+null. Never invent a 5-hour allowance from that or conflate Fable with `seven_day`.
+`config/keeper-limits/scoped-limits.patch` preserves those scoped rows and inactive
+flags while retaining legacy keys and history. Its Dockerfile pins upstream
+41b34f12dbef209292765415b860583aad5afc09 and runs a parser/normalizer regression
+test. Build on k8s and import before pushing the deployment (the local image uses
+`imagePullPolicy: Never`):
+
+```sh
+rsync -a kubernetes/homelab/config/keeper-limits/ k8s:quota-keeper-build/
+ssh k8s 'cd quota-keeper-build && sudo docker build --memory=3g --cpuset-cpus=0,1 -t docker.io/library/cpa-usage-keeper:2.1.0-scoped1 . && sudo docker save docker.io/library/cpa-usage-keeper:2.1.0-scoped1 | sudo k3s ctr -n k8s.io images import -'
+```
+
+Rebuild/import after node replacement. Bump the tag when changing the patch.
+The upstream image remains the rollback. No database schema changes.
 
 Keeper's own background refresh was enabled at five-minute intervals. This is
 stored on its existing PVC, so it survives restarts. After replacing that DB,

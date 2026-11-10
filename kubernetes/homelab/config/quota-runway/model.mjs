@@ -33,7 +33,8 @@ export function accountState(account, role, now, lookback=HOUR) {
   const history=account.histories?.[role];
   const seconds=role==='primary'?18000:604800;
   const rows=account.cache?.quota?.quota || [];
-  const row=rows.find(r=>r.window?.seconds===seconds && (!r.scope||r.scope==='window'));
+  const key=account.provider==='claude'?(role==='primary'?'five_hour':'seven_day'):(role==='primary'?'rate_limit.primary_window':'rate_limit.secondary_window');
+  const row=rows.find(r=>r.key===key)||rows.find(r=>!r.key&&r.window?.seconds===seconds&&(!r.scope||r.scope==='window'));
   const points=observations(history),last=points.at(-1);
   const cacheTime=time(account.cache?.refreshed_at);
   const cacheP=row ? percent(typeof row.usedPercent==='number'?100-row.usedPercent:

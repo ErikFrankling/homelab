@@ -46,9 +46,10 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
       containers:
+        # Upstream 2.1.0 plus scoped Claude limits; build/import: docs/cliproxy.md.
         - name: keeper
-          image: ghcr.io/willxup/cpa-usage-keeper:v2.1.0@sha256:c071c6326e95601988e011ef38f0fe4cfd2bd50dcebf18848cd10cc1a01edb84
-          imagePullPolicy: IfNotPresent
+          image: docker.io/library/cpa-usage-keeper:2.1.0-scoped1
+          imagePullPolicy: Never
           command: ["/app/cpa-usage-keeper"]
           workingDir: /data
           env:

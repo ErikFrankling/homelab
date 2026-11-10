@@ -1,0 +1,65 @@
+--- a/internal/quota/types.go
++++ b/internal/quota/types.go
+@@ -64,6 +64,7 @@
+ }
+ 
+ type QuotaRow struct {
++	Active *bool `json:"active,omitempty"`
+ 	UsageBreakdown    []QuotaUsageBreakdown `json:"usageBreakdown,omitempty"`
+ 	Key               string                `json:"key"`
+ 	Label             string                `json:"label,omitempty"`
+@@ -208,7 +209,20 @@
+ 	Utilization  *float64 `json:"utilization,omitempty"`
+ }
+ 
++type ClaudeLimit struct {
++ Kind string `json:"kind"`
++ Group string `json:"group"`
++ Percent *float64 `json:"percent"`
++ ResetsAt string `json:"resets_at"`
++ Active *bool `json:"is_active"`
++ Scope *struct {
++  Model *struct { ID string `json:"id"`; Name string `json:"display_name"` } `json:"model"`
++  Surface *struct { ID string `json:"id"`; Name string `json:"display_name"` } `json:"surface"`
++ } `json:"scope"`
++}
++
+ type ClaudeUsagePayload struct {
++ Limits []ClaudeLimit `json:"limits,omitempty"`
+ 	ResetGrants       *ClaudeResetGrantStatus `json:"resetGrants,omitempty"`
+ 	FiveHour          *ClaudeUsageWindow      `json:"fiveHour,omitempty"`
+ 	SevenDay          *ClaudeUsageWindow      `json:"sevenDay,omitempty"`
+--- a/internal/quota/payloads.go
++++ b/internal/quota/payloads.go
+@@ -245,7 +245,11 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	var limits []ClaudeLimit
++	// Scoped limits (including Fable) are absent from the legacy fields.
++	_ = json.Unmarshal(object["limits"], &limits)
+ 	return &ClaudeUsagePayload{
++		Limits: limits,
+ 		ResetGrants:       parseClaudeResetGrants(object["cedar_ember"]),
+ 		FiveHour:          parseClaudeUsageWindow(objectField(object, "five_hour", "fiveHour")),
+ 		SevenDay:          parseClaudeUsageWindow(objectField(object, "seven_day", "sevenDay")),
+--- a/internal/quota/normalize.go
++++ b/internal/quota/normalize.go
+@@ -76,6 +76,17 @@
+ 		return nil
+ 	}
+ 	rows := make([]QuotaRow, 0, 8)
++ for _, limit := range result.Usage.Limits {
++  // Preserve legacy all-account keys for history; scoped quotas are separate.
++  if limit.Scope == nil || limit.Percent == nil || math.IsNaN(*limit.Percent) || math.IsInf(*limit.Percent, 0) { continue }
++  label, metric := "", ""
++  if limit.Scope.Model != nil { label = limit.Scope.Model.Name; metric = limit.Scope.Model.ID }
++  if limit.Scope.Surface != nil { label = strings.TrimSpace(label + " " + limit.Scope.Surface.Name); metric += ":" + limit.Scope.Surface.ID }
++  if label == "" { label = limit.Kind }
++  row := QuotaRow{Key: "limits." + limit.Kind + "." + label, Label: label, Scope: "model", Metric: metric, UsedPercent: limit.Percent, ResetAt: limit.ResetsAt, Active: limit.Active}
++  if limit.Group == "weekly" { row.Label += " · 7 days"; row.Window = &QuotaWindow{Seconds: intPtr(quotaWindowSevenDaySeconds)} }
++  rows = append(rows, row)
++ }
+ 	rows = appendClaudeWindowQuotaRow(rows, "five_hour", "5h", "window", result.Usage.FiveHour)
+ 	rows = appendClaudeWindowQuotaRow(rows, "seven_day", "Weekly", "window", result.Usage.SevenDay)
+ 	rows = appendClaudeWindowQuotaRow(rows, "seven_day_oauth_apps", "7d OAuth Apps", "window", result.Usage.SevenDayOAuthApps)
