@@ -43,7 +43,7 @@ spec:
       automountServiceAccountToken: false
       initContainers:
         - name: seed
-          image: nixos/nix:latest@sha256:be8887c130cd8d1751e9cfafcacdb7dbe1748e00c9843ca58f37a4e7956fb908
+          image: nixos/nix:latest@sha256:a3b3e3eb3883e5af5327757c5304c0093426a0d11c58a9056df46cfefe30319e
           imagePullPolicy: IfNotPresent
           command: ["sh", "/config/seed.sh"]
           env:
