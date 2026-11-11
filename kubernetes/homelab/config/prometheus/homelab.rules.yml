@@ -58,7 +58,7 @@ groups:
     rules:
       - alert: DiskAlmostFull
         expr: |
-          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint=~"/|/home|/nix|/mnt/data"}
+          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint=~"/|/home|/nix"}
             / node_filesystem_size_bytes) < 0.10
         for: 15m
         labels: {severity: critical, project: homelab, session: "true"}
@@ -66,12 +66,42 @@ groups:
           summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} free"
       - alert: DiskFillingUp
         expr: |
-          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint=~"/|/home|/nix|/mnt/data"}
+          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint=~"/|/home|/nix"}
             / node_filesystem_size_bytes) < 0.20
         for: 1h
         labels: {severity: warning, project: homelab, session: "true"}
         annotations:
           summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} under 20% free"
+      # /mnt/data on the pc holds agent build caches (cargo/Go target dirs,
+      # sccache) on purpose. Erik (2026-11-11): "do not get rid of any caching
+      # of build artifacts to appease the disk limits; it is fine that we go
+      # closer to 97%; if you need space use it all". So the data disk has its
+      # own lines: almost full at 95% used, and filling up only when the 6 h
+      # trend reaches 97% used within 12 h (and it is already past 85%).
+      # Normal build growth below that never pages.
+      - alert: DiskAlmostFull
+        expr: |
+          (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint="/mnt/data"}
+            / node_filesystem_size_bytes) < 0.05
+        for: 15m
+        labels: {severity: critical, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} free (budget: 97% used)"
+      - alert: DiskFillingUp
+        expr: |
+          (
+            predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint="/mnt/data"}[6h], 12 * 3600)
+              < 0.03 * node_filesystem_size_bytes
+          )
+          and
+          (
+            node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint="/mnt/data"}
+              / node_filesystem_size_bytes < 0.15
+          )
+        for: 1h
+        labels: {severity: warning, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} on track to pass 97% used within 12 h"
       # The pc's Alloy sends node metrics every minute while it runs.
       - alert: MachineSilent
         expr: |
