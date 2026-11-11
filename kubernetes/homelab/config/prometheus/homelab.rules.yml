@@ -264,8 +264,10 @@ groups:
         labels: {severity: info, project: time, session: "false", window: daytime}
         annotations:
           summary: "Time: no events from the phone for 2 h"
+      # 2026-11-11: pending sits at 1-3 on a healthy pc (in-flight batch, drains within a
+      # minute); 1 -> 2 over 6h fired this for 2 h. Only a real backlog (> 25) counts.
       - alert: TimeSpoolGrowing
-        expr: time_device_spool_pending > 0 and delta(time_device_spool_pending[6h]) > 0
+        expr: time_device_spool_pending > 25 and delta(time_device_spool_pending[6h]) > 0
         for: 1h
         labels: {severity: info, project: time, session: "false"}
         annotations:
