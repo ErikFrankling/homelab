@@ -84,7 +84,7 @@ groups:
           (node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|bcachefs",mountpoint="/mnt/data"}
             / node_filesystem_size_bytes) < 0.05
         for: 15m
-        labels: {severity: critical, project: homelab, session: "true"}
+        labels: {severity: critical, project: homelab, session: "true", budget: "data97"}
         annotations:
           summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} free (budget: 97% used)"
       - alert: DiskFillingUp
@@ -99,7 +99,7 @@ groups:
               / node_filesystem_size_bytes < 0.15
           )
         for: 1h
-        labels: {severity: warning, project: homelab, session: "true"}
+        labels: {severity: warning, project: homelab, session: "true", budget: "data97"}
         annotations:
           summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} on track to pass 97% used within 12 h"
       # The pc's Alloy sends node metrics every minute while it runs.
