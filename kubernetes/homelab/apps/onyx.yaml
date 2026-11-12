@@ -246,7 +246,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: redis
-          image: docker.io/library/redis:7.4-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+          image: docker.io/library/redis:7.4-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
           args: ["redis-server", "--save", "", "--appendonly", "no"]
           ports:
             - containerPort: 6379
@@ -584,7 +584,7 @@ spec:
               mountPath: /models
       containers:
         - name: llama-server
-          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:3be21531a885f5955c6ac02c41a734fa4e40b70697123a9bd5e8d0649e9f6675
+          image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:4bce66a7831e1d396f49d433eb738b9ef1edc20002f5a0d5099b15282d01d13f
           args:
             - -m
             - /models/embeddinggemma-300M-Q8_0.gguf
