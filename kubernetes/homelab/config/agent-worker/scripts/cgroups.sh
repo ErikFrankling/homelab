@@ -48,8 +48,10 @@ else
 fi
 
 mkdir -p "$cg/service"
+# cpuset: `heavy --cpus` pins a job to exclusive cores (cores.sh).
+echo +cpuset > "$cg/cgroup.subtree_control" 2> /dev/null || true
 for pool in jobs service; do
-  echo "+memory +cpu +pids" > "$cg/$pool/cgroup.subtree_control" 2> /dev/null || true
+  echo "+memory +cpu +pids +cpuset" > "$cg/$pool/cgroup.subtree_control" 2> /dev/null || true
   # Job cgroups whose processes are gone (rmdir fails on busy ones).
   rmdir "$cg/$pool"/job-* 2> /dev/null
 done
@@ -58,7 +60,12 @@ rmdir "$cg/light" 2> /dev/null
 
 cores() { echo "$(($1 * 100000)) 100000"; }
 echo "$jobs_memory" > "$cg/jobs/memory.max"
-cores "$jobs_cpus" > "$cg/jobs/cpu.max"
+# The jobs pool's quota, unless a pinned job (`heavy --cpus`) runs: then
+# cores.sh lifts it; its sweep puts it back and undoes what a pinned job that
+# died left behind (exclusive lists, IRQ affinity).
+echo "$jobs_cpus" > "$state/jobs-cpus"
+echo "$cg" > "$state/cgroup"
+bash /scripts/cores.sh sweep || cores "$jobs_cpus" > "$cg/jobs/cpu.max"
 echo "$service_pool_memory" > "$cg/service/memory.max"
 cores "$service_cpus" > "$cg/service/cpu.max"
 echo "$service_weight" > "$cg/service/cpu.weight"

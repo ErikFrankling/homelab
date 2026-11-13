@@ -159,6 +159,7 @@ configMapGenerator:
     files:
       - config/agent-worker/scripts/heavy-run.sh
       - config/agent-worker/scripts/cgroups.sh
+      - config/agent-worker/scripts/cores.sh
       - config/agent-worker/scripts/housekeeping.sh
       - config/agent-worker/scripts/heavy-status.sh
       - config/agent-worker/scripts/heavy-bg.sh

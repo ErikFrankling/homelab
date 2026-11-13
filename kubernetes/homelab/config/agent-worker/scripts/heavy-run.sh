@@ -110,6 +110,33 @@ if [ "$class" = big ] && [ "$ws" != /work/.emulator ] && emulator_holds; then
   fi
 fi
 
+# `heavy --cpus N` (HEAVY_CPUS_WANT): exclusive cores for the job's whole run
+# (cores.sh). One pinned job at a time, in the order they ask; the lock is
+# taken before the slot queue so a waiting pinned job does not sit on a slot.
+pin=""
+if [ -n "${HEAVY_CPUS_WANT:-}" ]; then
+  half=$(($(nproc --all) / 2))
+  if ! [[ $HEAVY_CPUS_WANT =~ ^[1-9][0-9]*$ ]] || [ "$HEAVY_CPUS_WANT" -gt "$half" ]; then
+    echo "heavy: --cpus takes 1 to $half (the node has $(nproc --all) vCPUs; the rest stay for everything else)" >&2
+    exit 2
+  fi
+  if [ -z "$cgroot" ] || [ "$class" = service ]; then
+    echo "heavy: --cpus is not available here (no job cgroups, or a background service); the job was not started" >&2
+    exit 96
+  fi
+  pin=$(bash /scripts/cores.sh list "$HEAVY_CPUS_WANT")
+  mkdir -p /work/.slots
+  exec 7> /work/.slots/cpus
+  if ! flock -n 7; then
+    echo "heavy: waiting for the pinned cores: another --cpus job holds $(cut -f2 /work/.slots/cpus.job 2> /dev/null) ($(cut -f3- /work/.slots/cpus.job 2> /dev/null | tr '\t' ' '))" >&2
+    until flock -n 7; do
+      [ ! -e "$run/closed" ] || exit 130
+      sleep 2
+    done
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$pin" "$(basename "$ws")" "$display" > /work/.slots/cpus.job
+fi
+
 mkdir -p /work/.stats
 # Minutes a job of this class usually takes: the median of the last 10.
 typical() {
@@ -229,11 +256,33 @@ if [ -n "$cgroot" ]; then
   fi
 fi
 
+# Pinned: the empty job cgroup becomes the exclusive partition before the job
+# enters it, so it never runs anywhere else. Fail closed: a job that asked
+# for exclusive cores and cannot have them does not start.
+niceness=19
+if [ -n "$pin" ]; then
+  if [ -z "$jobcg" ] || ! bash /scripts/cores.sh pin "$jobcg" "$pin"; then
+    [ -z "$jobcg" ] || rmdir "$jobcg" 2> /dev/null
+    bash /scripts/cores.sh release
+    rm -f /work/.slots/cpus.job
+    [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
+    echo "heavy: could not reserve CPUs $pin exclusively; the job was not started" >&2
+    exit 96
+  fi
+  # Alone on its cores, so no reason to yield to anything.
+  niceness=0
+  echo "heavy: pinned to CPUs $pin, exclusive for this run (no other process, pod or IRQ the node can move is on them)" >&2
+fi
+
 # The job moves itself into its cgroup before exec, so nothing of it runs
-# outside even for a moment.
+# outside even for a moment. HEAVY_CPUS is the CPU list it may run on as it
+# starts (exclusive when HEAVY_CPUS_EXCLUSIVE=1), for a benchmark's provenance.
 started=$(date +%s)
-setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null; shift; exec nice -n 19 "$@"' \
-  heavy-job "$target" "$@" < /dev/null 3<&- 9>&- &
+HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
+  setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null
+    HEAVY_CPUS=$(sed -n "s/^Cpus_allowed_list:[[:space:]]*//p" /proc/self/status); export HEAVY_CPUS HEAVY_CPUS_EXCLUSIVE
+    n=$2; shift 2; exec nice -n "$n" "$@"' \
+  heavy-job "$target" "$niceness" "$@" < /dev/null 3<&- 7>&- 9>&- &
 job=$!
 echo "$job" > "$run/job"
 [ -z "${HEAVY_JOB_PIDFILE:-}" ] || echo "$job" > "$HEAVY_JOB_PIDFILE"
@@ -251,5 +300,12 @@ pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
 [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
 [ -z "$shared" ] || rm -f "$shared"
+if [ -n "$pin" ]; then
+  # Stragglers the job left (daemonized children) would keep the cores.
+  [ -z "$(cat "$jobcg/cgroup.procs" 2> /dev/null)" ] || echo 1 > "$jobcg/cgroup.kill" 2> /dev/null
+  for _ in 1 2 3 4 5; do rmdir "$jobcg" 2> /dev/null && break; sleep 0.2; done
+  bash /scripts/cores.sh release
+  rm -f /work/.slots/cpus.job
+fi
 [ -z "$jobcg" ] || rmdir "$jobcg" 2> /dev/null || true
 exit "$rc"

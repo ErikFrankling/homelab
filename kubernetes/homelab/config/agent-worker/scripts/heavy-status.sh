@@ -33,6 +33,9 @@ for i in big small; do
     fi
   fi
 done
+if [ -f /work/.slots/cpus.job ] && ! flock -n /work/.slots/cpus true 2> /dev/null; then
+  echo "  [pinned to CPUs $(cut -f2 /work/.slots/cpus.job), exclusive] $(cut -f3- /work/.slots/cpus.job | redact)"
+fi
 for s in /work/.slots/shared/*; do
   [ -e "$s" ] || continue
   if kill -0 "$(basename "$s")" 2> /dev/null; then
