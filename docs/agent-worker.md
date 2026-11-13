@@ -78,9 +78,13 @@ the PC.
 builds, anything driving the emulator; guessed from the command or the script
 it runs, or `heavy --big`) with up to 10 GiB, and one **small** job with up to
 3 GiB, which may borrow the big slot while no big job waits. Others queue in
-order (`/work/.queue`); `heavy --priority` (`HEAVY_PRIORITY=1`) puts a job ahead of
-the ordinary waiters of its class without interrupting the running one, for a
-shared job many sessions wait on. `cgroups.sh` splits the container's cgroup into
+order (`/work/.queue`); `heavy --priority` (`HEAVY_PRIORITY=1`) gives a job a 30-minute
+head start in its class's queue: it passes ordinary waiters that joined less
+than 30 minutes before it, never one that has waited longer, and never
+interrupts the running job. For a shared job many sessions wait on. A head
+start rather than the front of the queue, because two priority jobs that
+re-queue each other (wasm-box's builder and tests job, 2026-11-13) otherwise
+keep the big slot forever. `cgroups.sh` splits the container's cgroup into
 `jobs/` (13 GiB, 4 cores, one `job-<pid>/` per job with `memory.oom.group`),
 `emulator/` (5.5 GiB, 2 cores), `light/` (768 MiB) and `system/`. The caps add
 up to less than the 20 GiB pod limit, so an OOM kills only the job that caused

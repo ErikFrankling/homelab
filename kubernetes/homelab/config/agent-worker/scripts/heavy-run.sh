@@ -11,8 +11,8 @@
 #   service  long-running servers from `heavy bg` (HEAVY_LIGHT=1 is the old
 #            name): no slot, a small capped cgroup, low CPU weight.
 # Big and small jobs wait in a FIFO queue per class (/work/.queue, one ticket
-# each; HEAVY_PRIORITY=1 tickets first); slots are flock(1)s on
-# /work/.slots/{big,small}.
+# each; HEAVY_PRIORITY=1 tickets get a 30-minute head start); slots are
+# flock(1)s on /work/.slots/{big,small}.
 #
 # Secrets: HEAVY_ENVFILE names a 0600 file of NUL-separated VAR=value pairs
 # (`heavy -e`). They go into the job's environment only, and the file is
@@ -120,15 +120,22 @@ typical() {
 
 if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   mkdir -p /work/.queue /work/.slots
-  # HEAVY_PRIORITY=1 (`heavy --priority`, for a shared job many sessions wait
-  # on): the ticket's name starts with 0, so it sorts ahead of every ordinary
-  # ticket of its class (those start with the epoch, "1..."), in order among
-  # priority tickets. It only decides who takes the slot next: a running job
-  # is never interrupted. (2026-11-13: wasm-box's shared builder waited
-  # behind other big jobs while ten lanes waited on it.)
-  prio="" mark=""
-  if [ "${HEAVY_PRIORITY:-0}" = 1 ]; then prio=0 mark=" (priority)"; fi
-  ticket="/work/.queue/$prio$(date +%s%N)-$class-$$"
+  # Tickets are named by the time they joined (epoch ns); the slot goes to
+  # the lowest name of the class. HEAVY_PRIORITY=1 (`heavy --priority`, for a
+  # shared job many sessions wait on) backdates the ticket by
+  # HEAVY_PRIORITY_HEADSTART minutes (default 30): it passes ordinary jobs
+  # that joined less than that before it, never one that has waited longer.
+  # It only decides who takes the slot next: a running job is never
+  # interrupted. (2026-11-13: wasm-box's shared builder waited behind other
+  # big jobs while ten lanes waited on it. The first version put priority
+  # tickets ahead of every ordinary one; wasm-box's builder and tests jobs
+  # re-queue each other with --priority, so they took turns in the big slot
+  # and an APK release waited 1 h 45 min and more.)
+  key=$(date +%s%N) mark=""
+  if [ "${HEAVY_PRIORITY:-0}" = 1 ]; then
+    key=$((key - ${HEAVY_PRIORITY_HEADSTART:-30} * 60000000000)) mark=" (priority)"
+  fi
+  ticket="/work/.queue/$key-$class-$$"
   printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class$mark" "$(basename "$ws")" "$display" > "$ticket"
   trap 'rm -rf "$run" "$ticket"' EXIT
   take() {
