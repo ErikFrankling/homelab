@@ -78,7 +78,9 @@ the PC.
 builds, anything driving the emulator; guessed from the command or the script
 it runs, or `heavy --big`) with up to 10 GiB, and one **small** job with up to
 3 GiB, which may borrow the big slot while no big job waits. Others queue in
-order (`/work/.queue`). `cgroups.sh` splits the container's cgroup into
+order (`/work/.queue`); `heavy --priority` (`HEAVY_PRIORITY=1`) puts a job ahead of
+the ordinary waiters of its class without interrupting the running one, for a
+shared job many sessions wait on. `cgroups.sh` splits the container's cgroup into
 `jobs/` (13 GiB, 4 cores, one `job-<pid>/` per job with `memory.oom.group`),
 `emulator/` (5.5 GiB, 2 cores), `light/` (768 MiB) and `system/`. The caps add
 up to less than the 20 GiB pod limit, so an OOM kills only the job that caused

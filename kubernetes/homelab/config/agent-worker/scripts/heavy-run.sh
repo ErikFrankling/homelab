@@ -11,7 +11,8 @@
 #   service  long-running servers from `heavy bg` (HEAVY_LIGHT=1 is the old
 #            name): no slot, a small capped cgroup, low CPU weight.
 # Big and small jobs wait in a FIFO queue per class (/work/.queue, one ticket
-# each); slots are flock(1)s on /work/.slots/{big,small}.
+# each; HEAVY_PRIORITY=1 tickets first); slots are flock(1)s on
+# /work/.slots/{big,small}.
 #
 # Secrets: HEAVY_ENVFILE names a 0600 file of NUL-separated VAR=value pairs
 # (`heavy -e`). They go into the job's environment only, and the file is
@@ -119,8 +120,16 @@ typical() {
 
 if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   mkdir -p /work/.queue /work/.slots
-  ticket="/work/.queue/$(date +%s%N)-$class-$$"
-  printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class" "$(basename "$ws")" "$display" > "$ticket"
+  # HEAVY_PRIORITY=1 (`heavy --priority`, for a shared job many sessions wait
+  # on): the ticket's name starts with 0, so it sorts ahead of every ordinary
+  # ticket of its class (those start with the epoch, "1..."), in order among
+  # priority tickets. It only decides who takes the slot next: a running job
+  # is never interrupted. (2026-11-13: wasm-box's shared builder waited
+  # behind other big jobs while ten lanes waited on it.)
+  prio="" mark=""
+  if [ "${HEAVY_PRIORITY:-0}" = 1 ]; then prio=0 mark=" (priority)"; fi
+  ticket="/work/.queue/$prio$(date +%s%N)-$class-$$"
+  printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class$mark" "$(basename "$ws")" "$display" > "$ticket"
   trap 'rm -rf "$run" "$ticket"' EXIT
   take() {
     exec 9> "/work/.slots/$1"
