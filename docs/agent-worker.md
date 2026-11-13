@@ -93,6 +93,39 @@ one job over the limit killed the whole pod, emulator included.) Because the
 container's own cgroup now hands its controllers to children, `kubectl exec`
 into it fails; use SSH.
 
+## Exclusive cores (`heavy --cpus N`)
+
+For latency-sensitive benchmarks (wasm-box's Firecracker restore and vsock
+round trips, 2026-11-13), which cannot get a quiet machine on the PC.
+`scripts/cores.sh` makes the job's cgroup a cgroup-v2 *remote partition* of
+type `root` over the top N vCPUs (N at most half the node: 1 = `7`, 2 = `6-7`,
+4 = `4-7`): every ancestor up to the node root gets the list in
+`cpuset.cpus.exclusive`, and the kernel removes those CPUs from every other
+cgroup on the node, including system.slice, k3s, every other pod, the
+emulator and cgroups created during the run. Device IRQs and the unbound
+workqueue cpumask move off them for the run (saved in
+`/nix/var/worker/irq-affinity`). Per-CPU kernel threads and the few IRQs the
+kernel manages itself stay. The job runs at nice 0, and the `jobs/` pool's
+4-core quota is lifted while it runs so the other jobs cannot throttle it.
+
+- One pinned job at a time (`/work/.slots/cpus`, taken before the slot queue);
+  it still holds a big or small slot for its memory.
+- The job cgroup becomes the partition before the job enters it, and a job
+  that cannot get it does not start (exit 96).
+- `HEAVY_CPUS` (the CPU list at start) and `HEAVY_CPUS_EXCLUSIVE` (1/0) are
+  in every job's environment, for provenance.
+- Release: after the job (stragglers are killed with `cgroup.kill`), and
+  `cgroups.sh` runs `cores.sh sweep` before every job, which undoes what a job
+  that died left behind (exclusive lists, IRQ masks, the quota).
+- Kernel 6.8 computes an empty exclusive set at levels whose `cpuset.cpus` is
+  empty, so `pin` writes the full CPU list into the levels between
+  kubepods.slice and the job. That is what they inherit anyway.
+- These are the k3s VM's vCPUs. Proxmox floats them over the i7-6700K's 8
+  threads (4 cores with hyperthreading) without pinning, and the host itself
+  is nearly idle (it only routes Tailscale), so the cores are quiet but not
+  fixed physical cores, and a pinned vCPU can share a physical core with
+  another vCPU's hyperthread.
+
 ## Changing it without killing jobs
 
 Everything under `config/agent-worker/scripts/` is the `agent-worker-scripts`
