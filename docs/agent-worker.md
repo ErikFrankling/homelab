@@ -347,3 +347,55 @@ permission-dependent tests gain. A full unprivileged user for the whole job
 (own uid with the workspace, the caches and Bazel handed to it, a Nix daemon in
 its own cgroup so `nix` works inside) was drafted and dropped as more than the
 first need.
+
+### User namespaces with subordinate ids, and a delegated cgroup (2026-11-14)
+
+For a test that needs an unprivileged user with `/etc/subuid` ranges and
+`newuidmap` (wasm-box's isolate-tier jail): `heavy -e HEAVY_USERNS=1 -- CMD`.
+Opt-in; the job still runs as root, with these added:
+
+| What | Value |
+|---|---|
+| User | `heavytest`, uid 20000, gid 20000, no groups, no home on disk. Not 65534: `nobody` owns nothing and has no ranges |
+| Subordinate ids | `heavytest:2000000:131072` in `/etc/subuid` and `/etc/subgid` (2000000 to 2131071). The `nixbld1..16` users hold 100000 to 1148575, uid 65534 and the nixbld ids 30000s are outside both; `heavy-userns.sh` refuses to write a range that overlaps another |
+| `newuidmap`, `newgidmap` | setuid root in `/usr/local/bin`, from the pinned nixpkgs' `shadow` (the image has no `uidmap` package) |
+| Prefix | `$HEAVY_UNPRIV_NS` (like `$HEAVY_UNPRIV`, as heavytest) and `$HEAVY_UNPRIV_NS_TMP` (its `HOME` and `TMPDIR`, owned by it) |
+| Facts as env vars | `HEAVY_USERNS_USER`, `HEAVY_USERNS_UID`, `HEAVY_USERNS_GID`, `HEAVY_USERNS_SUBID_START`, `HEAVY_USERNS_SUBID_COUNT` |
+| Cgroup | `$HEAVY_CGROUP_DELEGATED`, owned by heavytest for this job; `$HEAVY_CGROUP_JOB` is its parent |
+
+`HEAVY_USER=test` runs the whole command as heavytest (workspace readable, not
+writable, umask 022, as for `nobody`) and implies `HEAVY_USERNS=1`.
+
+Declared, not edited by jobs: `scripts/heavy-userns.sh` (run by `heavy-run.sh`
+before such a job, idempotent, under a lock) creates the user, the ranges and
+the two setuid binaries. The container's `/etc` and `/usr/local/bin` are lost
+on a pod restart and `seed.sh`/`entrypoint.sh` are in a hashed ConfigMap
+(editing them restarts the pod and kills every job), so this is a script in the
+unhashed one, applied at the first job that asks for it. The store path of
+`shadow` is rooted at `/nix/var/worker/suid/shadow`, so only the first time
+ever downloads anything (a 1 MB man output, 2026-11-14).
+
+The cgroup path is `/sys/fs/cgroup/kubepods.slice/.../cri-containerd-<container id>.scope/jobs/job-<pid>/delegate`
+(`service/` for a `heavy bg` style class). The container id changes with every
+pod restart, and so does the pid: always use `$HEAVY_CGROUP_DELEGATED`. Why
+two directories: in cgroup v2 a cgroup with processes cannot enable controllers
+for its children, so the job's processes run in `job-<pid>/main` and
+`job-<pid>/delegate` is empty with `cpu memory pids` enabled for its children.
+The user owns `delegate`, its `cgroup.procs`, `cgroup.subtree_control` and
+`cgroup.threads`, and `job-<pid>/cgroup.procs`: moving a process from `main`
+into `delegate/x` needs write access to the common ancestor's `cgroup.procs`
+(the kernel still only lets it move processes it owns). A test makes children
+with `mkdir`, sets `memory.max`, `cpu.max`, `pids.max` on them and moves its
+processes in. Memory stays capped by the job cgroup (6 GiB small, 10 GiB big:
+a child's own `memory.max` kills inside that child, not the whole job; the job
+cap still kills the whole job). The pool directories `jobs/` and `service/` are
+now 755 for this. When the job ends, everything below its cgroup is killed and
+removed (`cgroup.kill`, then `rmdir` deepest first); `cgroups.sh` also removes
+what a dead job left, never below a job whose `heavy-run.sh` still runs.
+
+Checked on the worker on 2026-11-14 with a probe job: `newuidmap`/`newgidmap`
+mapped `0 20000 1; 1 2000000 65535` for both uids and gids; heavytest made a
+child in the delegated cgroup, set `memory.max` 50M and `pids.max` 64, and moved
+itself into it; unprivileged user namespaces are on (`max_user_namespaces`
+208677, no AppArmor restriction, kernel 6.8) and the cgroup2 mount has
+`nsdelegate`.
