@@ -96,11 +96,23 @@ mentions() {
 # HEAVY_USER=root says root, which is the default (default_user=0). Nobody can
 # read the workspace but not write it, the caches or the Nix store: build as
 # root, run the permission-sensitive step as nobody.
+#
+# For tests that need user namespaces with subordinate ids (a jail's
+# unprivileged path), HEAVY_USERNS=1 (`heavy -e HEAVY_USERNS=1`) adds the user
+# `heavytest` (uid 20000, subuid/subgid 2000000+131072), newuidmap/newgidmap,
+# a cgroup subtree delegated to it for this job, and the prefix
+# $HEAVY_UNPRIV_NS (heavy-userns.sh, below). HEAVY_USER=test runs the whole
+# command as heavytest (and implies HEAVY_USERNS=1).
 default_user=0
 user_mode=$default_user
+userns=0
 case "${HEAVY_USER:-}" in
   1 | user | nobody | yes | true) user_mode=1 ;;
+  test | heavytest) user_mode=2 userns=1 ;;
   0 | root | no | false) user_mode=0 ;;
+esac
+case "${HEAVY_USERNS:-}" in
+  1 | yes | true) userns=1 ;;
 esac
 
 class=${HEAVY_CLASS:-auto}
@@ -279,17 +291,33 @@ unpriv=$run/unpriv
 mkdir -m 700 "$unpriv" && chown 65534:65534 "$unpriv" && chmod 711 "$run"
 export HEAVY_UNPRIV_TMP=$unpriv
 export HEAVY_UNPRIV="setpriv --reuid=65534 --regid=65534 --clear-groups env HOME=$unpriv USER=nobody LOGNAME=nobody TMPDIR=$unpriv TMP=$unpriv TEMP=$unpriv"
-if [ "$user_mode" = 1 ] && { [ -n "$shared" ] || [ "$ws" = /work/.emulator ]; }; then
-  echo "heavy: this job uses the emulator, so it runs as root, not as nobody" >&2
+if [ "$user_mode" -ge 1 ] && { [ -n "$shared" ] || [ "$ws" = /work/.emulator ]; }; then
+  echo "heavy: this job uses the emulator, so it runs as root, not as an unprivileged user" >&2
   user_mode=0
 fi
-if [ "$user_mode" = 1 ]; then
+# The test user with subordinate ids: its account, ranges and newuidmap
+# (heavy-userns.sh, idempotent, declared in the repository), its own TMPDIR and
+# HOME, and the prefix. The cgroup it may manage is made further down.
+if [ "$userns" = 1 ]; then
+  if ! bash /scripts/heavy-userns.sh ensure 3<&- 6<&- 7<&- 9<&-; then
+    [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
+    echo "heavy: could not set up the test user for user namespaces; the job was not started" >&2
+    exit 94
+  fi
+  unpriv_ns=$run/userns
+  mkdir -m 700 "$unpriv_ns" && chown 20000:20000 "$unpriv_ns"
+  export HEAVY_UNPRIV_NS_TMP=$unpriv_ns
+  export HEAVY_UNPRIV_NS="setpriv --reuid=20000 --regid=20000 --clear-groups env HOME=$unpriv_ns USER=heavytest LOGNAME=heavytest TMPDIR=$unpriv_ns TMP=$unpriv_ns TEMP=$unpriv_ns"
+  export HEAVY_USERNS_USER=heavytest HEAVY_USERNS_UID=20000 HEAVY_USERNS_GID=20000
+  export HEAVY_USERNS_SUBID_START=2000000 HEAVY_USERNS_SUBID_COUNT=131072
+fi
+if [ "$user_mode" -ge 1 ]; then
   # Jobs run with umask 077 (a root-built target/ is unreadable to nobody) and
   # a workspace synced from the PC may hold modes nobody cannot read: open it
   # for reading (o+rX), not for writing.
   find "$ws" -xdev \( -type d ! -perm -005 -o -type f ! -perm -004 \) -exec chmod o+rX {} + 2> /dev/null
   # shellcheck disable=SC2086
-  set -- $HEAVY_UNPRIV "$@"
+  if [ "$user_mode" = 2 ]; then set -- $HEAVY_UNPRIV_NS "$@"; else set -- $HEAVY_UNPRIV "$@"; fi
 fi
 
 if [ "$develop" != no ] && [ -f "$ws/flake.nix" ] && grep -q devShell "$ws/flake.nix"; then
@@ -336,6 +364,34 @@ if [ -n "$pin" ]; then
   echo "heavy: pinned to CPUs $pin, exclusive for this run (no other process, pod or IRQ the node can move is on them)" >&2
 fi
 
+# A cgroup subtree the test user manages for this job (HEAVY_USERNS=1), so a
+# test can make children and set memory.max/cpu.max/pids.max on them.
+# Delegation (cgroup v2): a cgroup with processes cannot enable controllers for
+# its children, so the job's processes go into $jobcg/main and $jobcg/delegate,
+# empty, with the controllers on, is the user's. The user owns delegate and its
+# control files, and $jobcg/cgroup.procs: moving a process from main into
+# delegate/x needs write access to the common ancestor's cgroup.procs. The
+# kernel only lets it move processes it owns. Memory is still capped by
+# $jobcg (memory.max, oom.group: a child's own memory.max kills inside that
+# child, not the job). Needs 755 on $jobcg (mkdir made it 700 under umask 077).
+delegated=""
+if [ "$userns" = 1 ]; then
+  if [ -n "$jobcg" ] \
+    && echo "+memory +cpu +pids" > "$jobcg/cgroup.subtree_control" 2> /dev/null \
+    && mkdir -m 755 "$jobcg/main" "$jobcg/delegate" 2> /dev/null \
+    && echo "+memory +cpu +pids" > "$jobcg/delegate/cgroup.subtree_control" 2> /dev/null \
+    && chmod 755 "$jobcg" \
+    && chown 20000:20000 "$jobcg/delegate" "$jobcg/delegate/cgroup.procs" "$jobcg/delegate/cgroup.subtree_control" \
+      "$jobcg/delegate/cgroup.threads" "$jobcg/cgroup.procs"; then
+    delegated=$jobcg/delegate
+    target=$jobcg/main
+    export HEAVY_CGROUP_DELEGATED=$delegated
+    export HEAVY_CGROUP_JOB=$jobcg
+  else
+    echo "heavy: could not delegate a cgroup subtree to the test user (is the job cgroup there?); HEAVY_CGROUP_DELEGATED is unset" >&2
+  fi
+fi
+
 # The job moves itself into its cgroup before exec, so nothing of it runs
 # outside even for a moment. HEAVY_CPUS is the CPU list it may run on as it
 # starts (exclusive when HEAVY_CPUS_EXCLUSIVE=1), for a benchmark's provenance.
@@ -345,7 +401,7 @@ started=$(date +%s)
 # unprivileged step that runs it. Set for the job's fork only.
 if [ -n "${HEAVY_UMASK:-}" ] && [[ $HEAVY_UMASK =~ ^0?[0-7]{3}$ ]]; then
   umask "$HEAVY_UMASK"
-elif [ "$user_mode" = 1 ]; then
+elif [ "$user_mode" -ge 1 ]; then
   umask 022
 fi
 HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
@@ -371,6 +427,16 @@ pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
 [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
 [ -z "$shared" ] || rm -f "$shared"
+if [ -n "$delegated" ]; then
+  # What the job and its test user left in the subtree: kill it, then remove
+  # the cgroups below $jobcg deepest first, so the rmdir of $jobcg below works.
+  echo 1 > "$jobcg/cgroup.kill" 2> /dev/null
+  for _ in 1 2 3 4 5; do
+    find "$jobcg" -mindepth 1 -depth -type d -exec rmdir {} \; 2> /dev/null
+    [ -z "$(find "$jobcg" -mindepth 1 -type d 2> /dev/null)" ] && break
+    sleep 0.2
+  done
+fi
 if [ -n "$pin" ]; then
   # Stragglers the job left (daemonized children) would keep the cores.
   [ -z "$(cat "$jobcg/cgroup.procs" 2> /dev/null)" ] || echo 1 > "$jobcg/cgroup.kill" 2> /dev/null

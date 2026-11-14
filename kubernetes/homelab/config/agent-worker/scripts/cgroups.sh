@@ -59,7 +59,13 @@ echo +cpuset > "$cg/cgroup.subtree_control" 2> /dev/null || true
 for pool in jobs service; do
   echo "+memory +cpu +pids +cpuset" > "$cg/$pool/cgroup.subtree_control" 2> /dev/null || true
   # Job cgroups whose processes are gone (rmdir fails on busy ones).
-  rmdir "$cg/$pool"/job-* 2> /dev/null
+  # A job with a delegated subtree (heavy-run.sh) has cgroups below it: those
+  # first, but only of a job whose heavy-run.sh (the pid in the name) is gone;
+  # a running job's empty `delegate` must stay.
+  for dead in "$cg/$pool"/job-*; do
+    [ -d "$dead" ] && ! kill -0 "${dead##*job-}" 2> /dev/null \
+      && find "$dead" -depth -type d -exec rmdir {} \; 2> /dev/null
+  done
 done
 # The pre-service pool for --light; gone once empty.
 rmdir "$cg/light" 2> /dev/null
