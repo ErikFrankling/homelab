@@ -12,7 +12,11 @@ echo "load: $(cut -d' ' -f1-3 /proc/loadavg)  (node has $(nproc) threads, shared
 cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
 if [ -n "$cgroot" ]; then
   mib() { [ -f "$1" ] && echo $(($(cat "$1") / 1048576)) || echo -; }
-  echo "memory MiB: pod $(mib "$cgroot/memory.current")/$(mib "$cgroot/memory.max"), jobs $(mib "$cgroot/jobs/memory.current")/$(mib "$cgroot/jobs/memory.max"), emulator $(mib "$cgroot/emulator/memory.current")/$(mib "$cgroot/emulator/memory.max"), services $(mib "$cgroot/service/memory.current")/$(mib "$cgroot/service/memory.max")"
+  # The total counts page cache, which sits at the limit by design (the kernel
+  # fills it and reclaims on demand), so the anonymous memory, the part that
+  # can run out, is shown beside it (2026-11-14: a full cache read as a limit hit).
+  anon() { [ -f "$1/memory.stat" ] && echo $(($(awk '$1 == "anon" { print $2 }' "$1/memory.stat") / 1048576)) || echo -; }
+  echo "memory MiB: pod $(mib "$cgroot/memory.current") (anon $(anon "$cgroot"))/$(mib "$cgroot/memory.max"), jobs $(mib "$cgroot/jobs/memory.current") (anon $(anon "$cgroot/jobs"))/$(mib "$cgroot/jobs/memory.max"), emulator $(mib "$cgroot/emulator/memory.current")/$(mib "$cgroot/emulator/memory.max"), services $(mib "$cgroot/service/memory.current")/$(mib "$cgroot/service/memory.max")"
 fi
 echo "disk: $(df -h --output=avail /nix | tail -1 | tr -d ' ') free on the node"
 echo "emulator: $(pgrep -f 'qemu-system.*-avd' > /dev/null && echo running || echo stopped)"
