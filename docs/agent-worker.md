@@ -303,3 +303,47 @@ Not changed: the other cache prunes (`.gradle` 10 GB, `.cache` 20 GB, ...)
 wait for a moment with no job running and the log shows them skipped every
 hour ("a job is running, pruning next time"). Gradle's caches are at 14 GB
 against 10.
+
+## Jobs are root; unprivileged steps (2026-11-14)
+
+What a job is: uid 0, gid 0, no supplementary groups, `CapEff` 000001ffffffffff
+(every capability), identity `uid_map`, inside a **privileged** container. So
+it is real root on the node, not rootless (see "Access": whoever holds the key
+has root on the node, as with nix-builder). Root never gets EACCES, so a test of
+a permission check passes for the wrong reason (a wasm-box test that expects
+EACCES passed its mutation only because of this).
+
+Two ways to get an unprivileged process, both `setpriv` plus the container's
+`nobody` user (uid/gid 65534, no groups, no capabilities); the build, `nix
+develop` and the caches stay root:
+
+- **One step of a root job:** every job has `HEAVY_UNPRIV`, a command prefix
+  (`setpriv --reuid=65534 --regid=65534 --clear-groups env HOME=... TMPDIR=...`),
+  and `HEAVY_UNPRIV_TMP`, a directory nobody owns that is its `HOME` and
+  `TMPDIR`. Use it unquoted before the command:
+  `cargo test --no-run && $HEAVY_UNPRIV ./target/debug/deps/wbox-1a2b3c --test-threads=1`.
+- **The whole command:** `heavy -e HEAVY_USER=nobody -- CMD` runs CMD as nobody
+  (`nix develop` around it is still root). Also sets the job's umask to 022 and
+  opens the workspace for reading (`chmod o+rX`, a find over the tree, about
+  0.1 s per 20000 files). `HEAVY_USER=root` is the default. A job that uses the
+  emulator or adb stays root.
+
+What nobody can and cannot do: read the workspace and the Nix store; write only
+its own `TMPDIR`/`HOME` (a fresh directory in the job's temp dir, removed with
+the job). It cannot write the workspace, the caches (cargo, npm, Gradle,
+Bazel), `/work/.slots` or the Nix store, so it cannot build; `cargo test`
+compiles into `target/`, so compile as root (`cargo test --no-run`) and run the
+test binaries as nobody. Locks are taken by `heavy-run.sh` as root, so the
+queue, the slots and the Bazel lock work as before.
+
+Readability: jobs run with umask 077, so what a root job builds is unreadable
+to nobody. Either `heavy -e HEAVY_UMASK=022 -- CMD` (the job's umask; directories
+and files built earlier with 077 stay as they are) or `chmod -R o+rX target`
+before the step. `HEAVY_USER=nobody` does the second for the whole workspace.
+
+Not the default (`default_user=0` in `heavy-run.sh`): everything that writes
+the workspace or a cache, calls `nix` or uses adb would break, and only
+permission-dependent tests gain. A full unprivileged user for the whole job
+(own uid with the workspace, the caches and Bazel handed to it, a Nix daemon in
+its own cgroup so `nix` works inside) was drafted and dropped as more than the
+first need.

@@ -84,6 +84,25 @@ mentions() {
   return 1
 }
 
+# Who the job's command runs as. Jobs are root in a privileged container, which
+# gives different answers than a developer's machine for anything
+# permission-dependent: root never gets EACCES (2026-11-14: a wasm-box test of
+# EACCES passed only because of that). Two ways to get an unprivileged
+# process, both built on `setpriv` and the `nobody` user (65534):
+#   HEAVY_USER=nobody   (`heavy -e HEAVY_USER=nobody`) the whole command runs as
+#                       nobody, with the workspace readable to it (below);
+#   $HEAVY_UNPRIV       in every job: a command prefix for one step of a root
+#                       job, `$HEAVY_UNPRIV ./target/debug/deps/x-1a2b --test`.
+# HEAVY_USER=root says root, which is the default (default_user=0). Nobody can
+# read the workspace but not write it, the caches or the Nix store: build as
+# root, run the permission-sensitive step as nobody.
+default_user=0
+user_mode=$default_user
+case "${HEAVY_USER:-}" in
+  1 | user | nobody | yes | true) user_mode=1 ;;
+  0 | root | no | false) user_mode=0 ;;
+esac
+
 class=${HEAVY_CLASS:-auto}
 [ "${HEAVY_LIGHT:-0}" != 1 ] || class=service
 if [ "$class" = auto ]; then
@@ -252,6 +271,27 @@ if [ -n "${ticket:-}" ] && [ -z "${slot:-}" ]; then
   exit 98
 fi
 
+# Unprivileged steps. $run is the job's private directory under /tmp (removed
+# with it): `unpriv` in it is nobody's TMPDIR and HOME, and $run is
+# traversable (not listable) so nobody reaches it. HEAVY_UNPRIV is the prefix.
+# The emulator's adb server is root's, so a job that uses it stays root.
+unpriv=$run/unpriv
+mkdir -m 700 "$unpriv" && chown 65534:65534 "$unpriv" && chmod 711 "$run"
+export HEAVY_UNPRIV_TMP=$unpriv
+export HEAVY_UNPRIV="setpriv --reuid=65534 --regid=65534 --clear-groups env HOME=$unpriv USER=nobody LOGNAME=nobody TMPDIR=$unpriv TMP=$unpriv TEMP=$unpriv"
+if [ "$user_mode" = 1 ] && { [ -n "$shared" ] || [ "$ws" = /work/.emulator ]; }; then
+  echo "heavy: this job uses the emulator, so it runs as root, not as nobody" >&2
+  user_mode=0
+fi
+if [ "$user_mode" = 1 ]; then
+  # Jobs run with umask 077 (a root-built target/ is unreadable to nobody) and
+  # a workspace synced from the PC may hold modes nobody cannot read: open it
+  # for reading (o+rX), not for writing.
+  find "$ws" -xdev \( -type d ! -perm -005 -o -type f ! -perm -004 \) -exec chmod o+rX {} + 2> /dev/null
+  # shellcheck disable=SC2086
+  set -- $HEAVY_UNPRIV "$@"
+fi
+
 if [ "$develop" != no ] && [ -f "$ws/flake.nix" ] && grep -q devShell "$ws/flake.nix"; then
   shell=default
   [ "$develop" = auto ] || shell=${develop#.#}
@@ -300,12 +340,21 @@ fi
 # outside even for a moment. HEAVY_CPUS is the CPU list it may run on as it
 # starts (exclusive when HEAVY_CPUS_EXCLUSIVE=1), for a benchmark's provenance.
 started=$(date +%s)
+# The job's umask: 077 as ever, 022 for HEAVY_USER=nobody, or HEAVY_UMASK=NNN
+# (`heavy -e HEAVY_UMASK=022`), so what a root job builds can be read by the
+# unprivileged step that runs it. Set for the job's fork only.
+if [ -n "${HEAVY_UMASK:-}" ] && [[ $HEAVY_UMASK =~ ^0?[0-7]{3}$ ]]; then
+  umask "$HEAVY_UMASK"
+elif [ "$user_mode" = 1 ]; then
+  umask 022
+fi
 HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
   setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null
     HEAVY_CPUS=$(sed -n "s/^Cpus_allowed_list:[[:space:]]*//p" /proc/self/status); export HEAVY_CPUS HEAVY_CPUS_EXCLUSIVE
     n=$2; shift 2; exec nice -n "$n" "$@"' \
   heavy-job "$target" "$niceness" "$@" < /dev/null 3<&- 6>&- 7>&- 9>&- &
 job=$!
+umask 077
 echo "$job" > "$run/job"
 [ -z "${HEAVY_JOB_PIDFILE:-}" ] || echo "$job" > "$HEAVY_JOB_PIDFILE"
 # The channel closed while the job was starting.
