@@ -1,4 +1,4 @@
-# CLIProxyAPI: one home for every Claude and Codex login
+# CLIProxyAPI: one home for every Claude, Codex, Grok and OpenCode login
 
 `apps/cliproxy.yaml` runs [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 at `https://cliproxy.erikfrankling.duckdns.org` (lan-only: LAN and Tailscale).
@@ -32,6 +32,32 @@ OAuth login, pick Claude or Codex, open the link in a browser signed in to that
 account, authorize, then paste the localhost callback URL the browser lands on
 back into the panel. Logins are stored on the `cliproxy-data` PVC
 (`/data/auths`). To bench an account, disable it in the panel.
+
+
+## Grok and OpenCode Go (added 2026-11-14)
+
+- **Grok** (SuperGrok, `ef.pro454@gmail.com`): a native xAI OAuth login, its own
+  grant (the local `grok` CLI keeps its own). Added with
+  `GET /v0/management/xai-auth-url`, a device code: open the returned
+  `accounts.x.ai/oauth2/device?user_code=...` URL in the agent Chromium (signed
+  in through the cookie sync), Continue, Allow. Requests go to
+  `cli-chat-proxy.grok.com`, the plan's included usage. Models are the plain
+  `grok-*` names (`grok-4.7-build-fast`, ...).
+- **OpenCode Go**: a static API key as `api-keys.openai-compatibility`
+  `opencode-go` in `secrets/cliproxy.enc.yaml`, with `prefix: opencode`, so
+  clients call `opencode/<model>` (`opencode/kimi-k3`, `opencode/glm-5.3`).
+  `routing.force-model-prefix: true` keeps Go's own `claude-haiku-5-5` and
+  `grok-4.7` out of the Claude and xAI pools. Go refuses a request without a
+  per-conversation session id (`MissingSessionID`). The provider forwards
+  Claude Code's `X-Claude-Code-Session-Id`, Codex's `session_id` and
+  `x-opencode-session`, so those clients work and a bare curl does not. Left
+  out: the `*-contributor` and `*-free` models (they train on request data).
+  The model list is fixed in the secret: add new Go models there
+  (`GET https://opencode.ai/inference/go/openai/v1/models`).
+- The config watcher does not reload `/data/config.yaml` written from
+  `kubectl exec`. To apply a secret change without a restart (which drops
+  every in-flight stream), also PUT it through the management API
+  (`/v0/management/openai-compatibility`, `/v0/management/force-model-prefix`).
 
 ## Clients
 
