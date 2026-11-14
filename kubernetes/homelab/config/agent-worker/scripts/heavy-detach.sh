@@ -19,6 +19,7 @@
 #         job is gone: the worker restarted, or the result was collected)
 #   heavy-detach.sh cancel KEY   what an interrupted client does: the job leaves
 #         the queue, or is killed, as before
+#   heavy-detach.sh status KEY   running | done N collected|uncollected | gone
 #   heavy-detach.sh list         the jobs and their state
 #
 # KEY is the client's hash of the workspace, the command and the options, so the
@@ -192,6 +193,16 @@ case "${1:-}" in
     [ -d "$d" ] || exit 0
     touch "$d/cancelled" "$d/consumed"
     cancel_job "$d"
+    ;;
+  status)
+    # What a client asks when its ssh ended with a status that could be ssh's
+    # (a lost connection, a signal) or the job's own (an OOM-killed job exits
+    # 137): running | done N collected|uncollected | gone.
+    d=$jobs/${2:?usage: heavy-detach.sh status KEY}
+    if [ ! -d "$d" ]; then echo gone
+    elif [ -f "$d/status" ]; then echo "done $(cat "$d/status") $([ -f "$d/consumed" ] && echo collected || echo uncollected)"
+    elif alive "$d"; then echo running
+    else echo gone; fi
     ;;
   reap) reap ;;
   list)
