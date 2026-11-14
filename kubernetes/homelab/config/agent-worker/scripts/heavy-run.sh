@@ -137,6 +137,28 @@ if [ -n "${HEAVY_CPUS_WANT:-}" ]; then
   printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$pin" "$(basename "$ws")" "$display" > /work/.slots/cpus.job
 fi
 
+# Bazel (cgroups.sh, housekeeping.sh): every job gets the persistent output
+# root and disk cache's location. A job that uses Bazel (its command or the
+# script it names mentions bazel, or HEAVY_BAZEL=1 through `heavy -e
+# HEAVY_BAZEL=1`, or the directory holds a MODULE.bazel, WORKSPACE or
+# .bazelversion within three levels) holds a shared lock on
+# /work/.slots/bazel from here, so while it is queued or running,
+# housekeeping.sh cannot take the exclusive one and prune the directory.
+export HEAVY_BAZEL_DIR=/nix/var/worker/bazel HEAVY_BAZEL_RC=/nix/var/worker/bazel/heavy.bazelrc
+if [ "$class" != service ] && { [ "${HEAVY_BAZEL:-0}" = 1 ] || mentions '\bbazel(isk)?\b' "$@" \
+  || [ -n "$(find . -maxdepth 3 \( -name node_modules -o -name target \) -prune -o \
+    \( -name MODULE.bazel -o -name WORKSPACE -o -name WORKSPACE.bazel -o -name .bazelversion \) -print -quit 2> /dev/null)" ]; }; then
+  mkdir -p /work/.slots
+  exec 6> /work/.slots/bazel
+  # A prune of the directory holds the exclusive lock for a few minutes at
+  # most; do not wait more than 30 for it.
+  for _ in $(seq 1 900); do
+    flock -s -n 6 && break
+    [ ! -e "$run/closed" ] || exit 130
+    sleep 2
+  done
+fi
+
 mkdir -p /work/.stats
 # Minutes a job of this class usually takes: the median of the last 10.
 typical() {
@@ -282,7 +304,7 @@ HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
   setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null
     HEAVY_CPUS=$(sed -n "s/^Cpus_allowed_list:[[:space:]]*//p" /proc/self/status); export HEAVY_CPUS HEAVY_CPUS_EXCLUSIVE
     n=$2; shift 2; exec nice -n "$n" "$@"' \
-  heavy-job "$target" "$niceness" "$@" < /dev/null 3<&- 7>&- 9>&- &
+  heavy-job "$target" "$niceness" "$@" < /dev/null 3<&- 6>&- 7>&- 9>&- &
 job=$!
 echo "$job" > "$run/job"
 [ -z "${HEAVY_JOB_PIDFILE:-}" ] || echo "$job" > "$HEAVY_JOB_PIDFILE"

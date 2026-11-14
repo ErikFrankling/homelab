@@ -37,9 +37,13 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
 - **Disk:** same node disk as nix-builder. Hourly housekeeping collects dead
   store paths when the disk has under 155 GiB free. `min-free` (90 GiB, before
   nix-builder's 80) is only an emergency backstop: at 155 GiB every
-  `nix develop` in every job ran its own full GC and waited on the GC lock. An hourly janitor removes workspaces untouched
-  for 7 days, then the oldest while the disk has under 35 GiB free; a workspace
-  with a running job is never touched. Devshells are rooted (`nix develop
+  `nix develop` in every job ran its own full GC and waited on the GC lock. An
+  hourly janitor removes workspaces untouched for 3 days, then the least
+  recently used ones while all workspaces together use more than 15 GB (never
+  one with a queued or running job; see "Housekeeping and caches"). **A
+  workspace is disposable: anything that must survive between runs and is not
+  in the repository belongs in `$HEAVY_BAZEL_DIR` or a cache under `$HOME`
+  (see "Bazel"), not in `/work`.** Devshells are rooted (`nix develop
   --profile <workspace>/.heavy/shell-NAME`) so collection keeps them.
 - **Emulator:** one at most. It stops itself after 30 minutes with no adb
   client, and when the pod stops.
@@ -241,3 +245,61 @@ broke Fleet's builds every hour: unpacked crate sources keep their archive's
 git repository lost its empty `refs/` ("could not find repository"). Pruning
 holds both job slots while it removes anything, because housekeeping starts
 when a job does; while a job runs it waits for the next hour.
+
+## Bazel: a persistent output root and disk cache (2026-11-14)
+
+Why: on 2026-11-14 the 06:22 UTC housekeeping run logged `removing workspace
+/work/t3-edceb705-... (workspaces use 62G > 15G; least recently used)`. The
+workspace held a Bazel output root with V8 objects (about 20 GB, 7.3 h of
+small-slot time). It was the 15 GB budget for all workspaces, not the 3-day
+rule, not the pod restart (`/work` is on the persistent volume, restarted at
+04:22 UTC, hours before) and not that morning's memory change.
+
+Where: `/nix/var/worker/bazel/` on the volume, outside `/work` and outside
+`.cache`, so neither the workspace budget nor the cache pruning touches it:
+
+| Path | What |
+|---|---|
+| `/nix/var/worker/bazel/root` | `--output_user_root`: install base and one output base per workspace path (the V8 objects) |
+| `/nix/var/worker/bazel/disk-cache` | `--disk_cache`: content-addressed, reusable whatever the workspace path |
+| `/nix/var/worker/bazel/heavy.bazelrc` | both flags in one rc file, rewritten by `cgroups.sh` on every job |
+
+Using it: every `heavy` job has `HEAVY_BAZEL_DIR` (the directory) and
+`HEAVY_BAZEL_RC` (the rc file) in its environment. Either call
+`bazel --bazelrc=$HEAVY_BAZEL_RC build ...`, or put
+`try-import /nix/var/worker/bazel/heavy.bazelrc` in the project's `.bazelrc`
+(a missing file is ignored, so it does no harm off the worker), or pass
+`--output_user_root=$HEAVY_BAZEL_DIR/root` and
+`--disk_cache=$HEAVY_BAZEL_DIR/disk-cache` yourself. An output base is named
+after the workspace path (`/work/<repo>-<hash>`, stable for one directory), so
+a re-synced workspace finds its objects again; the disk cache needs no such
+luck.
+
+Eviction (`prune_bazel` in `housekeeping.sh`):
+
+- Budget 30 GB for the whole directory (`HEAVY_BAZEL_BUDGET_MB`). Over it,
+  housekeeping prunes down to 24 GB: first disk-cache files, least recently
+  used first (newest of atime and mtime), then whole output bases the same
+  way, skipping one with a live Bazel server (`server/server.pid.txt`). Nothing
+  used in the last 2 days goes.
+- **Never while a job that uses Bazel is queued or running.** Such a job
+  holds a shared `flock` on `/work/.slots/bazel` from the moment `heavy-run.sh`
+  starts until it ends (queue wait included); the prune takes the exclusive
+  one without waiting and skips this hour if it cannot. A job counts as using
+  Bazel when its command or the script it names mentions `bazel`/`bazelisk`,
+  when `heavy -e HEAVY_BAZEL=1` says so, or when its directory holds a
+  `MODULE.bazel`, `WORKSPACE`, `WORKSPACE.bazel` or `.bazelversion` within
+  three levels (not under `node_modules` or `target`). A script that calls
+  Bazel two levels down, from a directory without those files, needs
+  `-e HEAVY_BAZEL=1`.
+- Consequence: the budget is soft. While Bazel jobs are always queued the
+  directory can grow past 30 GB; the node's disk is 697 GB with 133 GB free
+  (2026-11-14), so watch `du -sh /nix/var/worker/bazel` and `heavy status`'s
+  disk line.
+- A prune holds the exclusive lock for a few minutes at most; a Bazel job
+  that starts then waits for it, up to 30 minutes.
+
+Not changed: the other cache prunes (`.gradle` 10 GB, `.cache` 20 GB, ...)
+wait for a moment with no job running and the log shows them skipped every
+hour ("a job is running, pruning next time"). Gradle's caches are at 14 GB
+against 10.

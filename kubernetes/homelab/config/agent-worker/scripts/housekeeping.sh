@@ -116,6 +116,61 @@ if [ -n "$slots" ]; then
   exec 8>&- 9>&-
 fi
 
+# Bazel (cgroups.sh): $state/bazel/{root,disk-cache}, at most bazel_budget_mb.
+# Not a workspace and not in .cache, so none of the rules above touch it. It
+# is pruned only while nothing that uses Bazel is queued or running: heavy-run.sh
+# holds a shared flock on /work/.slots/bazel for such a job from the moment it
+# queues until it ends, and this takes the exclusive one without waiting. Over
+# the budget, with the lock, down to 80 % of it: first the disk cache's files,
+# least recently used first (newest of atime and mtime; content-addressed, so
+# a missing file is only a cache miss), then whole output bases and the install
+# base under root/ the same way, skipping any with a live Bazel server. Nothing
+# used in the last 2 days goes.
+bazel=${HEAVY_BAZEL_DIR:-$state/bazel}
+bazel_budget_mb=${HEAVY_BAZEL_BUDGET_MB:-30720}
+# Newest atime or mtime of the regular files under $1. Not the directories':
+# the du and find in this script read them, which sets their atime to now.
+bazel_last_used() { find "$1" -xdev -type f -printf '%A@\n%T@\n' 2> /dev/null | awk '$1 > m { m = $1 } END { printf "%d", m }'; }
+prune_bazel() {
+  local size_mb target_mb need_kb recent entry used pid
+  [ -d "$bazel" ] || return 0
+  size_mb=$(du -sm "$bazel" 2> /dev/null | cut -f1)
+  [ "${size_mb:-0}" -gt "$bazel_budget_mb" ] || return 0
+  mkdir -p /work/.slots
+  exec 5> /work/.slots/bazel
+  if ! flock -x -n 5; then
+    echo "$bazel uses $((size_mb / 1024))G > $((bazel_budget_mb / 1024))G; a job that uses Bazel is queued or running, pruning next time"
+    exec 5>&-
+    return 0
+  fi
+  target_mb=$((bazel_budget_mb * 8 / 10))
+  recent=$(($(date +%s) - 2 * 86400))
+  echo "$bazel uses $((size_mb / 1024))G > $((bazel_budget_mb / 1024))G, pruning to $((target_mb / 1024))G"
+  need_kb=$(((size_mb - target_mb) * 1024))
+  # "last-used size-kb path": the paths here are hash names, no spaces.
+  find "$bazel/disk-cache" -type f -printf '%A@ %T@ %k %p\n' 2> /dev/null \
+    | awk -v recent="$recent" '
+        { t = ($1 > $2) ? $1 : $2; if (t < recent) print int(t), $3, $4 }' \
+    | sort -n \
+    | awk -v need="$need_kb" '{ if (freed >= need) exit; freed += $2; print $3 }' \
+    | xargs -r rm -f
+  size_mb=$(du -sm "$bazel" 2> /dev/null | cut -f1)
+  if [ "${size_mb:-0}" -gt "$target_mb" ]; then
+    while IFS=$'\t' read -r used entry; do
+      [ "$used" -lt "$recent" ] || { echo "$bazel still uses $((size_mb / 1024))G, but everything left was used in the last 2 days"; break; }
+      pid=$(cat "$entry/server/server.pid.txt" 2> /dev/null || true)
+      if [ -n "$pid" ] && kill -0 "$pid" 2> /dev/null; then continue; fi
+      echo "removing $entry (Bazel ${size_mb}M > ${target_mb}M; last used $(date -d "@$used" +%F))"
+      rm -rf "$entry"
+      size_mb=$(du -sm "$bazel" 2> /dev/null | cut -f1)
+      [ "${size_mb:-0}" -gt "$target_mb" ] || break
+    done < <(find "$bazel/root" -mindepth 1 -maxdepth 1 -print0 2> /dev/null \
+      | while IFS= read -r -d '' entry; do printf '%s\t%s\n' "$(bazel_last_used "$entry")" "$entry"; done | sort -n)
+  fi
+  exec 5>&-
+}
+prune_bazel
+
 for profile in /work/*/.heavy/shell-*; do
   case "$profile" in *-link) continue ;; esac
   [ -L "$profile" ] && nix-env -p "$profile" --delete-generations old > /dev/null 2>&1

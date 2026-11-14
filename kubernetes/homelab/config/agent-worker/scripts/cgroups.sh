@@ -105,6 +105,21 @@ for cache in .gradle .cache .local .npm .android .cargo .bun; do
   fi
 done
 
+# Bazel: the output root (output bases, with the objects a big build such as
+# V8 takes hours to make) and the disk cache live here, not in a workspace and
+# not under .cache, so neither the workspace budget nor the .cache pruning of
+# housekeeping.sh can remove them (a V8 output root in a workspace went with
+# the workspace on 2026-11-14, 7.3 h of small-slot time). housekeeping.sh
+# prunes this directory on its own rule: 30 GB, never while a job that uses
+# Bazel is queued or running. heavy-run.sh exports HEAVY_BAZEL_DIR and
+# HEAVY_BAZEL_RC to every job; the rc file is what a job passes:
+#   bazel --bazelrc=$HEAVY_BAZEL_RC build ...
+# or a project's .bazelrc has `try-import /nix/var/worker/bazel/heavy.bazelrc`.
+bazel=$state/bazel
+mkdir -p "$bazel/root" "$bazel/disk-cache"
+printf '%s\n' "startup --output_user_root=$bazel/root" "build --disk_cache=$bazel/disk-cache" \
+  > "$bazel/heavy.bazelrc.new" && mv -f "$bazel/heavy.bazelrc.new" "$bazel/heavy.bazelrc"
+
 # Housekeeping (housekeeping.sh) at most hourly, in the background. It must
 # not inherit fd 8: on 2026-11-09 it held this lock for an hour (a slow du
 # under IO pressure) and every heavy job waited in `flock 8` behind it.
