@@ -8,7 +8,7 @@
 #   emulator/  the one Android emulator
 # Kubernetes sets memory.oom.group on the container: if the container as a
 # whole hits its limit, every process in it dies. The pools below add up to
-# less than the 20 GiB pod limit, so an OOM stays inside the pool and the job
+# less than the pod limit, so an OOM stays inside the pool and the job
 # that caused it. The limits are applied on every run, so editing them here
 # takes effect on the running pod (this file is in the unhashed ConfigMap).
 set -u
@@ -17,13 +17,19 @@ exec 8> /run/heavy-cgroups.lock
 flock 8
 
 # Pools (GiB-based units, as cgroup files take them) and per-job caps.
-# jobs 12.5G + emulator 5.5G + service 1.5G = 19.5G of 20G. A big job (10G)
-# and a small one (3G) at full size together exceed the jobs pool; then the
-# kernel kills one of them, not the pod.
-jobs_memory=12800M jobs_cpus=4
-big_memory=10G small_memory=3G
-emulator_memory=5632M emulator_cpus=2
-service_pool_memory=1536M service_memory=1G service_cpus=2 service_weight=10
+# A big job (10G) and a small one (6G; `cargo test -p wbox` needs 3 to 5G,
+# 2026-11-14: 3G killed it) at full size need a 16G jobs pool, and with the
+# emulator (5.5G) and services (1.5G) that is 23G: the pod limit is 24Gi.
+# The jobs pool is sized from the container's own limit (the part left after
+# the other pools and 512M for sshd and the kernel), at most 16G, so a pod
+# that runs with a lower limit (20Gi before 2026-11-14) gets a smaller pool
+# (12.8G) instead of one that lets the container hit its limit and die whole.
+# When a big and a small job at full size together exceed the pool, the kernel
+# kills one of them, not the pod.
+jobs_want_mb=16384 jobs_cpus=4
+big_memory=10G small_memory=6G
+emulator_mb=5632 emulator_memory=5632M emulator_cpus=2
+service_pool_mb=1536 service_pool_memory=1536M service_memory=1G service_cpus=2 service_weight=10
 
 cg=""
 if [ -s "$state/cgroup" ] && [ -d "$(cat "$state/cgroup")/jobs" ] \
@@ -59,7 +65,13 @@ done
 rmdir "$cg/light" 2> /dev/null
 
 cores() { echo "$(($1 * 100000)) 100000"; }
-echo "$jobs_memory" > "$cg/jobs/memory.max"
+jobs_mb=$jobs_want_mb
+limit=$(cat "$cg/memory.max" 2> /dev/null || echo max)
+if [ "$limit" != max ]; then
+  fit_mb=$((limit / 1048576 - emulator_mb - service_pool_mb - 512))
+  [ "$fit_mb" -ge "$jobs_mb" ] || jobs_mb=$fit_mb
+fi
+echo "${jobs_mb}M" > "$cg/jobs/memory.max"
 # The jobs pool's quota, unless a pinned job (`heavy --cpus`) runs: then
 # cores.sh lifts it; its sweep puts it back and undoes what a pinned job that
 # died left behind (exclusive lists, IRQ affinity).

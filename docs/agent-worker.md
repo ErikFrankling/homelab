@@ -28,7 +28,9 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
 
 ## Keeping it away from everything else
 
-- **Memory:** limit 20 GiB (one release APK build peaks near 10 GB, the emulator takes 4), request 8 GiB. Under node pressure earlyoom
+- **Memory:** limit 24 GiB on the running pod, 20 GiB in the manifest until the
+  next restart (see "Pod limit"); one release APK build peaks near 10 GB, a
+  small job up to 6, the emulator takes 4; request 8 GiB. Under node pressure earlyoom
   (`ops/earlyoom/install.sh`) kills nix-builder's processes before this pod's.
 - **CPU:** no request and no limit, so it gets the smallest share under
   contention. `max-jobs = 2`, `cores = 4` for Nix builds here.
@@ -77,7 +79,8 @@ the PC.
 `scripts/heavy-run.sh` admits one **big** job at a time (Gradle, Expo, APK
 builds, anything driving the emulator; guessed from the command or the script
 it runs, or `heavy --big`) with up to 10 GiB, and one **small** job with up to
-3 GiB, which may borrow the big slot while no big job waits. Others queue in
+6 GiB (3 GiB until 2026-11-14, when `cargo test -p wbox` jobs, 3 to 5 GiB,
+were killed at the cap), which may borrow the big slot while no big job waits. Others queue in
 order (`/work/.queue`); `heavy --priority` (`HEAVY_PRIORITY=1`) gives a job a 30-minute
 head start in its class's queue: it passes ordinary waiters that joined less
 than 30 minutes before it, never one that has waited longer, and never
@@ -85,10 +88,17 @@ interrupts the running job. For a shared job many sessions wait on. A head
 start rather than the front of the queue, because two priority jobs that
 re-queue each other (wasm-box's builder and tests job, 2026-11-13) otherwise
 keep the big slot forever. `cgroups.sh` splits the container's cgroup into
-`jobs/` (13 GiB, 4 cores, one `job-<pid>/` per job with `memory.oom.group`),
-`emulator/` (5.5 GiB, 2 cores), `light/` (768 MiB) and `system/`. The caps add
-up to less than the 20 GiB pod limit, so an OOM kills only the job that caused
-it. (Kubernetes sets `memory.oom.group` on the container itself: before this,
+`jobs/` (16 GiB, 4 cores, one `job-<pid>/` per job with `memory.oom.group`),
+`emulator/` (5.5 GiB, 2 cores), `service/` (1.5 GiB) and `system/`. The caps add
+up to less than the 24 GiB pod limit, so an OOM kills only the job that caused
+it. The jobs pool is sized from the container's actual limit (limit minus the
+other pools minus 512 MiB, at most 16 GiB): a pod that runs with 20 GiB gets
+12.8 GiB, never a pool that lets the container hit its limit and die whole.
+A big and a small job at full size together (10 + 6) fill the pool; then the
+kernel kills one of them. The jobs pool's 4-core quota is what a job's speed
+depends on: on 2026-11-14 it was throttled in 72 % of its periods, and the
+node itself (4 cores, 8 threads) averaged 74 % busy over 7 days, so a second
+small slot would only split the same 4 cores. (Kubernetes sets `memory.oom.group` on the container itself: before this,
 one job over the limit killed the whole pod, emulator included.) Because the
 container's own cgroup now hands its controllers to children, `kubectl exec`
 into it fails; use SSH.
@@ -125,6 +135,25 @@ kernel manages itself stay. The job runs at nice 0, and the `jobs/` pool's
   is nearly idle (it only routes Tailscale), so the cores are quiet but not
   fixed physical cores, and a pinned vCPU can share a physical core with
   another vCPU's hyperthread.
+
+## Pod limit: resized in place, manifest pending (2026-11-14)
+
+Any edit of the Deployment (`strategy: Recreate`) restarts the pod and kills
+every job, and the queue is never empty. So the limit went from 20 to 24 GiB on
+the running pod without a restart, with Kubernetes 1.35's in-place resize:
+
+```bash
+sudo kubectl -n homelab patch pod POD --subresource resize --patch \
+  '{"spec":{"containers":[{"name":"worker","resources":{"limits":{"memory":"24Gi"}}}]}}'
+```
+
+`apps/agent-worker.yaml` still says `20Gi`. Change it to `24Gi` (and
+`WORKER_SMALL_MEMORY` to `6G`) in the same push as the next change that
+restarts the pod anyway (an image update, a new env var), or when `heavy
+status` shows nothing running. Until then a restart brings the pod back with
+20 GiB, and `cgroups.sh` sizes the jobs pool down to fit (12.8 GiB), so
+nothing breaks, only a big and a small job at full size can again kill each
+other.
 
 ## Changing it without killing jobs
 
