@@ -30,6 +30,12 @@ idle homelab time-backup-*
 10000 homelab authentik-*
 10000 homelab kokoro-tts-*
 
+# Erik's Claude traffic (2026-11-14): every model call he and his agents make
+# goes through cliproxy (and cliproxy-management for its logins). At the
+# default weight 1, beside heavy jobs at 200 on a node with CPU pressure of 51%
+# over 5 minutes, it threw 502/503s and slow responses. It uses little CPU.
+10000 homelab cliproxy-*
+
 # Search answers agents (the hourly parcel sweep) in seconds: every query is
 # an embedding call (onyx-embed), a model-server call, OpenSearch and Postgres.
 # At the default weight 1 a nightly build starved them: embedding 41 characters
