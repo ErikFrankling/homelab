@@ -12,6 +12,37 @@ The PC side is the `heavy` command (dotfiles,
 `/work/<repo>-<hash>/` here and runs a command in it over SSH, inside the
 repository's `nix develop` shell when its flake has one.
 
+## When the checkout is copied: at submission, not at start
+
+**`heavy` copies the checkout when the job is submitted (when you run
+`heavy ...`), not when the job starts.** The sequence is: rsync the checkout to
+`/work/<repo>-<hash>/`, then queue the job. A job can wait for an hour or more;
+**edits you make to your checkout while it waits are not on the worker and do
+not run.** Briefs that said "syncs at start" were wrong. Spelled out:
+
+- The job runs on the worker's copy, as it is when the job starts. That copy is
+  the result of the last sync into that workspace by anyone, not a snapshot
+  taken at submission: another `heavy` call from the same checkout (the same
+  directory, so the same `/work/<repo>-<hash>/`) syncs again and changes the
+  files a waiting job will use. A job queued before your edit runs your edit if,
+  and only if, some later `heavy` call (or `heavy sync`) from that checkout
+  synced it before the job started.
+- **Re-running the same command syncs again, then re-attaches to the job
+  already queued or running for it** (see "Jobs that survive their client").
+  The queue place is kept and the files are refreshed, which is how to get an
+  edit into a job that is already waiting: run the same `heavy ...` command
+  again. Without the sync (`--no-sync`) nothing is copied.
+- `heavy sync` only copies, without queueing anything. `--no-sync` skips the
+  copy (rerun on what the worker already has).
+- What is copied: the files git would show (tracked plus untracked, minus
+  everything ignored), not `.git`; in a directory that is not a repository,
+  everything but `node_modules`, `.direnv`, `result*`, `.venv`, `.gradle`.
+  Files a job built on the worker (`target/`, `node_modules`) stay between
+  runs.
+- A job that is already running is not affected by later syncs of files it has
+  already read, but one that reads files late in its run (a test suite that
+  opens fixtures as it goes) can see a mix of old and new.
+
 ## How it fits together
 
 | Piece | Where | What it does |
