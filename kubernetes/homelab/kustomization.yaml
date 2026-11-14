@@ -162,6 +162,7 @@ configMapGenerator:
       - config/agent-worker/scripts/cores.sh
       - config/agent-worker/scripts/housekeeping.sh
       - config/agent-worker/scripts/heavy-userns.sh
+      - config/agent-worker/scripts/heavy-detach.sh
       - config/agent-worker/scripts/heavy-status.sh
       - config/agent-worker/scripts/heavy-bg.sh
       - config/agent-worker/scripts/heavy-emulator.sh

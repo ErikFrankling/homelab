@@ -171,6 +171,10 @@ prune_bazel() {
 }
 prune_bazel
 
+# Jobs nobody attends any more (heavy-detach.sh): cancelled after 2 hours,
+# results nobody collected forgotten after 6.
+bash /scripts/heavy-detach.sh reap
+
 for profile in /work/*/.heavy/shell-*; do
   case "$profile" in *-link) continue ;; esac
   [ -L "$profile" ] && nix-env -p "$profile" --delete-generations old > /dev/null 2>&1
