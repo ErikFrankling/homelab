@@ -58,6 +58,8 @@ redact() {
     | cut -c1-300
 }
 display=${HEAVY_DISPLAY:-$(redact "$@")}
+# A detached job (heavy-detach.sh) shows its key, the argument of `heavy cancel`.
+[ -z "${HEAVY_JOB_KEY:-}" ] || display="[${HEAVY_JOB_KEY:0:12}] $display"
 
 # Background jobs get /dev/null as stdin in a non-interactive shell, so the
 # watcher reads the channel through fd 3.

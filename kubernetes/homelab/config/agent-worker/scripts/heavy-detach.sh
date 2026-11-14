@@ -92,8 +92,17 @@ attach() {
   d=$jobs/$1
   off_out=0 off_err=0
   [ -d "$d" ] || { echo "heavy: no such job on the worker (it was collected, or the worker restarted); run the command again" >&2; exit 253; }
-  local finished
+  local finished ppid0 ppid_now _
+  # The client's ssh session is this process's parent (sshd). When the client
+  # dies, sshd's session ends and this process is reparented to init, but it
+  # keeps running: until 2026-11-14 it kept touching the heartbeat for good, so
+  # the job looked attended forever (and the 2-hour cutoff never came). A
+  # reparented attach has no client: stop quietly, leave the job alone (it is
+  # cancelled only by `cancel` or the cutoff).
+  read -r _ _ _ ppid0 _ < /proc/$$/stat
   while :; do
+    read -r _ _ _ ppid_now _ < /proc/$$/stat
+    [ "$ppid_now" = "$ppid0" ] && [ "$ppid_now" != 1 ] || exit 141
     touch "$d/heartbeat"
     finished=0
     [ -f "$d/status" ] && finished=1
@@ -136,7 +145,9 @@ start_job() { # KEY WS REL DEVELOP CMD...
   # The channel heavy-run.sh watches: open while this sleep lives.
   setsid sleep 2147483647 > "$d/stdin" 3<&- 6>&- 7>&- 8>&- 9>&- &
   echo $! > "$d/keeper"
-  setsid bash -c '
+  # HEAVY_JOB_KEY: heavy-run.sh shows its first 12 characters in `heavy status`,
+  # which is what `heavy cancel` takes.
+  HEAVY_JOB_KEY=$key setsid bash -c '
     d=$1; shift
     bash /scripts/heavy-run.sh "$@" < "$d/stdin" > "$d/out" 2> "$d/err"
     rc=$?
@@ -189,10 +200,39 @@ case "${1:-}" in
     attach "${2:?usage: heavy-detach.sh attach KEY}"
     ;;
   cancel)
-    d=$jobs/${2:?usage: heavy-detach.sh cancel KEY}
-    [ -d "$d" ] || exit 0
-    touch "$d/cancelled" "$d/consumed"
-    cancel_job "$d"
+    # KEY, or a prefix of it (at least 6 characters) as `heavy status` shows it.
+    # Several keys may be given. Exit 1 when one matches nothing or several.
+    shift
+    [ $# -ge 1 ] || { echo "usage: heavy-detach.sh cancel KEY..." >&2; exit 2; }
+    rc=0
+    for k in "$@"; do
+      if [ -d "$jobs/$k" ]; then d=$jobs/$k
+      else
+        [ "${#k}" -ge 6 ] && [[ $k =~ ^[0-9a-f]+$ ]] || { echo "heavy: '$k' is not a job key" >&2; rc=1; continue; }
+        matches=("$jobs/$k"*/)
+        if [ ! -d "${matches[0]}" ]; then echo "heavy: no job on the worker with key $k (finished and collected, or not a detached job)" >&2; rc=1; continue; fi
+        [ "${#matches[@]}" = 1 ] || { echo "heavy: key $k matches ${#matches[@]} jobs; give more characters" >&2; rc=1; continue; }
+        d=${matches[0]%/}
+      fi
+      touch "$d/cancelled" "$d/consumed"
+      cancel_job "$d"
+      echo "cancelled $(basename "$d") ($(cut -f1 "$d/cmd" 2> /dev/null))"
+    done
+    exit "$rc"
+    ;;
+  cancel-ws)
+    # Every detached job of one workspace (its /work/NAME-HASH name).
+    ws=${2:?usage: heavy-detach.sh cancel-ws WORKSPACE-NAME}
+    n=0
+    for d in "$jobs"/*/; do
+      d=${d%/}
+      [ -d "$d" ] && [ "$(cut -f1 "$d/cmd" 2> /dev/null)" = "$ws" ] || continue
+      touch "$d/cancelled" "$d/consumed"
+      cancel_job "$d"
+      echo "cancelled $(basename "$d")"
+      n=$((n + 1))
+    done
+    echo "$n job(s) of $ws cancelled"
     ;;
   status)
     # What a client asks when its ssh ended with a status that could be ssh's
