@@ -71,11 +71,11 @@ spec:
               value: 608d0cadfed240589a7eea422407a547ad626a14
             # Scheduling and the sub-cgroup sizes (cgroups.sh, heavy-run.sh).
             - name: WORKER_JOBS_MEMORY
-              value: 13G
+              value: 16G
             - name: WORKER_BIG_MEMORY
               value: 10G
             - name: WORKER_SMALL_MEMORY
-              value: 3G
+              value: 6G
             - name: WORKER_JOBS_CPUS
               value: "4"
             - name: WORKER_EMULATOR_MEMORY
@@ -99,15 +99,15 @@ spec:
             tcpSocket:
               port: ssh
           resources:
-            # The limit covers the sub-cgroups in cgroups.sh (jobs 13G +
-            # emulator 5.5G + light 0.75G + sshd), so an OOM stays inside the
+            # The limit covers the sub-cgroups in cgroups.sh (jobs 16G +
+            # emulator 5.5G + services 1.5G + sshd), so an OOM stays inside the
             # job that caused it instead of killing the pod (Kubernetes sets
             # memory.oom.group on the container). The request keeps a running
             # emulator and build from being the first thing evicted when the
             # node runs short. No CPU request (smallest share); cgroups.sh
             # caps jobs and the emulator at 6 of the node's 8 cores.
             limits:
-              memory: 20Gi
+              memory: 24Gi
             requests:
               memory: 8Gi
           securityContext:
