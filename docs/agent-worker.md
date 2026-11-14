@@ -440,3 +440,61 @@ output shows Nix building a `gcc`, `llvm` or `clang` derivation with a version
 number (`building '/nix/store/...-llvm-19.1.7.drv'`, a wrapper does not match)
 or CMake compiling an object under an `llvm` path. A warning only: nothing is
 stopped by it.
+
+## Jobs that survive their client (2026-11-14)
+
+Why: until then a job lived exactly as long as the SSH channel of the PC's
+`heavy` client (`heavy-run.sh` reads the channel's stdin and kills the job, or
+takes it out of the queue, when it closes). That client is a few MB of ssh and
+bash that runs as an agent job at a high OOM score, so in any memory spike on
+the PC the kernel killed it first and the job lost its queue place. At
+17:53-17:57 on 2026-11-14 a global OOM took every wasm-box lane's client,
+including a `--priority` release build that had waited about 2 hours.
+
+Two changes, both in the dotfiles' `heavy` module and `agent-job`, plus one
+script here:
+
+1. **The client runs at OOM score 500** (the infra daemons' value), not 800
+   (agents' builds; 1000 in the units already running on 2026-11-14, from an
+   older `agent-job`). `heavy` passes `AGENT_JOB_OOM=500` to `agent-job wrap`,
+   which sets it as the unit's `OOMScoreAdjust`. A unit already running keeps
+   its old score: only a client started after the PC deploys gets it.
+2. **The job does not depend on the client.** `scripts/heavy-detach.sh` starts
+   `heavy-run.sh` in its own session, with its stdin on a fifo that a `sleep`
+   holds open (killing that sleep is the old "channel closed"), and its output
+   in `/work/.jobs/KEY/{out,err}`. The client only follows it
+   (`heavy-detach.sh run|attach|cancel|list|reap`).
+
+KEY is the client's hash of the workspace path, the sub-directory, the shell,
+the class, `--priority`, `--cpus`, the `-e` variables and the command: the same
+command from the same directory finds its job again. A different `-e` value is
+a different job. Files per job: `out`, `err`, `cmd`, `started`, `pid`,
+`keeper`, `heartbeat` (touched twice a second by an attached client), `status`
+(the exit code, when it ended), `consumed`, `cancelled`, `orphaned`.
+`heavy-detach.sh list` shows them (`ssh -p 2223 root@worker bash
+/scripts/heavy-detach.sh list`).
+
+What each case does:
+
+| Case | What happens |
+|---|---|
+| The client is killed by SIGKILL or the OOM killer | The job stays queued or running, its queue place unchanged (checked: the same ticket in `/work/.queue` before and after). Start the same command again, or `agent-job attach NAME`: it re-attaches, prints the job's output from the start and exits with its status |
+| The same command is started while its job is queued or running | It attaches to that job; nothing new is queued. This also happens between two live clients (two agents with the same command) |
+| The job finished while no client was there | The next call for the same command gets its output and exit code once (kept 6 hours), and says so; the call after that runs the command again |
+| `agent-job attach NAME` on a client that was killed | `agent-job` starts the client again from the recorded directory and command (it knows it is a `heavy`), which re-attaches. Not after `agent-job stop NAME`, which cancelled the job, and not for a finished one |
+| The client is interrupted: Ctrl-C, SIGTERM, SIGHUP, `agent-job stop` | It cancels the job on the worker (leaves the queue, or kills it) before exiting 130, as before |
+| The SSH connection is lost (the client survives) | The client re-attaches by itself every 5 s, up to 120 times (10 minutes); the output is replayed from the start. Until 2026-11-14 this ended the job with status 255 |
+| The PC reboots, or the client's unit is gone | The job keeps going; start the same command again to re-attach |
+| Nobody has attached for 2 hours (`HEAVY_ORPHAN_MIN`) | The job is cancelled (queued: it leaves the queue; running: it is killed), so abandoned jobs do not fill the queue. `housekeeping.sh` and every `heavy-detach.sh` call check this |
+| The worker pod restarts | Every job is gone, as before; a re-attach says so (exit 253) and a re-run starts it again |
+| `HEAVY_DETACH=0 heavy ...` | The old way: tied to the connection |
+
+Exit codes: the job's own, except 255 (ssh's) is reported as 254, and 253 means
+the job is gone (collected, or the worker restarted). Collected results and
+their logs are removed after 10 minutes. The output of a job is kept on the
+worker's disk while it runs; a very chatty job costs disk in `/work/.jobs`.
+
+What existed before: only the PC's `agent-job` reuse, a client unit with the
+same name (a hash of the directory and the arguments) that is still alive is
+followed instead of started again. It did nothing for a client that was killed,
+because its job was killed with it.
