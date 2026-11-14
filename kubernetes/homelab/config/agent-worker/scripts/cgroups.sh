@@ -57,6 +57,10 @@ mkdir -p "$cg/service"
 # cpuset: `heavy --cpus` pins a job to exclusive cores (cores.sh).
 echo +cpuset > "$cg/cgroup.subtree_control" 2> /dev/null || true
 for pool in jobs service; do
+  # Traversable by others (mkdir under umask 077 made them 700): an unprivileged
+  # test user reaches the cgroup subtree delegated to it (heavy-run.sh) through
+  # them. Nothing in a pool is writable by others.
+  chmod 755 "$cg/$pool" 2> /dev/null || true
   echo "+memory +cpu +pids +cpuset" > "$cg/$pool/cgroup.subtree_control" 2> /dev/null || true
   # Job cgroups whose processes are gone (rmdir fails on busy ones).
   # A job with a delegated subtree (heavy-run.sh) has cgroups below it: those
