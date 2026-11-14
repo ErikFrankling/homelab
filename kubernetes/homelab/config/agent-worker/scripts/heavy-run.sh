@@ -404,19 +404,97 @@ if [ -n "${HEAVY_UMASK:-}" ] && [[ $HEAVY_UMASK =~ ^0?[0-7]{3}$ ]]; then
 elif [ "$user_mode" -ge 1 ]; then
   umask 022
 fi
+# Wall cap (2026-11-14: a big job compiled LLVM from source for over an hour
+# and nothing noticed). An unmarked big job gets 2 hours, then SIGTERM and,
+# HEAVY_WALL_GRACE seconds later, SIGKILL. `heavy -e HEAVY_LONG=1` (heavy
+# --long) opts out; HEAVY_WALL_CAP=SECONDS gives any class its own cap. Not for
+# the emulator's reservation or a job inside it. The time is the job's own
+# (from here, not from queueing).
+long=0
+case "${HEAVY_LONG:-}" in 1 | yes | true) long=1 ;; esac
+wall_cap=0
+if [ "$long" = 0 ] && [ -z "$shared" ] && [ "$ws" != /work/.emulator ]; then
+  if [[ ${HEAVY_WALL_CAP:-} =~ ^[1-9][0-9]*$ ]]; then
+    wall_cap=$HEAVY_WALL_CAP
+  elif [ "$class" = big ]; then
+    wall_cap=7200
+  fi
+fi
+grace=${HEAVY_WALL_GRACE:-60}
+if [ $((wall_cap % 3600)) = 0 ]; then cap_text=$((wall_cap / 3600))h
+elif [ $((wall_cap % 60)) = 0 ]; then cap_text=$((wall_cap / 60))m
+else cap_text=${wall_cap}s; fi
+
+# A command that says it builds LLVM or GCC from source: say so in the log,
+# once, before it starts. (The log is also watched below.)
+if mentions '(nix[- ]build)[^[:cntrl:]]{0,80}\b(llvm|gcc)\b|\bbuild[-_ ](llvm|gcc)\b|\b(llvm|gcc)[-_ ]from[-_ ]source\b|\bllvm-project\b' "$@"; then
+  echo "heavy: warning: this command looks like it builds LLVM or GCC from source, which takes hours; if a cached compiler was expected, check that first (a big job over 2 h is stopped unless --long)" >&2
+fi
+
+# The job's output goes through two tees on fifos (bytes pass untouched, stdout
+# stays stdout and stderr stderr): $act is what they have written since the
+# monitor below last looked. That is how `heavy status` knows how long a job
+# has been silent, and how a compiler build in its log is noticed.
+mkfifo "$run/out.fifo" "$run/err.fifo"
+act=$run/act
+: > "$act"
+tee -a "$act" < "$run/out.fifo" 3<&- 6>&- 7>&- 9>&- &
+tee -a "$act" < "$run/err.fifo" >&2 3<&- 6>&- 7>&- 9>&- &
 HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
   setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null
     HEAVY_CPUS=$(sed -n "s/^Cpus_allowed_list:[[:space:]]*//p" /proc/self/status); export HEAVY_CPUS HEAVY_CPUS_EXCLUSIVE
     n=$2; shift 2; exec nice -n "$n" "$@"' \
-  heavy-job "$target" "$niceness" "$@" < /dev/null 3<&- 6>&- 7>&- 9>&- &
+  heavy-job "$target" "$niceness" "$@" < /dev/null > "$run/out.fifo" 2> "$run/err.fifo" 3<&- 6>&- 7>&- 9>&- &
 job=$!
 umask 077
 echo "$job" > "$run/job"
 [ -z "${HEAVY_JOB_PIDFILE:-}" ] || echo "$job" > "$HEAVY_JOB_PIDFILE"
 # The channel closed while the job was starting.
 [ ! -e "$run/closed" ] || kill -TERM -- "-$job" 2> /dev/null
+
+# The monitor, every 5 s while the job lives: records output (the mtime of
+# /work/.slots/SLOT.out, which `heavy status` reads as silence; its content is
+# the wall-cap deadline, or none), warns once if the log shows LLVM or GCC being
+# built, and enforces the wall cap.
+out=""
+if [ -n "${slot:-}" ]; then
+  out=/work/.slots/$slot.out
+  if [ "$wall_cap" -gt 0 ]; then echo $((started + wall_cap)) > "$out"; else echo none > "$out"; fi
+fi
+build_re="building '/nix/store/[^']*-(gcc|llvm|clang)-[0-9][0-9.]*(-[a-z]+)?\\.drv|Building (C|CXX) object [^ ]*[lL][lL][vV][mM]"
+(
+  warned=0
+  while sleep 5; do
+    kill -0 "$job" 2> /dev/null || exit 0
+    if [ -s "$act" ]; then
+      [ -z "$out" ] || touch "$out" 2> /dev/null
+      if [ "$warned" = 0 ]; then
+        hit=$(grep -aEm1 "$build_re" "$act" | cut -c1-150)
+        if [ -n "$hit" ]; then
+          warned=1
+          echo "heavy: warning: this job is building LLVM or GCC from source (log: $hit); if a cached compiler was expected, it was not substituted. A big job over 2 h is stopped unless --long" >&2
+        fi
+      fi
+      : > "$act"
+    fi
+    if [ "$wall_cap" -gt 0 ] && [ $(($(date +%s) - started)) -ge "$wall_cap" ]; then
+      echo "heavy: wall cap $cap_text; rerun with --long if this is expected" >&2
+      echo "heavy: stopping the job now: SIGTERM, then SIGKILL in $grace s" >&2
+      touch "$run/capped"
+      kill -TERM -- "-$job" 2> /dev/null
+      sleep "$grace"
+      kill -KILL -- "-$job" 2> /dev/null
+      exit 0
+    fi
+  done
+) 3<&- 6>&- 7>&- 9>&- &
+monitor=$!
 wait "$job"
 rc=$?
+# Not pkill -P: killing its sleep makes the monitor print "Terminated" into
+# the job's log. The sleep it leaves ends by itself within seconds.
+kill "$monitor" 2> /dev/null
+[ ! -e "$run/capped" ] || rc=124
 if [ -z "$shared" ] && [ -z "${HEAVY_NO_STATS:-}" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   echo $(($(date +%s) - started)) >> "/work/.stats/$class"
 fi
@@ -425,7 +503,7 @@ if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events" 2> /
 fi
 pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
-[ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
+[ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job" "/work/.slots/$slot.out"
 [ -z "$shared" ] || rm -f "$shared"
 if [ -n "$delegated" ]; then
   # What the job and its test user left in the subtree: kill it, then remove

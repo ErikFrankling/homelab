@@ -33,7 +33,23 @@ for i in big small; do
     if [ "$(cut -f3 "/work/.slots/$i.job")" = .emulator ]; then
       echo "  [$i] held by the emulator since $(cut -c1-5 "/work/.slots/$i.job") (${ran} min; freed by heavy emulator stop or 30 idle minutes)"
     else
-      echo "  [$i, ${ran} min] $(cut -f2- "/work/.slots/$i.job" | redact)"
+      # Wall time so far, seconds since the job's log last grew (the mtime of
+      # SLOT.out, kept by heavy-run.sh's monitor to within ~5 s) and the
+      # wall-cap deadline in its content (epoch, or none). A job started before
+      # the monitor existed has no such file.
+      now=$(date +%s) detail="${ran} min wall"
+      if [ -f "/work/.slots/$i.out" ]; then
+        detail="$detail, silent $((now - $(stat -c %Y "/work/.slots/$i.out" 2> /dev/null || echo "$now"))) s"
+        deadline=$(cat "/work/.slots/$i.out" 2> /dev/null)
+        case "$deadline" in
+          none) detail="$detail, no wall cap" ;;
+          '' | *[!0-9]*) ;;
+          *) if [ "$deadline" -gt "$now" ]; then detail="$detail, wall cap in $(((deadline - now) / 60)) min"; else detail="$detail, wall cap reached"; fi ;;
+        esac
+      else
+        detail="$detail, silence not tracked (started before it was)"
+      fi
+      echo "  [$i, $detail] $(cut -f2- "/work/.slots/$i.job" | redact)"
     fi
   fi
 done

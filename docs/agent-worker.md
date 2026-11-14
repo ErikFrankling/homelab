@@ -399,3 +399,44 @@ child in the delegated cgroup, set `memory.max` 50M and `pids.max` 64, and moved
 itself into it; unprivileged user namespaces are on (`max_user_namespaces`
 208677, no AppArmor restriction, kernel 6.8) and the cgroup2 mount has
 `nsdelegate`.
+
+## Silence, wall time and the 2-hour cap for big jobs (2026-11-14)
+
+Why: a wasm-box job believed a compiler was cached, compiled LLVM from source
+with gcc in the big slot for over an hour, ahead of everything else, and
+nothing in `heavy` noticed.
+
+`heavy status` / `heavy queue`, per running job:
+`[big, 52 min wall, silent 134 s, wall cap in 68 min] ...`. Silence is the
+seconds since the job's output (stdout or stderr) last appeared, to within
+about 5 s; wall time runs from when the job got its slot. A job that started
+before this existed shows `silence not tracked`.
+
+How: `heavy-run.sh` sends the job's stdout and stderr through two `tee`s on
+fifos (bytes pass untouched, stdout stays stdout, stderr stays stderr, the exit
+code is the job's). A monitor loop, every 5 s while the job lives, touches
+`/work/.slots/SLOT.out` when output appeared (its mtime is the silence; its
+content is the wall-cap deadline as an epoch, or `none`), and looks at the
+output of the last 5 s. Nothing is kept: the tee's file is emptied each time.
+
+**Wall cap:** an unmarked **big** job gets 2 hours from the start of its run.
+Then its log says `heavy: wall cap 2h; rerun with --long if this is expected`,
+the job's process group gets SIGTERM, and 60 s later SIGKILL; the job exits 124.
+
+| What | How |
+|---|---|
+| Opt out | `heavy --long -- CMD` or `heavy -e HEAVY_LONG=1 -- CMD` (`--long` needs the PC's `heavy` from the dotfiles of 2026-11-14; the `-e` form works anywhere) |
+| A cap of your own | `heavy -e HEAVY_WALL_CAP=SECONDS -- CMD`, any class; `HEAVY_LONG` wins |
+| Grace before SIGKILL | `HEAVY_WALL_GRACE=SECONDS`, default 60 |
+| Never capped | the emulator's reservation and jobs inside it, services, small jobs without `HEAVY_WALL_CAP` |
+
+`heavy bg --big` batch jobs are big jobs and get the cap too: pass `-e
+HEAVY_LONG=1` for one that is meant to run longer.
+
+**LLVM or GCC from source:** a warning line, once, in the job's log. At start,
+when the command (or the script it names) matches `nix build ... llvm|gcc`,
+`build-llvm`, `llvm-from-source` or `llvm-project`; while running, when its
+output shows Nix building a `gcc`, `llvm` or `clang` derivation with a version
+number (`building '/nix/store/...-llvm-19.1.7.drv'`, a wrapper does not match)
+or CMake compiling an object under an `llvm` path. A warning only: nothing is
+stopped by it.
