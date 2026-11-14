@@ -500,7 +500,14 @@ kill "$monitor" 2> /dev/null
 if [ -z "$shared" ] && [ -z "${HEAVY_NO_STATS:-}" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   echo $(($(date +%s) - started)) >> "/work/.stats/$class"
 fi
-if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$jobcg/memory.events" 2> /dev/null; then
+# memory.events.local, not memory.events: the latter adds up the cgroups below
+# (a test that makes children and OOM-kills processes in them under their own
+# memory.max, HEAVY_USERNS, would report the job as out of memory: 2026-11-14,
+# JS-L1's jail tests). Only a kill at the job's own limit counts. Kernels
+# without the local file (before 5.x) fall back to the hierarchical one.
+oom_events=$jobcg/memory.events.local
+[ -f "$oom_events" ] || oom_events=$jobcg/memory.events
+if [ -n "$jobcg" ] && ! grep -q '^oom_group_kill 0$' "$oom_events" 2> /dev/null; then
   echo "heavy: the job ran out of memory ($class jobs get up to $(numfmt --to=iec < "$jobcg/memory.max")); use --big for builds, or run less at once" >&2
 fi
 pkill -P "$watcher" 2> /dev/null
