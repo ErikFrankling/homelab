@@ -192,6 +192,43 @@ if [ "$class" != service ] && { [ "${HEAVY_BAZEL:-0}" = 1 ] || mentions '\bbazel
   done
 fi
 
+# Build stores (housekeeping.sh prune_stores, docs/agent-worker.md): directories
+# for state that must outlive a workspace, a job and a restart of the VM (a
+# package store that took hours to build). They live in
+# /nix/var/worker/stores/NAME on the volume, outside /work, so neither the
+# workspace budget (15 GB, least recently used first: it removed a 43 GB
+# workspace with such a store on 2026-11-15 04:24) nor the cache pruning can
+# touch them. A job names its store with `heavy -e HEAVY_STORE=NAME`, gets
+# HEAVY_STORE_DIR=/nix/var/worker/stores/NAME (created) and holds a shared
+# lock on /work/.slots/store-NAME from here, queue wait included, to its end:
+# housekeeping.sh takes the exclusive one to remove a store, so a store is
+# never removed while a job using it is queued or running. HEAVY_STORES_ROOT is
+# set for every job.
+export HEAVY_STORES_ROOT=/nix/var/worker/stores
+store=""
+if [ -n "${HEAVY_STORE:-}" ]; then
+  if ! [[ $HEAVY_STORE =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
+    echo "heavy: HEAVY_STORE '$HEAVY_STORE' is not a store name (letters, digits, . _ -, at most 64, starting with a letter or digit); the job was not started" >&2
+    exit 94
+  fi
+  store=$HEAVY_STORES_ROOT/$HEAVY_STORE
+  mkdir -p "$store" /work/.slots
+  exec 5> "/work/.slots/store-$HEAVY_STORE"
+  # A removal holds the exclusive lock for as long as it takes to delete the
+  # store; do not wait more than 30 minutes for it.
+  for _ in $(seq 1 900); do
+    flock -s -n 5 && break
+    [ ! -e "$run/closed" ] || exit 130
+    sleep 2
+  done
+  # Held, but a removal may have finished just before: the directory is made
+  # again by the mkdir above only if it was gone before the lock; check now.
+  mkdir -p "$store"
+  touch "$store/.heavy-last-used"
+  export HEAVY_STORE_DIR=$store
+  echo "heavy: store $HEAVY_STORE: HEAVY_STORE_DIR=$store ($(du -sh "$store" 2> /dev/null | cut -f1) there now)" >&2
+fi
+
 mkdir -p /work/.stats
 # Minutes a job of this class usually takes: the median of the last 10.
 typical() {
@@ -440,13 +477,13 @@ fi
 mkfifo "$run/out.fifo" "$run/err.fifo"
 act=$run/act
 : > "$act"
-tee -a "$act" < "$run/out.fifo" 3<&- 6>&- 7>&- 9>&- &
-tee -a "$act" < "$run/err.fifo" >&2 3<&- 6>&- 7>&- 9>&- &
+tee -a "$act" < "$run/out.fifo" 3<&- 5>&- 6>&- 7>&- 9>&- &
+tee -a "$act" < "$run/err.fifo" >&2 3<&- 5>&- 6>&- 7>&- 9>&- &
 HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
   setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null
     HEAVY_CPUS=$(sed -n "s/^Cpus_allowed_list:[[:space:]]*//p" /proc/self/status); export HEAVY_CPUS HEAVY_CPUS_EXCLUSIVE
     n=$2; shift 2; exec nice -n "$n" "$@"' \
-  heavy-job "$target" "$niceness" "$@" < /dev/null > "$run/out.fifo" 2> "$run/err.fifo" 3<&- 6>&- 7>&- 9>&- &
+  heavy-job "$target" "$niceness" "$@" < /dev/null > "$run/out.fifo" 2> "$run/err.fifo" 3<&- 5>&- 6>&- 7>&- 9>&- &
 job=$!
 umask 077
 echo "$job" > "$run/job"
@@ -489,7 +526,7 @@ build_re="building '/nix/store/[^']*-(gcc|llvm|clang)-[0-9][0-9.]*(-[a-z]+)?\\.d
       exit 0
     fi
   done
-) 3<&- 6>&- 7>&- 9>&- &
+) 3<&- 5>&- 6>&- 7>&- 9>&- &
 monitor=$!
 wait "$job"
 rc=$?
@@ -514,6 +551,8 @@ pkill -P "$watcher" 2> /dev/null
 kill "$watcher" 2> /dev/null
 [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job" "/work/.slots/$slot.out"
 [ -z "$shared" ] || rm -f "$shared"
+# The store's last use is when its job ended (housekeeping.sh prune_stores).
+[ -z "$store" ] || touch "$store/.heavy-last-used" 2> /dev/null
 if [ -n "$delegated" ]; then
   # What the job and its test user left in the subtree: kill it, then remove
   # the cgroups below $jobcg deepest first, so the rmdir of $jobcg below works.

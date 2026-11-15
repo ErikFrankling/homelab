@@ -171,6 +171,67 @@ prune_bazel() {
 }
 prune_bazel
 
+# Build stores ($state/stores/NAME, heavy-run.sh HEAVY_STORE): removed only when
+# nothing that uses one is queued or running (the job holds a shared flock on
+# /work/.slots/store-NAME from queueing to its end; this takes the exclusive one
+# without waiting, and keeps it while it removes the store), and then only
+#   - a store unused for stores_idle_days (default 14): its newest mark is
+#     $store/.heavy-last-used, touched when a job starts and when it ends;
+#   - least recently used first while all stores together are over
+#     stores_budget_mb (default 100 GB), never one used in the last 2 days.
+# Not size-measured unless a candidate exists (a du of a store of tens of GB
+# can take minutes under IO pressure).
+stores=${HEAVY_STORES_ROOT:-$state/stores}
+stores_idle_days=${HEAVY_STORES_IDLE_DAYS:-14}
+stores_budget_mb=${HEAVY_STORES_BUDGET_MB:-102400}
+store_last_used() { # DIR -> epoch of its mark, else of the directory
+  local m
+  m=$(stat -c %Y "$1/.heavy-last-used" 2> /dev/null) || m=$(stat -c %Y "$1" 2> /dev/null) || m=0
+  echo "$m"
+}
+remove_store() { # DIR REASON: only under the exclusive lock
+  local d=$1 name
+  name=$(basename "$d")
+  mkdir -p /work/.slots
+  exec 4> "/work/.slots/store-$name"
+  if flock -x -n 4; then
+    echo "removing store $d ($2)"
+    rm -rf "$d"
+    exec 4>&-
+    return 0
+  fi
+  echo "store $d would go ($2), but a job that uses it is queued or running"
+  exec 4>&-
+  return 1
+}
+prune_stores() {
+  local now d name used total_mb
+  [ -d "$stores" ] || return 0
+  now=$(date +%s)
+  local -a cand=()
+  for d in "$stores"/*/; do
+    d=${d%/}
+    [ -d "$d" ] || continue
+    used=$(store_last_used "$d")
+    if [ $((now - used)) -gt $((stores_idle_days * 86400)) ]; then
+      remove_store "$d" "unused for $stores_idle_days days; last used $(date -d "@$used" +%F)" || true
+    elif [ $((now - used)) -gt 172800 ]; then
+      cand+=("$used $d")
+    fi
+  done
+  [ ${#cand[@]} -gt 0 ] || return 0
+  total_mb=$(ionice -c3 du -sm "$stores" 2> /dev/null | cut -f1)
+  [ "${total_mb:-0}" -gt "$stores_budget_mb" ] || return 0
+  while read -r used d; do
+    [ "${total_mb:-0}" -gt "$stores_budget_mb" ] || break
+    name=$(du -sm "$d" 2> /dev/null | cut -f1)
+    if remove_store "$d" "stores use $((total_mb / 1024))G > $((stores_budget_mb / 1024))G; least recently used, last used $(date -d "@$used" +%F)"; then
+      total_mb=$((total_mb - ${name:-0}))
+    fi
+  done < <(printf '%s\n' "${cand[@]}" | sort -n)
+}
+prune_stores
+
 # Jobs nobody attends any more (heavy-detach.sh): cancelled after 2 hours,
 # results nobody collected forgotten after 6.
 bash /scripts/heavy-detach.sh reap

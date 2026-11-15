@@ -126,7 +126,8 @@ done
 #   bazel --bazelrc=$HEAVY_BAZEL_RC build ...
 # or a project's .bazelrc has `try-import /nix/var/worker/bazel/heavy.bazelrc`.
 bazel=$state/bazel
-mkdir -p "$bazel/root" "$bazel/disk-cache"
+# Build stores (heavy-run.sh HEAVY_STORE, housekeeping.sh prune_stores).
+mkdir -p "$bazel/root" "$bazel/disk-cache" "$state/stores"
 printf '%s\n' "startup --output_user_root=$bazel/root" "build --disk_cache=$bazel/disk-cache" \
   > "$bazel/heavy.bazelrc.new" && mv -f "$bazel/heavy.bazelrc.new" "$bazel/heavy.bazelrc"
 

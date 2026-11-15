@@ -531,3 +531,28 @@ What existed before: only the PC's `agent-job` reuse, a client unit with the
 same name (a hash of the directory and the arguments) that is still alive is
 followed instead of started again. It did nothing for a client that was killed,
 because its job was killed with it.
+
+## Build stores: a persistent area for state that must outlive a workspace (2026-11-15)
+
+Why: on 2026-11-15 04:24:34 UTC wasm-box's package-world store
+(`/work/world-r3h-dd182dd6/target/supply-world-store`, hours of work) was gone.
+Not `/tmp`, not the restart itself: it was in a workspace, and housekeeping
+removed that workspace (`workspaces use 43G > 15G; least recently used`,
+`/nix/var/worker/housekeeping.log`, 90 s before the next job was submitted).
+The restart only triggered it: the VM restart kills every job, so at the first
+housekeeping run after it **no workspace has a job and every one over the 15 GB
+budget is removable, least recently used first** (9 workspaces went that
+minute). Anything that must survive belongs in a store, not in `/work`.
+
+| What | Value |
+|---|---|
+| Where | `/nix/var/worker/stores/NAME` on the volume, outside `/work` and `$HOME`: not touched by the workspace budget or the cache pruning, and kept across a pod or VM restart |
+| How a job gets one | `heavy -e HEAVY_STORE=NAME -- CMD`. The job sees `HEAVY_STORE_DIR=/nix/var/worker/stores/NAME` (created, root owned) and `HEAVY_STORES_ROOT` (in every job) |
+| Names | letters, digits, `.` `_` `-`, up to 64, starting with a letter or digit; anything else exits 94 without starting |
+| Never removed while in use | a job with `HEAVY_STORE=NAME` holds a shared `flock` on `/work/.slots/store-NAME` from the moment `heavy-run.sh` starts (queue wait included) to its end; housekeeping takes the exclusive one without waiting and skips the store when it cannot |
+| Eviction | only when no job uses it, and then only (1) a store unused for 14 days (`HEAVY_STORES_IDLE_DAYS`; last use is `$store/.heavy-last-used`, touched when a job starts and ends), or (2) least recently used first while all stores together exceed 100 GB (`HEAVY_STORES_BUDGET_MB`), never one used in the last 2 days. Nothing else removes a store |
+
+Notes: a job that does not set `HEAVY_STORE` is not protected, even if it writes
+under the stores root. A store is a plain directory owned by root: an
+unprivileged step (`HEAVY_USER=nobody`) can read it, not write it. A store is not
+a Nix store; point whatever tool you run (`WBOX_PKGS=$HEAVY_STORE_DIR/pkgs`) at it.
