@@ -602,3 +602,24 @@ when the big slot is free and nothing non-resumable waits for it, and `ready` wh
 both slots are held and nothing runs. Do not restart while it says anything else;
 `--long` jobs (hours) are the usual reason. After the restart, `unpause` (or let the
 pause lapse) and confirm with `heavy-detach.sh list` that the queued jobs came back.
+
+### Without a standing pause (2026-11-15, the preferred way)
+
+A pause holds new big jobs for as long as it takes a long job to end, which can be
+all day; wasm-box asked for none. So no pause is held while waiting. A change that
+restarts the pod is applied at one of two moments, and costs nothing extra:
+
+1. **Just before a restart that happens anyway.** The VM's nightly maintenance
+   reboot (Proxmox `homelab-maintenance-reboot.timer`, 04:15 UTC; `qm reboot 200` at
+   about 04:20, only when the VM has `/run/reboot-required`) kills every job
+   regardless. Merging the Deployment change about two minutes before it (Flux
+   applies in about a minute) makes that one reboot apply it. Whether it is due:
+   `ssh proxmox homelab-maintenance-reboot --dry-run` after the VM's upgrade run
+   (about 06:00 to 07:00 UTC), or at 04:17 UTC the unit is still running and its
+   journal has no `nothing to reboot`.
+2. **A true idle moment**, with no pause: `heavy-maint.sh idle` says `idle` when no
+   job is in a slot, no service or emulator runs and no queued job would be lost
+   (queued jobs of resumable clients are kept). Then `pause all 15` as a guard for
+   the minute Flux needs, check `idle` again, merge, verify, `unpause`.
+
+If neither comes, the change waits; nothing is killed to make room for it.

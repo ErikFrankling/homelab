@@ -10,6 +10,8 @@
 #                                     minutes (max 720): SCOPE big = the big slot only,
 #                                     all = both slots. It lapses by itself.
 #   heavy-maint.sh unpause            lift it
+#   heavy-maint.sh idle               no pause needed: "idle" (exit 0) when nothing runs and
+#                                     nothing queued would be lost, else "busy" (exit 1)
 #   heavy-maint.sh check              one word and a reason, for the one who restarts:
 #       wait      something still runs or something queued would be lost
 #       tighten   the big slot is free and nothing non-resumable waits for it:
@@ -90,6 +92,18 @@ case "${1:-status}" in
     rm -f "$pause"
     echo "pause lifted"
     ;;
+  idle)
+    # No pause involved: is this a moment at which a restart loses nothing?
+    # Exit 0 and "idle" if nothing runs and nothing queued would be lost (queued
+    # resumable jobs are kept), else exit 1 and "busy" with the first reason.
+    mapfile -t why < <(reasons)
+    if [ ${#why[@]} -eq 0 ]; then
+      echo "idle: nothing runs and nothing queued would be lost; $(tickets | grep -c ' yes$') queued job(s) would be kept"
+    else
+      echo "busy: ${why[0]}$([ ${#why[@]} -gt 1 ] && echo " (+$((${#why[@]} - 1)) more)")"
+      exit 1
+    fi
+    ;;
   check)
     info=$(paused_info)
     scope=none
@@ -115,7 +129,7 @@ case "${1:-status}" in
     fi
     ;;
   *)
-    echo "usage: heavy-maint.sh status|pause SCOPE MIN [REASON]|unpause|check" >&2
+    echo "usage: heavy-maint.sh status|pause SCOPE MIN [REASON]|unpause|check|idle" >&2
     exit 2
     ;;
 esac
