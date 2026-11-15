@@ -556,3 +556,49 @@ Notes: a job that does not set `HEAVY_STORE` is not protected, even if it writes
 under the stores root. A store is a plain directory owned by root: an
 unprivileged step (`HEAVY_USER=nobody`) can read it, not write it. A store is not
 a Nix store; point whatever tool you run (`WBOX_PKGS=$HEAVY_STORE_DIR/pkgs`) at it.
+
+## Restarting the pod without losing work (2026-11-15)
+
+Any change to the Deployment (`strategy: Recreate`: the `/tmp` volume, the 24 GiB
+limit in the manifest, an image bump) and a VM restart kill every process in the
+pod. Until 2026-11-15 that also lost the queue and the places in it. Now:
+
+- **Queued jobs are kept.** A job submitted by a client from 2026-11-15 on
+  (`heavy-detach.sh`) records its arguments, options, `-e` values (a 0600 copy, in
+  `/work/.jobs/KEY/`, deleted when the job gets its slot) and its ticket time.
+  At the next pod start, `cgroups.sh` runs `heavy-detach.sh resume` (only in the
+  first 3 minutes of the container, and before housekeeping): each such job that had
+  not got its slot is queued again in order, **with its original ticket time**, so it
+  keeps its place, and the lane's client re-attaches by key as after a lost connection.
+  `heavy-detach.sh list` says `queued (kept if the pod restarts)`. Log:
+  `/nix/var/worker/resume.log`.
+- **Running jobs are not.** A job that had its slot (marker `running`) is killed by a
+  restart and not re-queued: its client gets `gone` (253). So a restart is done only
+  when no job runs. Jobs queued by an older client, or submitted before this existed,
+  are also lost: `list` says so, and `check` waits for them to drain.
+- **A pause, to reach the moment nothing runs.** There is never an idle moment on its
+  own (a queue is always waiting). `heavy-maint.sh pause big|all MINUTES [REASON]`
+  writes `/work/.pause`: new starts of **resumable** jobs are held (scope `big`: the
+  big slot only, so small jobs keep flowing; `all`: both slots), everything else and
+  everything already running goes on, held tickets are not counted as "ahead" of the
+  rest, and it lapses at its deadline by itself (at most 12 h), so it can never wedge
+  the queue. Waiting jobs say so in their log.
+
+```bash
+W="ssh -p 2223 root@192.168.50.100"        # the worker (heavy's own key; known-hosts as heavy)
+$W bash /scripts/heavy-maint.sh status     # what runs, what a restart would keep and lose
+$W bash /scripts/heavy-maint.sh pause big 720 "pod restart: /tmp volume + 24Gi"
+$W bash /scripts/heavy-maint.sh check      # wait | tighten | ready
+$W bash /scripts/heavy-maint.sh pause all 45 "pod restart"     # when check says tighten
+$W bash /scripts/heavy-maint.sh check      # ready: nothing runs, nothing queued would be lost
+# now merge the Deployment change to main (Flux applies it in about a minute),
+# wait for the new pod, check the evidence, then:
+$W bash /scripts/heavy-maint.sh unpause
+```
+
+`check` waits while a job is in a slot, a `heavy bg` service or the emulator runs, a
+pinned-cores job holds the cores, or a queued job would be lost. It says `tighten`
+when the big slot is free and nothing non-resumable waits for it, and `ready` when
+both slots are held and nothing runs. Do not restart while it says anything else;
+`--long` jobs (hours) are the usual reason. After the restart, `unpause` (or let the
+pause lapse) and confirm with `heavy-detach.sh list` that the queued jobs came back.

@@ -43,7 +43,14 @@ keep_hours=6
 
 now() { date +%s; }
 mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
-alive() { [ -f "$1/pid" ] && kill -0 "$(cat "$1/pid")" 2> /dev/null; }
+# The pid must still be this job's wrapper: after a pod restart pids start from
+# 1 again and an old number can belong to anything.
+alive() {
+  local p
+  [ -f "$1/pid" ] || return 1
+  p=$(cat "$1/pid")
+  kill -0 "$p" 2> /dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2> /dev/null | grep -q "heavy-detached $1 "
+}
 cancel_job() { [ -f "$1/keeper" ] && kill "$(cat "$1/keeper")" 2> /dev/null; return 0; }
 
 # Orphans cancelled, finished jobs forgotten, dead ones (a worker restart
@@ -65,6 +72,9 @@ reap() {
         touch "$d/orphaned"
         cancel_job "$d"
       fi
+    elif [ -f "$d/argv" ] && [ ! -f "$d/running" ] && [ ! -f "$d/cancelled" ] && [ ! -f "$d/orphaned" ] \
+      && [ $((t - $(mtime "$d/ticket"))) -lt 7200 ]; then
+      : # queued when its pod died: resume re-queues it, give it two hours
     else
       [ $((t - $(mtime "$d"))) -gt 600 ] && rm -rf "$d"
     fi
@@ -135,19 +145,34 @@ start_job() { # KEY WS REL DEVELOP CMD...
   shift 4
   d=$jobs/$key
   mkdir -p "$d"
-  rm -f "$d/status" "$d/consumed" "$d/orphaned" "$d/cancelled" "$d/stdin"
+  chmod 700 "$d"
+  rm -f "$d/status" "$d/consumed" "$d/orphaned" "$d/cancelled" "$d/stdin" "$d/running"
   : > "$d/out"
   : > "$d/err"
   touch "$d/heartbeat"
   now > "$d/started"
   printf '%s\t%s\n' "$(basename "$ws")" "$(printf '%q ' "$@")" > "$d/cmd"
+  # What a pod restart needs to queue this job again with its place and its -e
+  # values (resume): the arguments, the three variables the client sends, a copy
+  # of the -e file (heavy-run.sh deletes the original at once, and this copy as
+  # soon as the job has its slot: a started job is killed by a restart, not
+  # re-queued), and the ticket time, so the place in the queue is the original.
+  rm -f "$d/argv" "$d/env" "$d/envfile"
+  [ -f "$d/ticket" ] || date +%s%N > "$d/ticket"
+  local resumable=0
+  if (
+    umask 077
+    printf '%s\0' "$ws" "$rel" "$develop" "$@" > "$d/argv.tmp" && mv "$d/argv.tmp" "$d/argv" \
+      && { for v in HEAVY_CLASS HEAVY_PRIORITY HEAVY_CPUS_WANT; do printf '%s=%s\0' "$v" "${!v:-}"; done; } > "$d/env" \
+      && { [ -z "${HEAVY_ENVFILE:-}" ] || [ ! -f "$HEAVY_ENVFILE" ] || cp "$HEAVY_ENVFILE" "$d/envfile"; }
+  ); then resumable=1; fi
   mkfifo "$d/stdin"
   # The channel heavy-run.sh watches: open while this sleep lives.
   setsid sleep 2147483647 > "$d/stdin" 3<&- 6>&- 7>&- 8>&- 9>&- &
   echo $! > "$d/keeper"
   # HEAVY_JOB_KEY: heavy-run.sh shows its first 12 characters in `heavy status`,
   # which is what `heavy cancel` takes.
-  HEAVY_JOB_KEY=$key setsid bash -c '
+  HEAVY_JOB_KEY=$key HEAVY_JOB_DIR=$d HEAVY_RESUMABLE=$resumable HEAVY_TICKET_NS=$(cat "$d/ticket") setsid bash -c '
     d=$1; shift
     bash /scripts/heavy-run.sh "$@" < "$d/stdin" > "$d/out" 2> "$d/err"
     rc=$?
@@ -188,7 +213,40 @@ run() { # KEY WS REL DEVELOP CMD...
   attach "$key"
 }
 
+# Once per container start (cgroups.sh): the jobs a pod restart killed while they
+# were still queued are queued again, in their original order and with their
+# original ticket time, their -e values and options. A job that already had its
+# slot (running marker) was killed by the restart and is not re-queued: it
+# stays dead, a client that asks gets "gone" (253), as before. Never cancelled,
+# orphaned or collected jobs.
+resume() {
+  local f d key n=0 skipped=0 ef
+  local -a argv
+  mkdir -p "$jobs"
+  for f in "$jobs"/*/ticket; do
+    [ -f "$f" ] && echo "$(cat "$f") $(dirname "$f")"
+  done | sort -n | while read -r _ d; do
+    key=$(basename "$d")
+    if [ ! -f "$d/argv" ] || [ -f "$d/status" ] || [ -f "$d/running" ] || [ -f "$d/cancelled" ] \
+      || [ -f "$d/orphaned" ] || [ -f "$d/consumed" ] || alive "$d"; then
+      continue
+    fi
+    mapfile -d '' -t argv < "$d/argv"
+    (
+      unset HEAVY_ENVFILE HEAVY_CLASS HEAVY_PRIORITY HEAVY_CPUS_WANT
+      while IFS= read -r -d '' kv; do export "$kv"; done < "$d/env"
+      if [ -f "$d/envfile" ]; then
+        ef=/work/.envs/$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        mkdir -p /work/.envs
+        (umask 077; cp "$d/envfile" "$ef") && export HEAVY_ENVFILE=$ef
+      fi
+      start_job "$key" "${argv[@]}"
+    ) && echo "$(date -Is) resumed $key ($(cut -f1 "$d/cmd" 2> /dev/null))"
+  done
+}
+
 case "${1:-}" in
+  resume) resume ;;
   run)
     shift
     [ $# -ge 5 ] || { echo "usage: heavy-detach.sh run KEY WS REL DEVELOP CMD..." >&2; exit 2; }
@@ -252,7 +310,11 @@ case "${1:-}" in
       d=${d%/}
       [ -d "$d" ] || continue
       if [ -f "$d/status" ]; then state="finished ($(cat "$d/status")), $([ -f "$d/consumed" ] && echo collected || echo uncollected)"
-      elif alive "$d"; then state="queued or running, client last seen $((t - $(mtime "$d/heartbeat"))) s ago"
+      elif alive "$d"; then
+        state="queued or running, client last seen $((t - $(mtime "$d/heartbeat"))) s ago"
+        if [ -f "$d/running" ]; then state="$state; running (lost if the pod restarts)"
+        elif [ -f "$d/argv" ]; then state="$state; queued (kept if the pod restarts)"
+        else state="$state; started before resume existed: lost if the pod restarts"; fi
       else state=dead; fi
       printf '%s\t%s\tsince %s\t%s\n' "$(basename "$d")" "$state" "$(date -d "@$(cat "$d/started" 2> /dev/null || echo 0)" +%T)" "$(cut -c1-120 "$d/cmd" 2> /dev/null | tr '\t' ' ')"
     done

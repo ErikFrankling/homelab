@@ -131,6 +131,18 @@ mkdir -p "$bazel/root" "$bazel/disk-cache" "$state/stores"
 printf '%s\n' "startup --output_user_root=$bazel/root" "build --disk_cache=$bazel/disk-cache" \
   > "$bazel/heavy.bazelrc.new" && mv -f "$bazel/heavy.bazelrc.new" "$bazel/heavy.bazelrc"
 
+# Once per container start, in its first minutes (the boot-time call from
+# entrypoint.sh, before sshd): jobs that the restart killed while they were
+# still queued are queued again, in order, with their original ticket time
+# (heavy-detach.sh resume). BEFORE housekeeping below: a queued job's workspace
+# must have its heavy-run.sh waiting again when housekeeping decides which
+# workspaces are idle (2026-11-15 04:24:34: it removed nine, after a restart).
+# Not in a pod that has been up longer: nothing is re-queued by a job start.
+if [ ! -e /run/heavy-resumed ] && [ "$(ps -o etimes= -p 1 2> /dev/null | tr -d ' ')" -lt 180 ] 2> /dev/null; then
+  : > /run/heavy-resumed
+  bash /scripts/heavy-detach.sh resume >> "$state/resume.log" 2>&1 < /dev/null 8>&- || true
+fi
+
 # Housekeeping (housekeeping.sh) at most hourly, in the background. It must
 # not inherit fd 8: on 2026-11-09 it held this lock for an hour (a slow du
 # under IO pressure) and every heavy job waited in `flock 8` behind it.

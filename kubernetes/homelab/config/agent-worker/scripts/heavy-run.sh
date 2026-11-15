@@ -250,14 +250,48 @@ if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   # tickets ahead of every ordinary one; wasm-box's builder and tests jobs
   # re-queue each other with --priority, so they took turns in the big slot
   # and an APK release waited 1 h 45 min and more.)
+  # HEAVY_TICKET_NS: the original ticket time of a job queued again after a pod
+  # restart (heavy-detach.sh resume), so it keeps its place.
   key=$(date +%s%N) mark=""
+  [[ ${HEAVY_TICKET_NS:-} =~ ^[0-9]{16,19}$ ]] && key=$HEAVY_TICKET_NS
   if [ "${HEAVY_PRIORITY:-0}" = 1 ]; then
     key=$((key - ${HEAVY_PRIORITY_HEADSTART:-30} * 60000000000)) mark=" (priority)"
   fi
   ticket="/work/.queue/$key-$class-$$"
   printf '%s\t%s\t%s\t%s\n' "$(date +%T)" "$class$mark" "$(basename "$ws")" "$display" > "$ticket"
   trap 'rm -rf "$run" "$ticket"' EXIT
+  # Maintenance pause (heavy-maint.sh, docs/agent-worker.md "Restarting the
+  # pod without losing work"): /work/.pause holds "DEADLINE_EPOCH SCOPE REASON".
+  # While it is in force, no job that is resumable (HEAVY_RESUMABLE=1, set by
+  # heavy-detach.sh: it is queued again after a pod restart) takes a slot:
+  # scope big holds the big slot only, scope all both. Anything else (a job
+  # from before this existed, an old-style client, a service) and everything
+  # already running is unaffected. It lapses by itself at its deadline.
+  paused() {
+    [ "${HEAVY_RESUMABLE:-0}" = 1 ] && [ -f /work/.pause ] || return 1
+    read -r pdl pscope _ < /work/.pause 2> /dev/null || return 1
+    [ "${pdl:-0}" -gt "$(date +%s)" ] 2> /dev/null || return 1
+    case "$pscope" in
+      all) return 0 ;;
+      big) [ "$1" = big ] ;;
+      *) return 1 ;;
+    esac
+  }
+  # A resumable ticket that a pause in force holds is not "ahead" of the jobs
+  # behind it: they would otherwise wait behind a ticket that cannot start (a
+  # job from before resume existed, which the restart would lose, could never
+  # drain).
+  held_ticket() {
+    local c=small p=${1##*-}
+    case "$1" in *-big-*) c=big ;; esac
+    [ -f /work/.pause ] || return 1
+    read -r hdl hscope _ < /work/.pause 2> /dev/null || return 1
+    [ "${hdl:-0}" -gt "$(date +%s)" ] 2> /dev/null || return 1
+    { [ "$hscope" = all ] || { [ "$hscope" = big ] && [ "$c" = big ]; }; } || return 1
+    tr '\0' '\n' < "/proc/$p/environ" 2> /dev/null | grep -qx 'HEAVY_RESUMABLE=1'
+  }
   take() {
+    ! paused "$1" || return 1
     exec 9> "/work/.slots/$1"
     if flock -n 9; then
       slot=$1
@@ -279,7 +313,7 @@ if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
     for t in /work/.queue/*; do
       [ -e "$t" ] || continue
       case "$t" in *-big-*) bigs=$((bigs + 1)) ;; esac
-      case "$t" in *"-$class-"*) [ "$t" \< "$ticket" ] && ahead=$((ahead + 1)) ;; esac
+      case "$t" in *"-$class-"*) if [ "$t" \< "$ticket" ] && ! held_ticket "$t"; then ahead=$((ahead + 1)); fi ;; esac
     done
     if [ "$ahead" = 0 ]; then
       if [ "$class" = big ]; then
@@ -306,6 +340,9 @@ if [ -z "$shared" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
     if [ "$class" = big ] && emulator_holds; then
       state="waiting for the big-job slot: the emulator holds it since $(cut -c1-5 /work/.slots/big.job 2> /dev/null) (freed by heavy emulator stop, or after 30 idle minutes); $ahead big job(s) ahead of you. Jobs that use adb or the emulator run alongside it instead."
     fi
+    if [ "$ahead" = 0 ] && { paused big || paused small; }; then
+      state="waiting: the worker is paused for maintenance (a pod restart that keeps queued jobs; until $(date -d "@$pdl" +%H:%M), at most). Your job keeps its place and is queued again if the worker restarts."
+    fi
     now=$(date +%s)
     if [ "$state" != "$last" ] && [ $((now - last_at)) -ge 60 ] || [ $((now - last_at)) -ge 300 ]; then
       echo "heavy: $state" >&2
@@ -320,6 +357,13 @@ fi
 if [ -n "${ticket:-}" ] && [ -z "${slot:-}" ]; then
   echo "heavy: internal error: left the queue without a job slot; the job was not started" >&2
   exit 98
+fi
+# The job has its slot: from here a pod restart kills it, it is not re-queued
+# (heavy-detach.sh resume only re-queues jobs without this marker). The copy of
+# its -e values that resume would have needed is deleted.
+if [ -n "${HEAVY_JOB_DIR:-}" ] && [ -d "$HEAVY_JOB_DIR" ]; then
+  touch "$HEAVY_JOB_DIR/running"
+  rm -f "$HEAVY_JOB_DIR/envfile"
 fi
 
 # Unprivileged steps. $run is the job's private directory under /tmp (removed
