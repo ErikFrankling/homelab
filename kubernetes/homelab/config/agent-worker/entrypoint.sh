@@ -5,6 +5,11 @@
 set -euo pipefail
 
 state=/nix/var/worker
+# /tmp is a subPath of the volume (apps/agent-worker.yaml), root-made 0755 and
+# holding the dead jobs' temp files of the last run: world-writable and sticky
+# again, and empty, as the container's own layer was at every start.
+chmod 1777 /tmp
+find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2> /dev/null || true
 export PATH="$state/bin:$PATH"
 export NIX_SSL_CERT_FILE="$state/ca-bundle.crt"
 
