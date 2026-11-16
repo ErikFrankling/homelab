@@ -34,12 +34,19 @@
 # A job nobody has attended for 120 minutes (HEAVY_ORPHAN_MIN; the heartbeat file of an
 # attach is touched twice a second) is cancelled: the queue must not fill with
 # the jobs of agents that are gone. A result nobody collected is kept for 6
-# hours, a collected one for 10 minutes. housekeeping.sh also calls `reap`.
+# hours historically; finished/partial traces are now retained indefinitely.
+# Reuse of a key archives its prior record. housekeeping.sh also calls `reap`.
 set -u
 jobs=/work/.jobs
 orphan_secs=$((${HEAVY_ORPHAN_MIN:-120} * 60))
 [[ ${HEAVY_ORPHAN_SECS:-} =~ ^[0-9]+$ ]] && orphan_secs=$HEAVY_ORPHAN_SECS
-keep_hours=6
+# Finished job records are agent traces. Never expire them by age.
+archive_job() {
+  local archive=${HEAVY_JOB_HISTORY:-/nix/var/worker/job-history}
+  mkdir -p "$archive" || return 1
+  [ "$(stat -c %d "$d")" = "$(stat -c %d "$archive")" ] || return 1
+  mv -T -- "$d" "$archive/$(basename "$d").$(cat /proc/sys/kernel/random/uuid)"
+}
 
 now() { date +%s; }
 mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
@@ -53,8 +60,7 @@ alive() {
 }
 cancel_job() { [ -f "$1/keeper" ] && kill "$(cat "$1/keeper")" 2> /dev/null; return 0; }
 
-# Orphans cancelled, finished jobs forgotten, dead ones (a worker restart
-# killed them) removed.
+# Orphans cancelled; finished and dead attempts remain as evidence.
 reap() {
   local d t
   t=$(now)
@@ -62,11 +68,7 @@ reap() {
     d=${d%/}
     [ -d "$d" ] || continue
     if [ -f "$d/status" ]; then
-      if [ -f "$d/consumed" ]; then
-        [ $((t - $(mtime "$d/consumed"))) -gt 600 ] && rm -rf "$d"
-      else
-        [ $((t - $(mtime "$d/status"))) -gt $((keep_hours * 3600)) ] && rm -rf "$d"
-      fi
+      : # retained completion evidence, collected or not
     elif alive "$d"; then
       if [ $((t - $(mtime "$d/heartbeat"))) -gt "$orphan_secs" ] && [ ! -f "$d/orphaned" ]; then
         touch "$d/orphaned"
@@ -76,7 +78,7 @@ reap() {
       && [ $((t - $(mtime "$d/ticket"))) -lt 7200 ]; then
       : # queued when its pod died: resume re-queues it, give it two hours
     else
-      [ $((t - $(mtime "$d"))) -gt 600 ] && rm -rf "$d"
+      : # dead/partial attempts are evidence too
     fi
   done
   return 0
@@ -192,9 +194,9 @@ run() { # KEY WS REL DEVELOP CMD...
     # Collected, cancelled or orphaned results are not replayed; a job that
     # died with the worker is not waited for.
     if [ -f "$d/status" ] && { [ -f "$d/consumed" ] || [ -f "$d/orphaned" ] || [ -f "$d/cancelled" ]; }; then
-      rm -rf "$d"
+      archive_job || return 1
     elif [ ! -f "$d/status" ] && ! alive "$d"; then
-      rm -rf "$d"
+      archive_job || return 1
     fi
   fi
   if [ -d "$d" ]; then

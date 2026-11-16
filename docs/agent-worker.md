@@ -623,3 +623,76 @@ restarts the pod is applied at one of two moments, and costs nothing extra:
    the minute Flux needs, check `idle` again, merge, verify, `unpause`.
 
 If neither comes, the change waits; nothing is killed to make room for it.
+
+## Borrowed targets and retained ownership (2026-11-16)
+
+A target borrowed from a different workspace is **not** protected by that
+workspace's command line or by the caller's pipeline lock. The old 15 GiB
+workspace janitor removed `/work/w-wmut2-54d0c36d` on 2026-11-16 at 02:50 UTC
+between two CONNECT validations. Its caller used a different workspace. A
+missing target is lost cache, not permission to silently create a cold target.
+
+The worker's `bash /scripts/heavy-lease.sh` is the single ownership authority
+for workspace and persistent-store retirement:
+
+1. Before submitting a borrower, `retain EXISTING_TARGET OWNER` returns a
+   unique token. `OWNER` is a stable lane/thread identifier, not a PID. The
+   target must already exist. Paths are canonicalized; the whole containing
+   workspace/store is protected. Records bind its device/inode as well as path.
+2. Submit with `heavy -e CARGO_TARGET_DIR=ABSOLUTE_TARGET
+   -e HEAVY_TARGET_LEASE=TOKEN -- ...`. The runner holds shared `flock`s for
+   its own workspace and the borrowed resource before starting housekeeping,
+   through queueing and completion. The command must use the declared target;
+   setting a hidden different target inside a script cannot be inferred by
+   admission. New local targets inside the caller's own workspace are allowed.
+3. `inspect EXISTING_TARGET` reports retained owners. Retention survives job
+   exit, client loss, validation gaps and pod restarts. There is **no automatic
+   TTL or PID-based expiry**. A stale/malformed/pending record blocks retirement
+   until an operator reconciles it with its owner. Multiple owners may retain
+   the same resource independently.
+4. Only after all validation and recovery are finished, `release TARGET TOKEN`
+   marks that exact record released. It fails while a job holds the resource;
+   retry after that job exits. Release never deletes the target, and a late
+   release cannot release a different/new token. A replaced inode fails closed.
+
+Metadata is in `/nix/var/worker/leases/<SHA256 canonical resource>/`. Lock
+files never move or get unlinked. Retain/release and retirement take the same
+exclusive lock nonblocking; active jobs take shared locks. A cleaner that wins
+first makes the subsequent acquisition fail rather than rebuild. Interrupted
+lease publication leaves a `.pending` record that protects the resource.
+
+Workspace age/budget cleanup and store cleanup use this authority. Unleased,
+inactive candidates are **atomically renamed on the same filesystem** into
+`/nix/var/worker/retired-workspaces/NAME.UUID`, with an append-only
+`leases/retirements.log`. All bytes, traces, symlinks and unfinished output stay
+intact. This removes the live name but does **not** reclaim disk; sustained disk
+pressure needs an owner-reviewed storage plan, never automatic deletion of
+unfinished work. Completed/partial `.jobs` receipts are retained; reusing a job
+key first renames its old receipt into `/nix/var/worker/job-history/`. Neither
+archive participates in automatic pruning.
+
+### Startup and rollout
+
+The independent hourly `entrypoint.sh` janitor was removed. Only the
+hot-updated housekeeping script performs workspace retirement. Admission and
+cleanup fail closed until `/run/heavy-workspace-leases-ready` exists; corrected
+startup creates it before accepting SSH jobs. For the existing pod, migration
+must verify and terminate **only** the old janitor subshell and its sleep child,
+confirm their exit, and protect pre-protocol workspaces/stores with explicit
+migration leases before publishing readiness. Do not kill PID 1, sshd or jobs.
+Migration owners reconcile/release those leases later; they never age out.
+
+The startup ConfigMap keeps the already-rendered name
+`agent-worker-config-6cbh4b5bkm` without further hash suffixes. This makes the
+startup fix durable without changing the worker Deployment's pod template or
+restarting active jobs. Future edits to startup/seed/SSH config require an
+explicit maintenance restart to apply to running processes; runtime scripts
+still update through `agent-worker-scripts`. Do not restore hashed generation
+without a planned worker rollout.
+
+Tests: `python3 kubernetes/homelab/config/agent-worker/test-leases.py` runs real
+flock contention and lossless retirement against tiny local fixtures. It
+covers cross-workspace use, validation gaps, two owners, cleanup-first races,
+active release refusal, killed holders, stale tokens, replaced inodes, partial
+publication, missing targets, and both age and budget cleanup. It submits no
+worker workload.

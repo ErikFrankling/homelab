@@ -15,41 +15,10 @@ state=/nix/var/worker
 free_gb() { df --output=avail -B1G /nix | tail -1 | tr -d ' '; }
 echo "== $(date -Is) housekeeping, node free $(free_gb)G"
 
-busy() { pgrep -f "heavy-run.sh ${1%/} " > /dev/null; }
-for ws in /work/*/; do
-  [ -d "$ws" ] || continue
-  if [ -n "$(find "$ws" -maxdepth 0 -mmin +4320)" ] && ! busy "$ws"; then
-    echo "removing workspace $ws (untouched for 3 days)"
-    rm -rf "$ws"
-  fi
-done
-
-# All workspaces together: at most 15 GB, least recently used go first.
-# Sizes are measured once, in the idle IO class, and subtracted as workspaces
-# go: a du of all of /work per removal took an hour under IO pressure on
-# 2026-11-09. `heavy status` shows what is left (/work/.stats/workspaces)
-# instead of running its own du.
-work_budget=15
-declare -A ws_kb=()
-used_kb=0
-while IFS=$'\t' read -r kb ws; do
-  ws_kb[$ws]=$kb
-  used_kb=$((used_kb + kb))
-done < <(ionice -c3 du -sk /work/*/ 2> /dev/null)
-for ws in $(ls -1dtr /work/*/ 2> /dev/null); do
-  [ $((used_kb / 1048576)) -gt "$work_budget" ] || break
-  busy "$ws" && continue
-  echo "removing workspace $ws (workspaces use $((used_kb / 1048576))G > ${work_budget}G; least recently used)"
-  rm -rf "$ws"
-  used_kb=$((used_kb - ${ws_kb[$ws]:-0}))
-  unset "ws_kb[$ws]"
-done
-mkdir -p /work/.stats
-{
-  echo "measured $(date '+%F %H:%M'), $((used_kb / 1048576))G in all"
-  for ws in "${!ws_kb[@]}"; do printf '%s\t%s\n' "${ws_kb[$ws]}" "$ws"; done \
-    | sort -rn | head -8 | awk -F'\t' '{ printf "%.1fG\t%s\n", $1 / 1048576, $2 }'
-} > /work/.stats/workspaces.new && mv /work/.stats/workspaces.new /work/.stats/workspaces
+source "$(dirname "${BASH_SOURCE[0]}")/heavy-lease.sh"
+# Fail closed until the old embedded janitor has been fenced.
+lease_init || exit 1
+lease_prune_workspaces
 
 # Caches go whole: each entry of the directories below is one tool's or one
 # project's cache (.cache/fleet-build, .cache/nix, .local/share/pnpm,
@@ -195,8 +164,10 @@ remove_store() { # DIR REASON: only under the exclusive lock
   mkdir -p /work/.slots
   exec 4> "/work/.slots/store-$name"
   if flock -x -n 4; then
-    echo "removing store $d ($2)"
-    rm -rf "$d"
+    if ! lease_retire "$d" "$2"; then
+      exec 4>&-
+      return 1
+    fi
     exec 4>&-
     return 0
   fi

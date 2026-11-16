@@ -27,9 +27,6 @@ umask 077
 ws=$1 sub=$2 develop=$3
 shift 3
 cd "$ws/$sub" || { echo "heavy: no directory $ws/$sub on the worker" >&2; exit 97; }
-touch "$ws"
-bash /scripts/cgroups.sh 2> /dev/null || true
-cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
 run=$(mktemp -d /tmp/heavy-run.XXXXXX)
 trap 'rm -rf "$run"' EXIT
 
@@ -40,6 +37,14 @@ if [ -n "${HEAVY_ENVFILE:-}" ] && [ -f "$HEAVY_ENVFILE" ]; then
   rm -f "$HEAVY_ENVFILE"
 fi
 unset HEAVY_ENVFILE
+
+# Acquire before cgroups.sh can start housekeeping. An explicit retained
+# lease is required for a target borrowed from another workspace/store.
+source "$(dirname "${BASH_SOURCE[0]}")/heavy-lease.sh"
+lease_admit "$ws" || exit 95
+touch "$ws"
+bash /scripts/cgroups.sh 2> /dev/null || true
+cgroot=$(cat /nix/var/worker/cgroup 2> /dev/null || true)
 
 # The shared emulator (heavy-emulator.sh): its gRPC port, emulator-python
 # (python with grpc, appended so a devShell's own python still wins), and an
@@ -213,6 +218,7 @@ if [ -n "${HEAVY_STORE:-}" ]; then
   fi
   store=$HEAVY_STORES_ROOT/$HEAVY_STORE
   mkdir -p "$store" /work/.slots
+  lease_hold "$store" || exit 95
   exec 5> "/work/.slots/store-$HEAVY_STORE"
   # A removal holds the exclusive lock for as long as it takes to delete the
   # store; do not wait more than 30 minutes for it.

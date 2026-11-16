@@ -138,7 +138,12 @@ configMapGenerator:
     files:
       - config/ntfy/server.yml
   # The agents' heavy-work pod; same authorized key as the builder.
-  - name: agent-worker-config
+  # Freeze the currently deployed name: editing the startup cleanup contract
+  # must not roll a pod with active jobs. Future startup changes need a
+  # deliberate maintenance restart; runtime scripts still hot-update.
+  - name: agent-worker-config-6cbh4b5bkm
+    options:
+      disableNameSuffixHash: true
     files:
       - config/agent-worker/seed.sh
       - config/agent-worker/entrypoint.sh
@@ -161,6 +166,7 @@ configMapGenerator:
       - config/agent-worker/scripts/cgroups.sh
       - config/agent-worker/scripts/cores.sh
       - config/agent-worker/scripts/housekeeping.sh
+      - config/agent-worker/scripts/heavy-lease.sh
       - config/agent-worker/scripts/heavy-userns.sh
       - config/agent-worker/scripts/heavy-detach.sh
       - config/agent-worker/scripts/heavy-maint.sh

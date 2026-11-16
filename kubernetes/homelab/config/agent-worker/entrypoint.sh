@@ -45,6 +45,7 @@ if [ ! -f "$state/ssh/ssh_host_ed25519_key" ]; then
   ssh-keygen -q -t ed25519 -N "" -f "$state/ssh/ssh_host_ed25519_key"
 fi
 
+touch /run/heavy-workspace-leases-ready
 mkdir -p /work/.queue /work/.slots
 rm -f /work/.queue/* /work/.slots/*.job
 # A failure here must not keep the pod from starting; jobs then just run
@@ -54,27 +55,9 @@ bash /config/cgroups.sh || { echo "cgroups: setup failed; jobs run without their
 "$(readlink -f "$state/bin/sshd")" -D -e -f /config/sshd_config &
 sshd=$!
 
-# Janitor, hourly: workspaces untouched for a week go, and the oldest go first
-# while the node disk is under 35 GiB free. A workspace with a running job is
-# never touched.
-(
-  while sleep 3600; do
-    busy() { pgrep -f "heavy-run.sh ${1%/} " > /dev/null; }
-    for ws in $(find /work/ -mindepth 1 -maxdepth 1 -type d -mtime +7); do
-      busy "$ws" || rm -rf "$ws"
-    done
-    while [ "$(df --output=avail -B1G /nix | tail -1)" -lt 35 ]; do
-      oldest=""
-      for ws in $(ls -1dtr /work/*/ 2> /dev/null); do
-        busy "$ws" || { oldest=$ws; break; }
-      done
-      [ -n "$oldest" ] || break
-      echo "janitor: low disk, removing $oldest"
-      rm -rf "$oldest"
-    done
-  done
-) &
-
+# One cleanup authority: hot-updated housekeeping.sh uses persistent leases.
+# No second embedded janitor can bypass those locks. Ephemeral marker also
+# gates admission until an existing pod's old janitor is explicitly fenced.
 trap 'kill "$sshd" 2> /dev/null; pkill -f qemu-system 2> /dev/null' TERM INT
 wait "$sshd"
 exit 1

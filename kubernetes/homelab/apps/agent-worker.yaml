@@ -131,7 +131,7 @@ spec:
             claimName: agent-worker-store
         - name: config
           configMap:
-            name: agent-worker-config
+            name: agent-worker-config-6cbh4b5bkm
         - name: scripts
           configMap:
             name: agent-worker-scripts
