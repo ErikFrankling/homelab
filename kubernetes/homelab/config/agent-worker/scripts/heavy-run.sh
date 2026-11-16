@@ -372,6 +372,16 @@ if [ -n "${HEAVY_JOB_DIR:-}" ] && [ -d "$HEAVY_JOB_DIR" ]; then
   rm -f "$HEAVY_JOB_DIR/envfile"
 fi
 
+# Opt-in bounded-store admission; never start a runtime command on refusal.
+source "$(dirname "${BASH_SOURCE[0]}")/heavy-budget.sh"
+if ! budget_prepare; then
+  [ -z "$pin" ] || rm -f /work/.slots/cpus.job
+  [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
+  pkill -P "$watcher" 2>/dev/null || true
+  kill "$watcher" 2>/dev/null || true
+  exit 122
+fi
+
 # Unprivileged steps. $run is the job's private directory under /tmp (removed
 # with it): `unpriv` in it is nobody's TMPDIR and HOME, and $run is
 # traversable (not listable) so nobody reaches it. HEAVY_UNPRIV is the prefix.
@@ -433,6 +443,15 @@ if [ -n "$cgroot" ]; then
   else
     jobcg=""
   fi
+fi
+
+if ! budget_capture_cgroup; then
+  [ -z "$pin" ] || rm -f /work/.slots/cpus.job
+  [ -z "$jobcg" ] || rmdir "$jobcg" 2>/dev/null || true
+  [ -z "${slot:-}" ] || rm -f "/work/.slots/$slot.job"
+  pkill -P "$watcher" 2>/dev/null || true
+  kill "$watcher" 2>/dev/null || true
+  exit 122
 fi
 
 # Pinned: the empty job cgroup becomes the exclusive partition before the job
@@ -529,12 +548,25 @@ act=$run/act
 : > "$act"
 tee -a "$act" < "$run/out.fifo" 3<&- 5>&- 6>&- 7>&- 9>&- &
 tee -a "$act" < "$run/err.fifo" >&2 3<&- 5>&- 6>&- 7>&- 9>&- &
+if [ "$budget_enabled" = 1 ]; then
+  mkfifo "$run/budget-go" || exit 122
+  export HEAVY_BUDGET_GATE=$run/budget-go
+else
+  unset HEAVY_BUDGET_GATE
+fi
 HEAVY_CPUS_EXCLUSIVE=$([ -n "$pin" ] && echo 1 || echo 0) \
-  setsid bash -c '[ -z "$1" ] || echo $$ > "$1/cgroup.procs" 2> /dev/null
+  setsid bash -c '[ -z "$1" ] || { echo $$ > "$1/cgroup.procs" 2> /dev/null || { [ -z "${HEAVY_BUDGET_GATE:-}" ] || exit 122; }; }
+    if [ -n "${HEAVY_BUDGET_GATE:-}" ]; then
+      read -r -t 15 go < "$HEAVY_BUDGET_GATE" && [ "$go" = go ] || exit 122
+      unset HEAVY_BUDGET_GATE
+    fi
     HEAVY_CPUS=$(sed -n "s/^Cpus_allowed_list:[[:space:]]*//p" /proc/self/status); export HEAVY_CPUS HEAVY_CPUS_EXCLUSIVE
     n=$2; shift 2; exec nice -n "$n" "$@"' \
   heavy-job "$target" "$niceness" "$@" < /dev/null > "$run/out.fifo" 2> "$run/err.fifo" 3<&- 5>&- 6>&- 7>&- 9>&- &
 job=$!
+if [ "$budget_enabled" = 1 ]; then
+  budget_job_start=$(budget_process_start "$job") || budget_job_start=missing
+fi
 umask 077
 echo "$job" > "$run/job"
 [ -z "${HEAVY_JOB_PIDFILE:-}" ] || echo "$job" > "$HEAVY_JOB_PIDFILE"
@@ -566,10 +598,18 @@ build_re="building '/nix/store/[^']*-(gcc|llvm|clang)-[0-9][0-9.]*(-[a-z]+)?\\.d
       fi
       : > "$act"
     fi
+    if [ "$budget_enabled" = 1 ] && ! budget_check; then
+      budget_stop "$budget_reason"
+      exit 122
+    fi
     if [ "$wall_cap" -gt 0 ] && [ $(($(date +%s) - started)) -ge "$wall_cap" ]; then
       echo "heavy: wall cap $cap_text; rerun with --long if this is expected" >&2
       echo "heavy: stopping the job now: SIGTERM, then SIGKILL in $grace s" >&2
       touch "$run/capped"
+      if [ "$budget_enabled" = 1 ]; then
+        budget_stop wall-45m
+        exit 124
+      fi
       kill -TERM -- "-$job" 2> /dev/null
       sleep "$grace"
       kill -KILL -- "-$job" 2> /dev/null
@@ -578,12 +618,25 @@ build_re="building '/nix/store/[^']*-(gcc|llvm|clang)-[0-9][0-9.]*(-[a-z]+)?\\.d
   done
 ) 3<&- 5>&- 6>&- 7>&- 9>&- &
 monitor=$!
-wait "$job"
-rc=$?
+if [ "$budget_enabled" = 1 ]; then
+  # Gate opens only after custody + a live supervised monitor exist. FIFO
+  # opening is itself bounded, so an early child failure cannot hang admission.
+  if [ "$budget_job_start" = missing ] || ! kill -0 "$monitor" 2>/dev/null \
+    || ! timeout -k 1s 5s bash -c 'echo go > "$1"' gate "$run/budget-go"; then
+    budget_stop start-gate-failed || true
+  fi
+  budget_supervise
+
+else
+  wait "$job"
+  rc=$?
+fi
 # Not pkill -P: killing its sleep makes the monitor print "Terminated" into
 # the job's log. The sleep it leaves ends by itself within seconds.
 kill "$monitor" 2> /dev/null
+[ ! -e "$run/budget-failed" ] || rc=122
 [ ! -e "$run/capped" ] || rc=124
+if [ "$budget_enabled" = 1 ]; then budget_event terminal "status=$rc" || rc=122; fi
 if [ -z "$shared" ] && [ -z "${HEAVY_NO_STATS:-}" ] && { [ "$class" = big ] || [ "$class" = small ]; }; then
   echo $(($(date +%s) - started)) >> "/work/.stats/$class"
 fi

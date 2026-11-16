@@ -696,3 +696,55 @@ covers cross-workspace use, validation gaps, two owners, cleanup-first races,
 active release refusal, killed holders, stale tokens, replaced inodes, partial
 publication, missing targets, and both age and budget cleanup. It submits no
 worker workload.
+
+### Opt-in dedicated-store stop monitor
+
+`HEAVY_DISK_STOP=1` adds a disk branch to the existing job monitor. This is a
+sampled reassessment/stop threshold, **not a quota** or runtime authorization.
+Declare a dedicated `HEAVY_STORE`, `CARGO_TARGET_DIR` inside that store, its
+retained `HEAVY_TARGET_LEASE`, `HEAVY_LONG=0`, `HEAVY_WALL_CAP=2700`, and
+`HEAVY_WALL_GRACE=30` through the job's environment file. Detached receipts
+and a private writable job cgroup are required. Shared/emulator/service jobs
+are refused. A separate exclusive writer flock serializes bounded writers
+across workspaces; it does not authorize unrelated writers to use the store.
+The adapter must also ensure exclusive ownership against non-opt-in writers.
+
+Admission requires allocated store bytes <16 GiB and filesystem available
+bytes >=176 GiB. Every monitor cycle (5-second sleep plus measurement time),
+allocated store bytes >=16 GiB, available filesystem bytes <155 GiB, changed
+identity, failed measurement, or failed receipt write requests a stop.
+`du -sx -B1` has a 5-second timeout and 1-second kill grace at idle IO priority;
+`df -B1` has 2 seconds plus 1-second kill grace. One traversal is in flight
+at a time; ordinary successful measurements take less, but samples are not
+promised every five seconds. Uninterruptible kernel IO can exceed timeout
+bounds. These are operational bounds, not real-time scheduling guarantees.
+The wall deadline is 45 minutes from execution, excluding queue time; detection
+can lag by a monitor cycle, followed by 30 seconds TERM grace. Sampling and
+TERM grace allow overshoot; the 155 GiB floor is a stop condition, not a
+filesystem reservation or a mathematical lower bound on free bytes.
+
+Before opening the payload start FIFO, the runner captures its exact
+`jobs/job-<runner PID>` directory FD and device/inode, session leader PID and
+/proc starttime, and starts a supervised monitor. TERM requires that leader
+starttime; final KILL writes through the held cgroup directory FD, never a
+reused path or shared slice. Monitor exit (including zero exit while the
+payload is live or death during TERM grace) stops the owned job. Leader exit
+also kills that cgroup's remaining descendants. The parent runner is the
+supervisor, not the payload. Destruction of the runner and monitor together
+or hostile root processes escaping their cgroup are outside this contract.
+
+`/work/.jobs/<24-hex-key>/budget.tsv` appends preparation, admission samples,
+custody, stop/kill and terminal receipts outside the capped store. Disk or
+supervision failure returns122; wall deadline returns124. Failure is never
+reported as validation success. Retained leases survive every terminal status
+and validation gaps; only the owning adapter may explicitly release them after
+reconciliation. Existing detached status/attach and an owned finite completion
+relay are the primitives: the caller sends terminal status plus receipt paths
+to the requesting threads with `t3_thread_send`. This change installs no
+polling scheduler and does not implement a product/JS adapter or thaw gates.
+
+Validation: `test-budget.py` exercises real local process waits/signals with
+fake cgroup control files, threshold/floor errors, measurement/receipt failure,
+path replacement, and monitor death during stop. `test-leases.py` covers the
+persistent lease contract. These tests submit no worker workload and are not
+an end-to-end kernel cgroup integration claim.

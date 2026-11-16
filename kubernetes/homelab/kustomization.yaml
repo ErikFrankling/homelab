@@ -167,6 +167,7 @@ configMapGenerator:
       - config/agent-worker/scripts/cores.sh
       - config/agent-worker/scripts/housekeeping.sh
       - config/agent-worker/scripts/heavy-lease.sh
+      - config/agent-worker/scripts/heavy-budget.sh
       - config/agent-worker/scripts/heavy-userns.sh
       - config/agent-worker/scripts/heavy-detach.sh
       - config/agent-worker/scripts/heavy-maint.sh
