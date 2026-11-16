@@ -59,8 +59,8 @@ the same caches as nix-builder. Unfree is allowed (Android SDK).
 
 ## Keeping it away from everything else
 
-- **Memory:** limit 24 GiB on the running pod, 20 GiB in the manifest until the
-  next restart (see "Pod limit"); one release APK build peaks near 10 GB, a
+- **Memory:** limit 24 GiB, in the manifest too since 2026-11-16 (see "Pod
+  limit"); one release APK build peaks near 10 GB, a
   small job up to 6, the emulator takes 4; request 8 GiB. Under node pressure earlyoom
   (`ops/earlyoom/install.sh`) kills nix-builder's processes before this pod's.
 - **CPU:** no request and no limit, so it gets the smallest share under
@@ -171,7 +171,7 @@ kernel manages itself stay. The job runs at nice 0, and the `jobs/` pool's
   fixed physical cores, and a pinned vCPU can share a physical core with
   another vCPU's hyperthread.
 
-## Pod limit: resized in place, manifest pending (2026-11-14)
+## Pod limit: resized in place (2026-11-14), manifest deployed (2026-11-16)
 
 Any edit of the Deployment (`strategy: Recreate`) restarts the pod and kills
 every job, and the queue is never empty. So the limit went from 20 to 24 GiB on
@@ -182,13 +182,15 @@ sudo kubectl -n homelab patch pod POD --subresource resize --patch \
   '{"spec":{"containers":[{"name":"worker","resources":{"limits":{"memory":"24Gi"}}}]}}'
 ```
 
-`apps/agent-worker.yaml` still says `20Gi`. Change it to `24Gi` (and
-`WORKER_SMALL_MEMORY` to `6G`) in the same push as the next change that
-restarts the pod anyway (an image update, a new env var), or when `heavy
-status` shows nothing running. Until then a restart brings the pod back with
-20 GiB, and `cgroups.sh` sizes the jobs pool down to fit (12.8 GiB), so
-nothing breaks, only a big and a small job at full size can again kill each
-other.
+**Deployed 2026-11-16:** the manifest now says `24Gi`, `WORKER_JOBS_MEMORY`
+`16G`, `WORKER_SMALL_MEMORY` `6G`, and mounts `/tmp` from the volume
+(`subPath: var/worker/tmp`; `entrypoint.sh` makes it 1777 and empties it at
+every start). It was merged (`67a700a`) at a true idle moment (nothing running,
+nothing queued, a 15 minute `heavy-maint.sh pause all` around the push), and
+Flux replaced the pod: `agent-worker-758696d8db-5pjmb` became
+`agent-worker-5d8dcb6866-w9n7c` (container started 10:42:23 UTC). The container
+cgroup `memory.max` is 25769803776, `findmnt /tmp` shows the volume, not
+overlay.
 
 ## Changing it without killing jobs
 
