@@ -659,7 +659,7 @@ kill "$watcher" 2> /dev/null
 if [ -n "$delegated" ]; then
   # What the job and its test user left in the subtree: kill it, then remove
   # the cgroups below $jobcg deepest first, so the rmdir of $jobcg below works.
-  echo 1 > "$jobcg/cgroup.kill" 2> /dev/null
+  if [ "$budget_enabled" = 1 ]; then budget_kill; else echo 1 > "$jobcg/cgroup.kill" 2> /dev/null; fi
   for _ in 1 2 3 4 5; do
     find "$jobcg" -mindepth 1 -depth -type d -exec rmdir {} \; 2> /dev/null
     [ -z "$(find "$jobcg" -mindepth 1 -type d 2> /dev/null)" ] && break
@@ -668,7 +668,9 @@ if [ -n "$delegated" ]; then
 fi
 if [ -n "$pin" ]; then
   # Stragglers the job left (daemonized children) would keep the cores.
-  [ -z "$(cat "$jobcg/cgroup.procs" 2> /dev/null)" ] || echo 1 > "$jobcg/cgroup.kill" 2> /dev/null
+  if [ "$budget_enabled" = 1 ]; then budget_kill; else
+    [ -z "$(cat "$jobcg/cgroup.procs" 2> /dev/null)" ] || echo 1 > "$jobcg/cgroup.kill" 2> /dev/null
+  fi
   for _ in 1 2 3 4 5; do rmdir "$jobcg" 2> /dev/null && break; sleep 0.2; done
   bash /scripts/cores.sh release
   rm -f /work/.slots/cpus.job
