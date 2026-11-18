@@ -40,8 +40,15 @@ client needs the new public key before it will accept anything built here.
   holds back scheduling. Its priority comes from the `cpu-priority` DaemonSet
   instead, which sets the pod's `cpu.weight` to 10000 against everyone else's 1
   (docs/architecture.md, "CPU priority"): under contention the nightly build
-  gets most of the node, and when it is idle it costs nothing. `max-jobs` and
-  `cores` in `config/nix-builder/nix.conf` are sized to use the node fully.
+  gets most of the node, and when it is idle it costs nothing.
+- **Concurrency:** `max-jobs` and `cores` in `config/nix-builder/nix.conf`
+  count per client connection, and every `--store ssh-ng://` client gets its
+  own daemon, so they do not bound the builder. The bound is the number of
+  `nixbld` users `entrypoint.sh` creates (3): each sandboxed build holds one,
+  and further builds from any client wait for a free one. 2026-11-18: with
+  32, eight concurrent clients ran 18+ rustc, the container hit its memory
+  limit 66 times and the OOM killer took the nightly's evaluation and pc
+  build. Raise it only together with the memory limit.
 - **Disk:** the volume is the node's root disk and local-path enforces no
   quota. The nightly job (dotfiles auto-update) collects garbage before its
   builds, even when they then fail, when the disk has under 150 GiB free.
