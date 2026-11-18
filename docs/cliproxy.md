@@ -33,6 +33,13 @@ account, authorize, then paste the localhost callback URL the browser lands on
 back into the panel. Logins are stored on the `cliproxy-data` PVC
 (`/data/auths`). To bench an account, disable it in the panel.
 
+Priority: the highest tier is used first; the default is 0. `patriktang.1@gmail.com`
+(Claude) has priority -1 (2026-11-18), so it only gets traffic when every
+other Claude account is unavailable. A thread that has moved to it stays on it
+until that account runs out too, because an existing binding outranks priority.
+The value is stored in the auth file on the PVC. Set it in the panel's edit dialog or with
+`PATCH /v0/management/auth-files/fields` `{"name": "<file>", "priority": -1}`.
+
 
 ## Grok and OpenCode Go (added 2026-11-14)
 
