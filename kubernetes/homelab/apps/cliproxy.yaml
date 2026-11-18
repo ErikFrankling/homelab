@@ -42,6 +42,17 @@ spec:
         app.kubernetes.io/name: cliproxy
     spec:
       automountServiceAccountToken: false
+      # Every agent session calls this. system-cluster-critical (2e9) is the
+      # only class the kubelet still admits and never evicts under
+      # DiskPressure (kubelet IsCriticalPod), and it schedules first. The
+      # toleration lets a restart (strategy Recreate) land on a node that
+      # already carries the disk-pressure taint. 2026-11-18: DiskPressure
+      # evicted it and every agent session failed with 429/503.
+      priorityClassName: system-cluster-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

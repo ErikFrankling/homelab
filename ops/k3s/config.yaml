@@ -22,7 +22,20 @@ kubelet-arg:
 # (about 105 GiB). That recovery emptied the node on 2026-11-18: deleting
 # pods cannot shrink the nix store, so it evicted everything and stayed
 # unschedulable. 1% reclaim frees about 7 GiB and scheduling resumes.
-# Image GC from 85% to 80% only deletes unused images. Memory eviction stays
-# off; earlyoom owns that. See docs/architecture.md.
+# Image GC used to start at 85% full. That deleted local Never-pull images
+# (brain, fleet, cliproxy) on 2026-11-18 while the disk sat at 88%, and
+# those pods cannot pull a replacement. Start at 93% and stop at 90%, still
+# under the 95% eviction line. The local images are also pinned
+# (ops/containerd-pin), so GC cannot take them at any threshold. Memory
+# eviction stays off; earlyoom owns that. See docs/architecture.md.
+#
+# 5% free is about 35 GiB of 697 GiB (95% full). The node itself stops
+# working at about 15 GiB free (2%), so the hard line is still 20 GiB above
+# that. Scheduling stays on until then; only cliproxy, Traefik and CoreDNS
+# (system-cluster-critical, with a disk-pressure toleration) are admitted,
+# placed and never evicted after it. The alert NodeDiskAbove80 fires long
+# before (kubernetes/homelab/config/prometheus/homelab.rules.yml).
   - "eviction-hard=imagefs.available<5%,nodefs.available<5%"
   - "eviction-minimum-reclaim=imagefs.available=1%,nodefs.available=1%"
+  - "image-gc-high-threshold=93"
+  - "image-gc-low-threshold=90"

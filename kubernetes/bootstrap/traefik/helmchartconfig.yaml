@@ -7,6 +7,18 @@ spec:
   valuesContent: |-
     additionalArguments:
       - "--log.level=WARN"
+    # Traefik carries cliproxy's route, so it must also be placed while the
+    # node has the disk-pressure taint. A list replaces the chart's default
+    # tolerations, so the two k3s adds are repeated.
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node.kubernetes.io/disk-pressure
+        operator: Exists
+        effect: NoSchedule
     certificatesResolvers:
       letsencrypt:
         acme:

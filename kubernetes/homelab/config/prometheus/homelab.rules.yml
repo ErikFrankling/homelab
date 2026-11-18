@@ -72,6 +72,27 @@ groups:
         labels: {severity: warning, project: homelab, session: "true"}
         annotations:
           summary: "{{ $labels.host_name }}: {{ $labels.mountpoint }} under 20% free"
+      # naiaclaw's one disk is shared by the nix-builder /nix, containerd, the
+      # heavy worker workspaces and app data. wasm-box builds filled it on
+      # 2026-11-17/18 until the kubelet set DiskPressure, stopped scheduling and
+      # evicted pods (cliproxy among them, so every agent session failed).
+      # The kubelet's hard line is 95% used and the node itself fails near 98%.
+      # This one tells Erik at 80%, hours before. No repair session: what to
+      # delete is Erik's call (traces are never deleted), docs/nix-builder.md.
+      - alert: NodeDiskAbove80
+        expr: |
+          (1 - node_filesystem_avail_bytes{host_name="k8s",mountpoint="/"}
+            / node_filesystem_size_bytes{host_name="k8s",mountpoint="/"}) > 0.80
+        for: 5m
+        labels: {severity: warning, project: homelab, session: "false"}
+        annotations:
+          summary: "k8s (naiaclaw): / is {{ $value | humanizePercentage }} full; the kubelet stops scheduling at 95%"
+      - alert: NodeDiskPressure
+        expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+        for: 1m
+        labels: {severity: critical, project: homelab, session: "true"}
+        annotations:
+          summary: "{{ $labels.node }}: kubelet DiskPressure (scheduling stopped, pods being evicted)"
       # /mnt/data on the pc holds agent build caches (cargo/Go target dirs,
       # sccache) on purpose. Erik (2026-11-11): "do not get rid of any caching
       # of build artifacts to appease the disk limits; it is fine that we go

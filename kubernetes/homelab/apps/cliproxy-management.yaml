@@ -16,6 +16,12 @@ spec:
         app.kubernetes.io/name: cliproxy-management
     spec:
       automountServiceAccountToken: false
+      # Same as cliproxy: the login page for the gateway the agents use.
+      priorityClassName: system-cluster-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: management
           image: docker.io/library/cliproxy-management-network:953fb244-1
