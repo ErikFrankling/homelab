@@ -43,14 +43,43 @@ client needs the new public key before it will accept anything built here.
   gets most of the node, and when it is idle it costs nothing. `max-jobs` and
   `cores` in `config/nix-builder/nix.conf` are sized to use the node fully.
 - **Disk:** the volume is the node's root disk and local-path enforces no
-  quota. The nightly job (dotfiles auto-update) collects garbage after its
-  builds when the disk has under 150 GiB free. `min-free` in `nix.conf` is
-  only an emergency backstop: below 80 GiB free, collect until 90 GiB. Keep
-  it well under the free space live data leaves: a threshold the store
-  cannot reach makes every Nix operation run a full GC under the GC lock
-  (2026-11-09: remote builds hung for 20 minutes). The nightly job keeps GC roots under
-  `/nix/var/nix/gcroots/auto-update` for the closures worth keeping; anything
-  not rooted is fair game.
+  quota. The nightly job (dotfiles auto-update) collects garbage before its
+  builds, even when they then fail, when the disk has under 150 GiB free.
+  `min-free` in `nix.conf` is only an emergency backstop: below 80 GiB free,
+  collect until 150 GiB (`max-free`). Keep `min-free` well under the free
+  space live data leaves: a threshold the store cannot reach makes every Nix
+  operation run a full GC under the GC lock (2026-11-09: remote builds hung
+  for 20 minutes). Keep `max-free` well above it, or each emergency GC frees
+  a sliver and the next starts a few builds later (2026-11-18). The nightly
+  job keeps GC roots under `/nix/var/nix/gcroots/auto-update` for the
+  closures worth keeping; anything not rooted is fair game.
+- **Never delete store paths with `rm`.** Only Nix deletes from `/nix/store`
+  (`nix-collect-garbage`, `nix-store --delete`). A store directory removed
+  behind its back stays valid in the database: every build that needs it
+  fails, and a store path's mtime is always 1970, so "older than N days"
+  matches all of them. 2026-11-18: an `rm -rf` of "old" store directories on
+  the node took ~9,800 paths, nix and sshd among them.
+
+## Repairing a store whose database and disk disagree
+
+1. List what is valid but gone: `nix path-info --all`, then `[ -e "$p" ]`
+   for each (`-e`, not `-d`: `.drv` files and some outputs are files).
+2. Paths a substituter has: `nix-store --repair-path` fetches them again.
+   `nix-store --verify` stops at its first database inconsistency, so give
+   it the list instead.
+3. Paths built only here that the PC still has: copy them into a file cache
+   on the volume and repair from it, so Nix does the canonicalisation and
+   hash check:
+   `nix copy --to 'ssh-ng://root@192.168.50.100:2222?remote-store=file%3A%2F%2F%2Fnix%2Fvar%2Fbuilder%2Frepair%3Fcompression%3Dnone' PATHS`,
+   then on the builder
+   `nix-store --repair-path PATHS --option substituters file:///nix/var/builder/repair --option require-sigs false`.
+4. The rest: `nix-store --delete --ignore-liveness` on
+   `nix-store -q --referrers-closure` of them, so nothing valid refers to a
+   missing path. They are rebuilt or fetched when next needed.
+5. `nix-store --verify` should now finish without errors.
+
+The seed container fetches the pod's own tools with `--repair`, so a pod
+restart brings nix and sshd back even when the database lies about them.
 
 ## Access
 
