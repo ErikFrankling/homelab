@@ -202,8 +202,24 @@ Rules that go with this choice:
   upstream's 15% free (85% full) to 5% free, and `ops/k3s/config.yaml` pins
   it: `eviction-hard` is `nodefs.available<5%,imagefs.available<5%`. On the
   697 GiB root disk that is about 35 GiB free, 95% full. Past 85% the node
-  still schedules. Unused container images are deleted from 85% full down
-  to 80%. That garbage collection does not taint the node.
+  still schedules. Unused container images are deleted from 93% full down
+  to 90% (`image-gc-high-threshold`/`low`; it started at 85% until
+  2026-11-18, when it deleted the Never-pull images `brain`, `fleet-*`,
+  `fleet-box` and `cliproxy-management-network`, which no registry can give
+  back). That garbage collection does not taint the node.
+- **Local-only images are pinned** (`ops/containerd-pin/install.sh`, a timer
+  every 10 minutes): containerd label `io.cri-containerd.pinned=pinned`, which
+  the kubelet's image GC skips. A new local-only image name needs adding to the
+  regex in that script. `crictl images -o json` shows `"pinned": true`.
+- **cliproxy, cliproxy-management and Traefik are never evicted for disk and
+  are placed first.** They run as `system-cluster-critical` (2000000000),
+  the only class the kubelet still admits under DiskPressure and never
+  evicts, and tolerate `node.kubernetes.io/disk-pressure`, so a restart lands
+  on a tainted node. Every agent session calls cliproxy; on 2026-11-18
+  DiskPressure evicted it and they all failed with 429/503.
+- **Alerts:** `NodeDiskAbove80` (warning, tells Erik, no repair session) and
+  `NodeDiskPressure` (critical) in `config/prometheus/homelab.rules.yml`. The
+  node itself fails near 15 GiB free (2%); the kubelet's line is 35 GiB.
 - **A disk-pressure trip reclaims 1%, not 10%.** k3s sets
   `eviction-minimum-reclaim` to 10%. Once free space crosses under 5%, the
   kubelet keeps evicting until 15% is free again (85% used, about 105 GiB
