@@ -17,6 +17,12 @@ packages="nix openssh harmonia bashInteractive coreutils gnugrep gnused findutil
 # local-path creates the volume directory world-writable, and Nix refuses a
 # store whose parent anyone can write to.
 chmod 0755 "$root/nix"
+
+# Build trees (build-dir in nix.conf) of builds killed with the pod stay on
+# the volume, and Nix never removes them: 44 GiB of them from Oct 21 on had
+# piled up by 2026-11-18. No build survives a pod restart, so all are dead.
+rm -rf "$root/nix/var/builder/build"/nix-*
+
 roots="$root/nix/var/nix/gcroots/builder-tools"
 
 # Seeded already, and the garbage collector has not taken anything: nothing to

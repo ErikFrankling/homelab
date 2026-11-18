@@ -45,8 +45,12 @@ client needs the new public key before it will accept anything built here.
 - **Disk:** the volume is the node's root disk and local-path enforces no
   quota. The nightly job (dotfiles auto-update) collects garbage before its
   builds, even when they then fail, when the disk has under 150 GiB free.
-  `min-free` in `nix.conf` is only an emergency backstop: below 80 GiB free,
-  collect until 150 GiB (`max-free`). Keep `min-free` well under the free
+  `min-free` in `nix.conf` is only an emergency backstop: below 50 GiB free,
+  collect until 150 GiB (`max-free`). The disk is shared and most of it is
+  not this store, so below `min-free` every Nix process runs its own GC in
+  turn under the exclusive GC lock and builds stop until free space is back
+  above it (2026-11-18: ~90 minutes at 80 GiB). Leftover build trees of
+  builds killed with the pod are removed by the seed at pod start. Keep `min-free` well under the free
   space live data leaves: a threshold the store cannot reach makes every Nix
   operation run a full GC under the GC lock (2026-11-09: remote builds hung
   for 20 minutes). Keep `max-free` well above it, or each emergency GC frees
