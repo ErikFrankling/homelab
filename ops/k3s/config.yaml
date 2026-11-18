@@ -16,3 +16,13 @@ kubelet-arg:
 # 110 (the default) was full by 2026-10-23: Gatus, alloy and CronJob runs sat
 # Pending with "Too many pods". The node's /24 pod CIDR has room for 200.
   - max-pods=200
+# DiskPressure is the taint that stops scheduling. The hard line stays at
+# k3s's 5% free (about 35 GiB, 95% full), which is already past 85%. k3s's
+# eviction-minimum-reclaim of 10% then keeps evicting until 15% is free
+# (about 105 GiB). That recovery emptied the node on 2026-11-18: deleting
+# pods cannot shrink the nix store, so it evicted everything and stayed
+# unschedulable. 1% reclaim frees about 7 GiB and scheduling resumes.
+# Image GC from 85% to 80% only deletes unused images. Memory eviction stays
+# off; earlyoom owns that. See docs/architecture.md.
+  - "eviction-hard=imagefs.available<5%,nodefs.available<5%"
+  - "eviction-minimum-reclaim=imagefs.available=1%,nodefs.available=1%"

@@ -195,8 +195,22 @@ Rules that go with this choice:
   invites OOM kills and breaks eviction ordering. Keeping them also holds pods
   in `Burstable` QoS rather than `BestEffort`, which is evicted first.
 - **Node memory has one guard: earlyoom** (`ops/earlyoom/install.sh`, since
-  2026-11-02). The kubelet here only evicts on disk, there is no swap, and the
+  2026-11-02). The kubelet does not evict on memory, there is no swap, and the
   kernel OOM killer fires minutes after the node has stopped responding.
+- **Disk pressure does not stop scheduling at 85% full.** The taint is
+  `node.kubernetes.io/disk-pressure`. k3s already raises the hard line from
+  upstream's 15% free (85% full) to 5% free, and `ops/k3s/config.yaml` pins
+  it: `eviction-hard` is `nodefs.available<5%,imagefs.available<5%`. On the
+  697 GiB root disk that is about 35 GiB free, 95% full. Past 85% the node
+  still schedules. Unused container images are deleted from 85% full down
+  to 80%. That garbage collection does not taint the node.
+- **A disk-pressure trip reclaims 1%, not 10%.** k3s sets
+  `eviction-minimum-reclaim` to 10%. Once free space crosses under 5%, the
+  kubelet keeps evicting until 15% is free again (85% used, about 105 GiB
+  here) and the node stays unschedulable the whole time. Pod eviction cannot
+  shrink the nix store, so on 2026-11-18 that recovery emptied the cluster
+  and never reached 15% free. This node sets the reclaim to 1% (about 7 GiB).
+  Scheduling resumes once free space is back near 6%.
 - **`kube-system` is untouched.** CFS shares derive from requests, so if
   everything requests nothing, everything gets an equal share. CoreDNS and
   Traefik should win under contention, so their requests are left alone.
