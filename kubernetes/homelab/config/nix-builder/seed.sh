@@ -21,6 +21,7 @@ roots="$root/nix/var/nix/gcroots/builder-tools"
 
 # Seeded already, and the garbage collector has not taken anything: nothing to
 # do, which also lets the pod start without network.
+repair=""
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$NIXPKGS_REV" ] && [ -d "$roots" ]; then
   intact=true
   for link in "$roots"/*; do
@@ -30,7 +31,12 @@ if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$NIXPKGS_REV" ] && [ -d "$roots" ];
     echo "tools already seeded from nixpkgs $NIXPKGS_REV"
     exit 0
   fi
-  echo "some tools are gone from the store; seeding again"
+  echo "some tools are gone from the store; seeding again with --repair"
+  # A tool whose files are gone can still be valid in the database (on
+  # 2026-11-18 store directories were deleted with rm -rf, behind Nix's back).
+  # Plain nix build trusts the database, fetches nothing, and the pod starts
+  # without nix or sshd; --repair fetches the closure's missing paths again.
+  repair="--repair"
 fi
 
 installables=""
@@ -44,7 +50,7 @@ done
 paths=$(nix build \
   --extra-experimental-features 'nix-command flakes' \
   --store "local?root=$root" \
-  --max-jobs 0 --no-link --print-out-paths $installables)
+  --max-jobs 0 --no-link --print-out-paths $repair $installables)
 
 # Each tool is rooted by its own symlink directly inside gcroots. Nix follows a
 # root symlink only to a store path; on 2026-10-14 the roots were one level
