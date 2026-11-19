@@ -128,3 +128,16 @@ footer{font-size:11px;color:var(--muted);margin-top:20px}
 .outlook{margin:14px 0 0;font-size:14px;color:var(--text)}
 .outlook strong{font-size:20px;font-weight:600}
 .legend small{color:var(--muted)}
+.topbar{flex-wrap:wrap}
+.when{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.group{display:flex;align-items:center;gap:8px}
+.group-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.timeline{flex-basis:100%;margin-top:4px}
+#nav{height:46px;margin:0;cursor:grab;touch-action:none;user-select:none}
+#nav text{font-size:10px}
+.window{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:2px}
+.window #window-label{color:var(--text)}
+.window button{font-size:11px;padding:3px 9px}
+.window .hint{margin-left:auto}
+#spend,#chart{cursor:grab;user-select:none;-webkit-user-select:none}
+@media(max-width:800px){.window .hint{display:none}.tabs.range button{padding:6px 9px;font-size:12px}.group-label{width:44px}}

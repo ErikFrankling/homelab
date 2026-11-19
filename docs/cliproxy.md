@@ -85,8 +85,15 @@ private-network dashboard; no separate login.
 ## Usage, allowance and forecast
 
 https://cliproxy-usage.erikfrankling.duckdns.org/runway/ is our own usage view,
-linked as **Quota runway** on Homepage. One range control (24 hours, 7 days,
-30 days, all time; kept in the URL hash and localStorage) drives every panel:
+linked as **Quota runway** on Homepage. One visible time window drives every
+panel. It is set by two presets, Past (24h, 7d, 30d, all) and Ahead (none, 1, 3,
+7, 14, 30 days; both kept in the URL hash, e.g. `#past=30d&ahead=14d`, and
+localStorage), or freely: a timeline strip under the presets shows all token
+history per day plus the look-ahead; drag the window, its edges or a new span,
+and with a mouse drag either chart, pinch or Ctrl+scroll to zoom, double-click
+to return to the preset. Token data is loaded once (all days, and the last 24
+hours per hour, used when the window is inside the last day); by-account and
+by-model totals are fetched for the visible days after the window settles:
 
 - headline numbers: tokens, requests, average and busiest day or hour, and the
   weekly allowance left per provider in accounts' worth;
