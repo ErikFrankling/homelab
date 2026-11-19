@@ -93,8 +93,13 @@ linked as **Quota runway** on Homepage. One range control (24 hours, 7 days,
 - tokens per hour or day stacked by model, or as a running total, with the
   range split by account and by model (`/usage/analysis`; "all time" asks for
   Keeper's longest custom range, 365 days, and trims empty leading days);
-- remaining allowance with one line per account, its forecast at the measured
-  pace times a multiplier, and the next provider reset;
+- what you can still spend, per provider: every enabled account's remaining
+  allowance stacked (in tokens, from what 1% of each account bought in its latest
+  cycle with at least 20% used, or in % of one allowance), and from now a dashed
+  expected line: the pooled pace (allowance used per hour across all of the
+  provider's accounts while any had some left; widened to 3, 7 or 30 days when
+  nothing could be used) drains the account that resets first, and each reset
+  refills that account and repeats every window;
 - weekly cycles per account: points used, tokens, and tokens per 1%.
 
 Keeper keeps 30 days of quota history, so the allowance chart and cycles stop

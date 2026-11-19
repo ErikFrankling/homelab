@@ -125,3 +125,6 @@ footer{font-size:11px;color:var(--muted);margin-top:20px}
  td:first-child{justify-content:flex-start;font-weight:600}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.outlook{margin:14px 0 0;font-size:14px;color:var(--text)}
+.outlook strong{font-size:20px;font-weight:600}
+.legend small{color:var(--muted)}

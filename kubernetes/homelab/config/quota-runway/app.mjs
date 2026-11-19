@@ -1,4 +1,4 @@
-import {HOUR,DAY,WINDOWS,windowKind,accountState,accountSeries,forecastAccount,cycleSummaries,maskedMatch,modelStacks,firstUsedIndex,time,percent} from './model.mjs';
+import {HOUR,DAY,WINDOWS,windowKind,accountState,pointScales,pooledRate,stackHistory,forecastStack,cycleSummaries,maskedMatch,modelStacks,firstUsedIndex,time,percent} from './model.mjs';
 const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=t=>t?new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(t):'Not reported';
@@ -15,7 +15,7 @@ const palette={claude:['#f0a77c','#e8c48a','#d9826b','#f3d2b3','#c99a6c'],codex:
 const modelColors=['#8faeff','#f0a77c','#a5d8a6','#d7a4e9','#e7cf87','#7f8a96'];
 const RANGES={'24h':{label:'24 hours',ms:DAY},'7d':{label:'7 days',ms:7*DAY},'30d':{label:'30 days',ms:30*DAY},all:{label:'all time',ms:null}};
 let range=RANGES[location.hash.slice(1)]?location.hash.slice(1):RANGES[localStorage.getItem('runway-range')]?localStorage.getItem('runway-range'):'7d';
-let others=[],data=[],spend=null,spendError=null,loading=false,kind='weekly',mode='bars',retryTimer,failures=0,resetBusy=false,spendSeq=0;
+let others=[],data=[],spend=null,spendError=null,loading=false,kind='weekly',unit='tokens',mode='bars',retryTimer,failures=0,resetBusy=false,spendSeq=0;
 const attempts=new Map(),messages=new Map();
 async function api(path,body,timeout=20000){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
@@ -113,9 +113,11 @@ function spendView(){
 }
 function weeklyGroups(now){
  return ['claude','codex'].map(p=>{
+  const scales=pointScales(data.filter(a=>a.provider===p),'weekly');
   const accounts=data.filter(a=>!a.disabled&&a.provider===p).map(a=>accountState(a,'weekly',now));
   const known=accounts.filter(a=>!a.stale&&a.remaining!==null);
-  return {p,accounts,known,left:known.reduce((n,a)=>n+a.remaining,0)/100,next:known.map(a=>a.reset).filter(t=>t>now).sort((a,b)=>a-b)[0]};
+  const tokens=known.every(a=>scales.get(a.id))?known.reduce((n,a)=>n+a.remaining*scales.get(a.id).value,0):null;
+  return {p,accounts,known,tokens,left:known.reduce((n,a)=>n+a.remaining,0)/100,next:known.map(a=>a.reset).filter(t=>t>now).sort((a,b)=>a-b)[0]};
  }).filter(g=>g.accounts.length);
 }
 function renderKpis(view,now){
@@ -131,7 +133,7 @@ function renderKpis(view,now){
  }else cards.push(`<article class="stat"><small>Tokens</small><strong>…</strong><p>${esc(spendError?spendError+'. Retrying.':'Loading')}</p></article>`);
  for(const g of weeklyGroups(now)){
   const color=palette[g.p][0];
-  cards.push(`<article class="stat" style="--series:${color}"><small>${providerName(g.p)} weekly allowance left</small><strong>${g.known.length?num(g.left):'—'}<span> of ${g.accounts.length} account${g.accounts.length===1?'':'s'}</span></strong><p>${g.known.length!==g.accounts.length?`${g.accounts.length-g.known.length} without a current reading · `:''}next reset ${g.next?fmt(g.next):'not reported'}</p></article>`);
+  cards.push(`<article class="stat" style="--series:${color}"><small>${providerName(g.p)} left this week</small><strong>${g.known.length?(g.tokens!==null?'≈'+tok(g.tokens):num(g.left*100)+'%'):'—'}<span> tokens</span></strong><p>${num(g.left)} of ${g.accounts.length} account${g.accounts.length===1?'':'s'} · ${g.known.length!==g.accounts.length?`${g.accounts.length-g.known.length} without a current reading · `:''}next reset ${g.next?fmt(g.next):'not reported'}</p></article>`);
  }
  $('kpis').innerHTML=cards.join('');
 }
@@ -175,37 +177,59 @@ function renderSpend(view){
  const models=view.models.filter(m=>m.total_tokens>0),maxM=Math.max(1,...models.map(m=>m.total_tokens));
  $('by-model').innerHTML=models.map(m=>`<div class="share"><div>${esc(m.label)}</div><b>${tok(m.total_tokens)}</b><div class="bar"><span style="width:${m.total_tokens/maxM*100}%"></span></div><small>${reqs(m.requests)} · ${num(m.percent||0)}%</small></div>`).join('')||'<p class="empty">No usage in this range.</p>';
 }
-function renderAllowance(now){
- const pace=Number($('pace').value)/100,lookback=Number($('lookback').value)*HOUR,future=Number($('future').value)*HOUR,pool=$('pool').value;
- $('pace-value').textContent=`at ${pace}× the pace`;
+// Accounts of one provider with their remaining allowance in the chosen unit.
+function poolAccounts(provider,k,now){
+ const all=data.filter(a=>a.provider===provider),scales=pointScales(all,k);
+ const scaleOf=a=>unit==='tokens'?scales.get(a.id)?.value??null:1;
  const counters={claude:0,codex:0};
- const accounts=data.filter(a=>!a.disabled&&palette[a.provider]&&(pool==='all'||a.provider===pool)).map(a=>({...accountState(a,kind,now,lookback),color:palette[a.provider][counters[a.provider]++%5]}));
- const earliest=Math.min(...accounts.flatMap(a=>a.points.map(p=>p.t)),now-DAY);
+ const states=all.map(a=>({...accountState(a,k,now),scale:scaleOf(a),scaleSource:scales.get(a.id)?.source,color:palette[a.provider][counters[a.provider]++%5]}));
+ return {all:states,enabled:states.filter(a=>!a.disabled&&a.scale)};
+}
+const amount=v=>unit==='tokens'?tok(v):`${num(v)}%`;
+function renderAllowance(now){
+ const lookback=Number($('lookback').value)*HOUR,future=Number($('future').value)*HOUR,provider=$('pool').value,pace=Number($('pace').value)/100;
+ $('pace-value').textContent=`at ${pace}× the pace`;
+ const {all,enabled}=poolAccounts(provider,kind,now);
+ // No usable time in the chosen window (everything empty) widens it until there is.
+ let rate=null,used=lookback;
+ for(const h of [lookback,72*HOUR,168*HOUR,720*HOUR].filter(h=>h>=lookback)){rate=pooledRate(all,now,h,a=>a.scale);used=h;if(rate)break;}
+ const usedLabel=used>=48*HOUR?`${Math.round(used/DAY)} days`:`${Math.round(used/HOUR)} hours`;
+ const perHour=rate?rate.perHour*pace:0;
+ const earliest=Math.min(...enabled.flatMap(a=>a.points.map(p=>p.t)),now-DAY);
  const start=range==='all'?earliest:Math.max(now-RANGES[range].ms,Math.min(earliest,now-HOUR)),end=now+future;
- $('chart-note').textContent=`${kind==='short'?'5-hour':'Weekly'} limit · remaining per account${range==='all'||range==='30d'?' · Keeper keeps 30 days of quota history':''}`;
- $('method').textContent='Solid: observed. Dashed: estimated at the selected pace.';
- $('legend').innerHTML=accounts.map(a=>`<span><i style="border-color:${a.color}"></i>${esc(providerName(a.provider))} · ${esc(a.name)} <b class="${a.remaining===0?'warning':''}">${a.remaining===null||a.stale?'no current reading':num(a.remaining)+'%'}</b></span>`).join('')||'<span>No enabled accounts with this limit.</span>';
+ const history=stackHistory(enabled,start,now),forecast=future>0?forecastStack(enabled,now,end,perHour,WINDOWS[kind]):[];
+ const total=s=>s.values.reduce((n,v)=>n+(v??0),0),current=history.length?total(history.at(-1)):0;
+ const unitNote=unit==='tokens'?'tokens, estimated from what 1% of each account bought in its latest cycle':'percent of one account; 100% = one full allowance';
+ $('chart-note').textContent=`${providerName(provider)} · ${kind==='short'?'5-hour':'weekly'} allowance of every enabled account, stacked · ${unitNote}`;
+ // Plain-language outlook: how long what is left lasts, and when the next refills come.
+ const zero=current>0&&forecast.find(p=>!p.reset&&total(p)===0&&p.t>now),refills=[];
+ for(let i=1;i<forecast.length;i++)if(forecast[i].reset)forecast[i].values.forEach((v,k)=>{const d=v-forecast[i-1].values[k];if(d>0)refills.push({t:forecast[i].t,a:enabled[k],d});});
+ const nextRefills=refills.slice(0,3).map(r=>`${fmt(r.t)} +${amount(r.d)} (${esc(r.a.name)})`);
+ $('outlook').innerHTML=`<strong>${amount(current)}</strong> left now${rate?` · pace ${amount(rate.perHour)}/hour over the last ${usedLabel}${used!==lookback?' (nothing could be used in the chosen window)':''}${pace!==1?` × ${pace}`:''}`:' · no measured pace yet'}${zero?` · runs out ${fmt(zero.t)}`:current>0&&rate&&future>0?' · lasts past the look-ahead':''}${nextRefills.length?`<br>Next refills: ${nextRefills.join(' · ')}`:''}`;
+ $('legend').innerHTML=enabled.map(a=>`<span><i class="sw" style="background:${a.color}"></i>${esc(a.name)} <b class="${a.remaining===0?'warning':''}">${a.remaining===null||a.stale?'no reading':`${num(a.remaining)}%`}${unit==='tokens'&&a.remaining?` · ${tok(a.remaining*a.scale)}`:''}</b>${unit==='tokens'&&a.scaleSource!=='own'?' <small>(typical rate)</small>':''}</span>`).join('')+(all.filter(a=>!a.disabled&&!a.scale).length?`<span>${all.filter(a=>!a.disabled&&!a.scale).length} account(s) without a token rate yet</span>`:'')||'<span>No enabled accounts.</span>';
  const svg=$('chart');svg.replaceChildren();$('tooltip').hidden=true;
- const W=Math.max(300,svg.clientWidth||1100),H=W<600?260:330,L=40,R=12,T=24,B=30,x=t=>L+(t-start)/(end-start)*(W-L-R),y=v=>H-B-v/100*(H-T-B);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
- for(let v=0;v<=100;v+=25)svg.append(node('line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'#2b3036'}),node('text',{x:L-8,y:y(v)+4,'text-anchor':'end'},v+'%'));
+ const W=Math.max(300,svg.clientWidth||1100),H=W<600?280:360,L=W<600?46:58,R=12,T=24,B=30;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+ const max=niceMax(Math.max(...history.map(total),...forecast.map(total),1e-9)),x=t=>L+(t-start)/(end-start)*(W-L-R),y=v=>H-B-v/max*(H-T-B);
+ for(let k=0;k<=4;k++){const v=max*k/4;svg.append(node('line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'#2b3036'}),node('text',{x:L-8,y:y(v)+4,'text-anchor':'end'},amount(v)));}
  const span=end-start,ticks=W<600?3:6;
  for(let i=0;i<=ticks;i++){const t=start+span*i/ticks;svg.append(node('text',{x:x(t),y:H-10,'text-anchor':i===0?'start':i===ticks?'end':'middle'},span>3*DAY?fmtDay(t):fmt(t)));}
  if(future>0)svg.append(node('rect',{x:x(now),y:T,width:x(end)-x(now),height:H-T-B,fill:'#ffffff06'}));
+ // Stacked areas, one band per account; the top edge is everything you can still spend.
+ const bands=(series,opacity)=>{let lower=series.map(()=>0);enabled.forEach((a,k)=>{const upper=series.map((s,i)=>lower[i]+(s.values[k]??0));if(upper.some((u,i)=>u>lower[i])){const pts=series.map((s,i)=>`${x(s.t).toFixed(1)},${y(upper[i]).toFixed(1)}`).concat(series.map((s,i)=>`${x(s.t).toFixed(1)},${y(lower[i]).toFixed(1)}`).reverse());svg.append(node('polygon',{points:pts.join(' '),fill:a.color,opacity}));}lower=upper;});};
+ const line=(series,attrs)=>svg.append(node('path',{d:series.map((s,i)=>`${i?'L':'M'}${x(s.t).toFixed(1)},${y(total(s)).toFixed(1)}`).join(' '),fill:'none','stroke-linejoin':'round',...attrs}));
+ if(history.length){bands(history,.55);line(history,{stroke:'#eff4f6','stroke-width':2});}
+ if(forecast.length>1){bands(forecast,.3);line(forecast,{stroke:'#eff4f6','stroke-width':2,'stroke-dasharray':'6 5'});}
  svg.append(node('line',{x1:x(now),x2:x(now),y1:T-6,y2:H-B,stroke:'#a4b1bc','stroke-dasharray':'3 5'}),node('text',{x:x(now)+5,y:T-10},'now'));
- const points=[];let any=false;
- for(const a of accounts){
-  const series=accountSeries(a.points,start,now);let d='',on=false;
-  for(const p of series){if(p.value===null){on=false;continue;}d+=`${on?'L':'M'}${x(p.t).toFixed(1)},${y(p.value).toFixed(1)} `;on=true;points.push({t:p.t,value:p.value,a,kind:'Observed'});}
-  if(d){svg.append(node('path',{d,fill:'none',stroke:a.color,'stroke-width':2,'stroke-linejoin':'round'}));any=true;}
-  if(future>0){const f=forecastAccount(a,now,end,pace);if(f.length>1){svg.append(node('path',{d:f.map((p,i)=>`${i?'L':'M'}${x(p.t).toFixed(1)},${y(p.value*100).toFixed(1)}`).join(' '),fill:'none',stroke:a.color,'stroke-width':1.6,'stroke-dasharray':'5 5',opacity:.85}));for(const p of f)points.push({t:p.t,value:p.value*100,a,kind:p.uncertain?'No measured pace; held flat':'Estimate'});}}
-  if(!a.stale&&a.remaining!==null){svg.append(node('circle',{cx:x(now),cy:y(a.remaining),r:4,fill:a.color}));points.push({t:now,value:a.remaining,a,kind:'Now'});}
- }
- if(!any)svg.append(node('text',{x:L+8,y:T+40},'No quota history for this range yet.'));
+ if(!history.some(s=>total(s)>0)&&!forecast.some(s=>total(s)>0))svg.append(node('text',{x:L+8,y:T+40},'Nothing left and no reset in view.'));
+ const series=[...history.map(s=>({...s,kind:'Observed'})),...forecast.map(s=>({...s,kind:'Expected'}))];
+ const hover=node('line',{y1:T,y2:H-B,stroke:'#ffffff40',visibility:'hidden'});svg.append(hover);
  svg.onpointermove=e=>{
-  const rect=svg.getBoundingClientRect(),t=start+((e.clientX-rect.left)/rect.width*W-L)/(W-L-R)*span,value=(H-B-(e.clientY-rect.top)/rect.height*H)/(H-T-B)*100;
-  const nearest=points.reduce((best,p)=>{const dist=Math.abs(p.t-t)/span+Math.abs(p.value-value)/400;return !best||dist<best.dist?{...p,dist}:best;},null);if(!nearest)return;
-  $('tooltip').hidden=false;$('tooltip').textContent=`${providerName(nearest.a.provider)} · ${nearest.a.name}\n${nearest.kind} · ${fmt(nearest.t)}\n${num(nearest.value)}% left${nearest.a.reset&&nearest.kind!=='Observed'?`\nResets ${fmt(nearest.a.reset)}`:''}`;$('tooltip').style.left=Math.min(Math.max(0,e.clientX-rect.left+12),Math.max(0,rect.width-260))+'px';
- };svg.onpointerleave=()=>$('tooltip').hidden=true;
+  const rect=svg.getBoundingClientRect(),t=start+((e.clientX-rect.left)/rect.width*W-L)/(W-L-R)*span;
+  const s=series.reduce((b,p)=>!b||Math.abs(p.t-t)<Math.abs(b.t-t)?p:b,null);if(!s)return;
+  hover.setAttribute('x1',x(s.t));hover.setAttribute('x2',x(s.t));hover.setAttribute('visibility','visible');
+  $('tooltip').hidden=false;$('tooltip').textContent=`${s.kind} · ${fmt(s.t)}\n${amount(total(s))} left in total\n${enabled.map((a,k)=>`${a.name}: ${s.values[k]===null?'no reading':amount(s.values[k])}`).join('\n')}`;
+  $('tooltip').style.left=Math.min(Math.max(0,e.clientX-rect.left+12),Math.max(0,rect.width-260))+'px';
+ };svg.onpointerleave=()=>{hover.setAttribute('visibility','hidden');$('tooltip').hidden=true;};
 }
 function renderCycles(now){
  const start=range==='all'?0:now-RANGES[range].ms;
@@ -249,6 +273,7 @@ const setRange=r=>{if(!RANGES[r]||r===range)return;range=r;localStorage.setItem(
 for(const b of document.querySelectorAll('[data-range]'))b.onclick=()=>setRange(b.dataset.range);
 window.addEventListener('hashchange',()=>setRange(location.hash.slice(1)));
 for(const b of document.querySelectorAll('[data-mode]'))b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));render();};
+for(const b of document.querySelectorAll('[data-unit]'))b.onclick=()=>{unit=b.dataset.unit;document.querySelectorAll('[data-unit]').forEach(x=>x.classList.toggle('active',x===b));render();};
 for(const b of document.querySelectorAll('[data-kind]'))b.onclick=()=>{kind=b.dataset.kind;$('future').value=kind==='short'?'12':'168';document.querySelectorAll('[data-kind]').forEach(x=>x.classList.toggle('active',x===b));render();};
 let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(render,100);});
 window.addEventListener('online',()=>load());document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});

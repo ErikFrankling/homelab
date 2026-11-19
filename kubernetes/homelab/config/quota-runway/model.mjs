@@ -120,3 +120,78 @@ export function firstUsedIndex(tokenUsage) {
   const i=(tokenUsage||[]).findIndex(b=>(b.total_tokens||0)>0||(b.requests||0)>0);
   return i<0?0:i;
 }
+// Remaining percent of one account at time t, from Keeper's observations.
+// Inside a cycle readings are joined; a reset switches to the next cycle's
+// first reading; after a reset with no later reading the value is unknown (null).
+export function remainingAt(points, t) {
+  let lo=0,hi=points.length-1,i=-1;
+  while(lo<=hi){const m=(lo+hi)>>1;if(points[m].t<=t){i=m;lo=m+1;}else hi=m-1;}
+  if(i<0)return null;
+  const a=points[i],b=points[i+1];
+  if(b&&b.cycle===a.cycle)return a.p+(b.p-a.p)*(t-a.t)/(b.t-a.t||1);
+  const resetPassed=a.reset!==null&&t>=a.reset;
+  if(b&&b.t-a.t<=2*HOUR)return t>=(a.reset??b.t)?b.p:a.p;
+  return resetPassed?null:a.p;
+}
+// Tokens one percentage point of this account's allowance bought in its most
+// recent cycle that used at least 20 points.
+export function tokensPerPoint(history) {
+  const c=cycleSummaries(history).find(c=>c.used>=20&&c.tokens>0);
+  return c?c.tokens/c.used:null;
+}
+const median=v=>{const s=[...v].sort((a,b)=>a-b);return s.length?s[s.length>>1]:null;};
+// Per-account scale: tokens per point, falling back to the median of the same
+// provider and plan, then of the same provider.
+export function pointScales(accounts, kind) {
+  const own=new Map(accounts.map(a=>[a.id,tokensPerPoint(a.histories?.[kind])]));
+  const pick=f=>median(accounts.filter(f).map(a=>own.get(a.id)).filter(v=>v>0));
+  return new Map(accounts.map(a=>{const v=own.get(a.id);
+    if(v>0)return [a.id,{value:v,source:'own'}];
+    const plan=pick(b=>b.provider===a.provider&&b.plan===a.plan);if(plan)return [a.id,{value:plan,source:'plan'}];
+    const prov=pick(b=>b.provider===a.provider);return [a.id,prov?{value:prov,source:'provider'}:null];}));
+}
+// Pooled pace: allowance used across all of a provider's accounts per hour of
+// time when at least one of them still had allowance (blocked time is excluded,
+// since nothing could be used then). Units follow scale(account).
+export function pooledRate(accounts, now, lookback, scale) {
+  const start=now-lookback;let lost=0;
+  for(const a of accounts){const s=scale(a);if(!s)continue;const pts=a.points||[];
+    for(let i=1;i<pts.length;i++){const x=pts[i-1],y=pts[i];
+      if(x.cycle!==y.cycle||y.p>=x.p||y.t<=start||x.t>=now)continue;
+      const overlap=Math.min(y.t,now)-Math.max(x.t,start);lost+=(x.p-y.p)*overlap/(y.t-x.t||1)*s;}}
+  let able=0;const step=5*60000;
+  for(let t=start;t<now;t+=step)if(accounts.some(a=>(remainingAt(a.points||[],t)??0)>0))able+=step;
+  if(able<30*60000)return null;
+  return {perHour:lost/able*HOUR,ableHours:able/HOUR,lost};
+}
+// Stacked history: each account's remaining allowance in units, summed.
+export function stackHistory(accounts, start, now, samples=240) {
+  const times=new Set([start,now]);
+  for(let k=1;k<samples;k++)times.add(start+(now-start)*k/samples);
+  for(const a of accounts)for(const p of a.points){if(p.t>start&&p.t<now)times.add(p.t);if(p.reset>start&&p.reset<now){times.add(p.reset-1);times.add(p.reset);}}
+  return [...times].sort((x,y)=>x-y).map(t=>({t,values:accounts.map(a=>{
+    const v=t===now&&a.remaining!==null&&!a.stale?a.remaining:remainingAt(a.points,t);
+    return v===null?null:v*a.scale;})}));
+}
+// Expected stack from now: one pooled demand drains the account that resets
+// first (its allowance would be lost at the reset anyway), then the next. Each
+// reset refills that account and repeats every window length.
+export function forecastStack(accounts, now, end, perHour, period) {
+  const r=accounts.map(a=>a.remaining===null||a.stale?0:a.remaining*a.scale);
+  const reset=accounts.map(a=>a.reset!==null&&a.reset>now?a.reset:null);
+  const rate=perHour>0?perHour/HOUR:0,out=[{t:now,values:[...r]}];
+  let t=now;
+  for(let guard=0;guard<1000&&t<end;guard++){
+    const nextReset=Math.min(...reset.map(x=>x??Infinity));
+    let active=-1;
+    r.forEach((v,i)=>{if(v>0&&(active<0||(reset[i]??Infinity)<(reset[active]??Infinity)))active=i;});
+    const empty=active>=0&&rate>0?t+r[active]/rate:Infinity;
+    const tn=Math.min(nextReset,empty,end);
+    if(active>=0&&rate>0)r[active]=tn===empty?0:Math.max(0,r[active]-rate*(tn-t));
+    t=tn;out.push({t,values:[...r]});
+    let jumped=false;
+    reset.forEach((x,i)=>{if(x===t){r[i]=100*accounts[i].scale;reset[i]=period?x+period*1000:null;jumped=true;}});
+    if(jumped)out.push({t,values:[...r],reset:true});
+  }
+  return out;
+}

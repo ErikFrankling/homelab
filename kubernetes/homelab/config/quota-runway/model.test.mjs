@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {HOUR,burnRate,observations,accountState,accountSeries,forecastAccount,cycleSummaries,maskedMatch,modelStacks,firstUsedIndex,limitRow} from './model.mjs';
+import {HOUR,burnRate,observations,accountState,accountSeries,forecastAccount,cycleSummaries,maskedMatch,modelStacks,firstUsedIndex,limitRow,remainingAt,tokensPerPoint,pointScales,pooledRate,stackHistory,forecastStack} from './model.mjs';
 const now=Date.parse('2026-11-07T12:00:00Z'),iso=t=>new Date(t).toISOString();
 function history(start,end,from,to,reset=now+HOUR,id=1){return {cycles:[{id,first_observed_at:iso(start),last_observed_at:iso(end),first_remaining_percent:from,last_remaining_percent:to,reset_at:iso(reset),transitions:[{from_remaining_percent:from,to_remaining_percent:to,interval_started_at:iso(start),interval_ended_at:iso(end)}]}]};}
 test('rate measures percentage points per hour and does not count reset gains',()=>{
@@ -75,4 +75,40 @@ test('model stacks keep the busiest models and fold the rest into Other',()=>{
  const s=modelStacks({buckets:[1,2],series:[{model:'a',total_tokens:[5,5]},{model:'b',total_tokens:[1,0]},{model:'c',total_tokens:[0,2]},{model:'z',total_tokens:[0,0]}]},2);
  assert.deepEqual(s.map(x=>[x.model,x.total]),[['a',10],['c',2],['Other',1]]);
  assert.equal(firstUsedIndex([{total_tokens:0},{total_tokens:0},{total_tokens:3}]),2);
+});
+test('remaining is interpolated inside a cycle, switches at reset and is unknown after an unobserved reset',()=>{
+ const pts=[{t:0,p:100,cycle:1,reset:10*HOUR},{t:2*HOUR,p:80,cycle:1,reset:10*HOUR},{t:10*HOUR+60000,p:100,cycle:2,reset:20*HOUR}];
+ assert.equal(remainingAt(pts,HOUR),90);
+ assert.equal(remainingAt(pts,5*HOUR),80);
+ assert.equal(remainingAt(pts,-1),null);
+ assert.equal(remainingAt([{t:0,p:40,cycle:1,reset:HOUR}],2*HOUR),null);
+ assert.equal(remainingAt([{t:0,p:40,cycle:1,reset:HOUR}],HOUR/2),40);
+});
+test('tokens per point use the latest cycle with real use and fall back to the plan',()=>{
+ const h={cycles:[{id:2,effective_started_at:iso(now),transitions:[{percentage_points:5}],usage:{total_tokens:1}},{id:1,effective_started_at:iso(now-HOUR),transitions:[{percentage_points:50}],usage:{total_tokens:5000}}]};
+ assert.equal(tokensPerPoint(h),100);
+ const s=pointScales([{id:'a',provider:'claude',plan:'max',histories:{weekly:h}},{id:'b',provider:'claude',plan:'max',histories:{}}],'weekly');
+ assert.deepEqual(s.get('b'),{value:100,source:'plan'});
+});
+test('pooled pace counts use across accounts and leaves out time when everything was empty',()=>{
+ const a={points:[{t:now-4*HOUR,p:0,cycle:1,reset:null},{t:now-2*HOUR,p:0,cycle:1,reset:null}]};
+ const b={points:[{t:now-2*HOUR,p:100,cycle:1,reset:null},{t:now,p:50,cycle:1,reset:null}]};
+ const r=pooledRate([a,b],now,4*HOUR,()=>1);
+ assert.ok(Math.abs(r.perHour-25)<1);assert.ok(Math.abs(r.ableHours-2)<0.1);
+});
+test('the expected stack drains the first reset, refills at resets and repeats each window',()=>{
+ const accounts=[{remaining:50,stale:false,reset:now+10*HOUR,scale:1},{remaining:0,stale:false,reset:now+2*HOUR,scale:1}];
+ const f=forecastStack(accounts,now,now+30*HOUR,10,24*3600);
+ const at=t=>f.filter(p=>p.t===t).at(-1).values;
+ assert.deepEqual(at(now+2*HOUR),[30,100]);
+ // the first account (earlier reset) empties at +5h, then the second drains until the first refills at +10h
+ assert.deepEqual(at(now+5*HOUR),[0,100]);
+ assert.deepEqual(at(now+10*HOUR),[100,50]);
+ assert.ok(f.some(p=>p.reset&&p.t===now+26*HOUR));
+});
+test('the observed stack sums every account in its unit',()=>{
+ const a={points:[{t:now-HOUR,p:50,cycle:1,reset:null}],remaining:40,stale:false,scale:2};
+ const b={points:[{t:now-HOUR,p:10,cycle:1,reset:null}],remaining:null,stale:true,scale:10};
+ const s=stackHistory([a,b],now-HOUR,now,4);
+ assert.deepEqual(s[0].values,[100,100]);assert.deepEqual(s.at(-1).values,[80,100]);
 });
