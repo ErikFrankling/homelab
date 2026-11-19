@@ -1,7 +1,11 @@
 // Quota percentages are provider observations, not interchangeable token budgets.
-export const HOUR = 3600000;
+export const HOUR = 3600000, DAY = 24 * HOUR;
+// Limits are identified by window length, not by Keeper's primary/secondary slot:
+// Codex Pro reports its weekly limit in the "primary" slot.
+export const WINDOWS = {short: 18000, weekly: 604800};
 export const time = value => { const n = Date.parse(value); return Number.isFinite(n) ? n : null; };
 export const percent = value => typeof value === 'number' && Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null;
+export function windowKind(seconds) { return Object.keys(WINDOWS).find(k => WINDOWS[k] === seconds) ?? null; }
 export function observations(history) {
   return (history?.cycles || []).flatMap(c => {
     const points = [{t:time(c.first_observed_at),p:percent(c.first_remaining_percent)}];
@@ -29,12 +33,16 @@ export function burnRate(history, now, lookback=HOUR) {
   if(elapsed<5*60000) return null;
   return {perHour:loss/elapsed*HOUR,minutes:elapsed/60000,loss};
 }
-export function accountState(account, role, now, lookback=HOUR) {
-  const history=account.histories?.[role];
-  const seconds=role==='primary'?18000:604800;
-  const rows=account.cache?.quota?.quota || [];
-  const key=account.provider==='claude'?(role==='primary'?'five_hour':'seven_day'):(role==='primary'?'rate_limit.primary_window':'rate_limit.secondary_window');
-  const row=rows.find(r=>r.key===key)||rows.find(r=>!r.key&&r.window?.seconds===seconds&&(!r.scope||r.scope==='window'));
+// The all-model limit row from the live cache. Claude also reports model-scoped
+// (Fable) and oauth-app rows with the same window length; those never count.
+export function limitRow(account, kind) {
+  const rows=account.cache?.quota?.quota || [], seconds=WINDOWS[kind];
+  if(account.provider==='claude') return rows.find(r=>r.key===(kind==='short'?'five_hour':'seven_day')) || null;
+  return rows.find(r=>r.window?.seconds===seconds&&(!r.scope||r.scope==='window')) || null;
+}
+export function accountState(account, kind, now, lookback=HOUR) {
+  const history=account.histories?.[kind];
+  const row=limitRow(account,kind);
   const points=observations(history),last=points.at(-1);
   const cacheTime=time(account.cache?.refreshed_at);
   const cacheP=row ? percent(typeof row.usedPercent==='number'?100-row.usedPercent:
@@ -49,25 +57,21 @@ export function accountState(account, role, now, lookback=HOUR) {
   return {...account,history,points,remaining,observed,reset,stale,rate,exhaustedAt,
     beforeReset:exhaustedAt!==null&&reset!==null&&exhaustedAt<reset};
 }
-export function valueAt(points,t) {
-  let previous=null,next=null;
-  for(const p of points) {if(p.t>t){next=p;break;}previous=p;}
-  const plateau=previous&&next&&previous.cycle!==undefined&&previous.cycle===next.cycle&&previous.p===next.p;
-  // Missing history is not zero. Do not bridge a cycle boundary or long gap.
-  if(!previous||(t-previous.t>2*HOUR&&!plateau)||(previous.reset!==null&&t>=previous.reset))return null;
-  return previous.p;
-}
-export function historicalPool(accounts,start,end) {
-  if(!accounts.length)return [];
-  const breaks=accounts.flatMap(a=>a.points.flatMap((p,i)=>{
-    const next=a.points[i+1];
-    if(!next)return [];
-    if(p.cycle!==undefined&&p.cycle===next.cycle&&p.p===next.p)return [];
-    const expiry=Math.min(p.t+2*HOUR,p.reset??Infinity);
-    return next.t>expiry?[expiry+1]:[];
-  }));
-  const times=[...new Set([start,end,...breaks,...accounts.flatMap(a=>a.points.map(p=>p.t))].filter(t=>t>=start&&t<=end))].sort((a,b)=>a-b);
-  return times.map(t=>{const values=accounts.map(a=>valueAt(a.points,t));return {t,value:values.every(v=>v!==null)?values.reduce((s,v)=>s+v,0)/100:null};});
+// One account's observed line, broken (null) only at a new quota cycle. Inside a
+// cycle the reading only falls, so joining two readings never invents usage.
+export function accountSeries(points, start, end) {
+  const out=[];
+  let before=null;
+  for(const p of points) {
+    if(p.t<start){before=p;continue;}
+    if(p.t>end)break;
+    const prev=out.length?out.at(-1):before;
+    if(prev&&prev.value!==null&&prev.cycle!==p.cycle)out.push({t:p.t,value:null});
+    else if(!out.length&&before&&before.cycle===p.cycle)out.push({t:start,value:before.p,p:before.p,cycle:before.cycle});
+    out.push({t:p.t,value:p.p,p:p.p,cycle:p.cycle});
+  }
+  if(!out.length&&before&&(before.reset===null||before.reset>start))out.push({t:start,value:before.p,p:before.p,cycle:before.cycle});
+  return out;
 }
 export function forecastAccount(a,now,end,multiplier=1) {
   if(a.stale||a.remaining===null)return [];
@@ -89,17 +93,30 @@ export function forecastAccount(a,now,end,multiplier=1) {
   }
   return points;
 }
-export function forecastPool(accounts,now,end,multiplier=1) {
-  if(accounts.some(a=>a.stale||a.remaining===null||!a.rate))return [];
-  const series=accounts.map(a=>forecastAccount(a,now,end,multiplier));
-  const times=[...new Set(series.flatMap(s=>s.map(p=>p.t)))].sort((a,b)=>a-b);
-  function value(s,t,after) {
-    const exact=s.filter(p=>p.t===t);if(exact.length)return (after?exact.at(-1):exact[0]).value;
-    const i=s.findIndex(p=>p.t>t);if(i<0)return s.at(-1).value;
-    const a=s[i-1],b=s[i];return a.value+(b.value-a.value)*(t-a.t)/(b.t-a.t);
-  }
-  return times.flatMap(t=>{
-    const before=series.reduce((n,s)=>n+value(s,t,false),0),after=series.reduce((n,s)=>n+value(s,t,true),0);
-    return before===after?[{t,value:before}]:[{t,value:before},{t,value:after,reset:true}];
-  });
+// Each quota cycle as "how much of one allowance went, and how many tokens it took".
+export function cycleSummaries(history) {
+  return (history?.cycles || []).map(c=>{
+    const used=(c.transitions||[]).reduce((n,x)=>n+(typeof x.percentage_points==='number'?x.percentage_points:0),0);
+    const tokens=c.usage?.total_tokens??null;
+    return {id:c.id,status:c.status,start:time(c.effective_started_at)??time(c.first_observed_at),
+      end:time(c.effective_ended_at)??time(c.reset_at),firstSeen:time(c.first_observed_at),lastSeen:time(c.last_observed_at),
+      remaining:percent(c.last_remaining_percent),used,tokens,requests:c.usage?.requests??null,
+      perPoint:used>0&&tokens!==null?tokens/used:null};
+  }).filter(c=>c.start!==null).sort((a,b)=>b.start-a.start);
+}
+// Keeper masks credential keys as the first 3 and last 6 characters.
+export const maskedMatch = (masked, id) => typeof masked==='string'&&typeof id==='string'&&masked.length>9&&id.startsWith(masked.slice(0,3))&&id.endsWith(masked.slice(-6));
+// Stack the busiest models; everything else is "Other".
+export function modelStacks(modelUsage, top=5) {
+  const series=(modelUsage?.series||[]).map(s=>({model:s.model,values:(s.total_tokens||[]).map(v=>v||0)}));
+  series.forEach(s=>{s.total=s.values.reduce((a,b)=>a+b,0);});
+  series.sort((a,b)=>b.total-a.total);
+  const kept=series.filter(s=>s.total>0).slice(0,top),rest=series.slice(kept.length).filter(s=>s.total>0);
+  if(rest.length)kept.push({model:'Other',values:(modelUsage.buckets||[]).map((_,i)=>rest.reduce((n,s)=>n+(s.values[i]||0),0)),total:rest.reduce((n,s)=>n+s.total,0)});
+  return kept;
+}
+// Drop empty leading buckets so "All time" starts at the first recorded day.
+export function firstUsedIndex(tokenUsage) {
+  const i=(tokenUsage||[]).findIndex(b=>(b.total_tokens||0)>0||(b.requests||0)>0);
+  return i<0?0:i;
 }

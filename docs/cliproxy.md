@@ -82,28 +82,39 @@ with reset times. It drains the proxy's usage queue (needs
 so it is the only consumer of that queue. Authentication is disabled on the
 private-network dashboard; no separate login.
 
-## Remaining allowance and forecast
+## Usage, allowance and forecast
 
-https://cliproxy-usage.erikfrankling.duckdns.org/runway/ is the quota runway view,
-also linked as **Quota runway** on Homepage. It adds the missing pooled
-remaining-capacity graph: observed drops, scheduled reset jumps, projected burn,
-per-account status, and an adjustable consumption multiplier. Keeper remains
-available at the original root for costs, requests and token charts.
+https://cliproxy-usage.erikfrankling.duckdns.org/runway/ is our own usage view,
+linked as **Quota runway** on Homepage. One range control (24 hours, 7 days,
+30 days, all time; kept in the URL hash and localStorage) drives every panel:
+
+- headline numbers: tokens, requests, average and busiest day or hour, and the
+  weekly allowance left per provider in accounts' worth;
+- tokens per hour or day stacked by model, or as a running total, with the
+  range split by account and by model (`/usage/analysis`; "all time" asks for
+  Keeper's longest custom range, 365 days, and trims empty leading days);
+- remaining allowance with one line per account, its forecast at the measured
+  pace times a multiplier, and the next provider reset;
+- weekly cycles per account: points used, tokens, and tokens per 1%.
+
+Keeper keeps 30 days of quota history, so the allowance chart and cycles stop
+there; token history goes back to the first recorded day. Keeper itself remains
+at the original root.
 
 The view is static HTML/CSS/ES modules under `config/quota-runway/`, served by
 upstream nginx as a small sidecar in the Keeper pod. It reads Keeper's existing
-same-origin `/api/v1/usage/identities`, `/quota/cache` and `/quota/history/:id`
+same-origin `/api/v1/usage/identities`, `/usage/analysis`, `/quota/cache` and `/quota/history/:id`
 APIs with `x-cpa-usage-keeper-request: fetch`. It never reads proxy credentials,
 creates another queue consumer, or fabricates missing historical observations.
 All routes remain LAN/Tailscale-only. No image build or additional database.
 
-The default graph compares Claude and Codex on one percentage axis with separate
-lines per provider/plan. Each line averages matching account allowances; it does
-not claim that different subscriptions have equal token budgets. The selector
-filters chart lines only: all accounts remain visible underneath, including
-disabled accounts. Cards list every normalized quota row (including model-scoped
-Fable), provider reset times, inactive/restricted states, and explicit missing
-readings. Main graph windows use exact quota keys, never the first weekly row.
+Limits are matched by window length (5 hours, 7 days), not by Keeper's
+primary/secondary slot: Codex Pro reports its weekly limit as "primary". Claude
+uses the exact `five_hour`/`seven_day` keys so Fable and oauth-app rows never
+count. A line breaks only at a new quota cycle; inside a cycle the reading only
+falls. An account without history never hides the others (the old pooled average
+did, and showed less than a day). The Show selector filters chart lines only;
+account cards list every account, including disabled ones, with every quota row.
 
 When a cache is empty, failed, older than five minutes, or past reset, the page
 POSTs `/quota/refresh` and polls `/quota/refresh/:auth_index` to completion
@@ -124,8 +135,8 @@ states are explicit.
 Rate calculation uses observed percentage-point drops inside cycles, excluding
 resets, intervals blocked at zero, and gaps longer than two hours. At least five
 minutes of usable observations are required. Only the next provider reset is
-projected. Missing rates show current dots and reset markers without invented
-burn. Old readings (>15 minutes), missing data and elapsed resets are marked stale.
+projected. Missing rates show the current dot and a flat dashed line to the next reset,
+without invented burn. Old readings (>15 minutes), missing data and elapsed resets are marked stale.
 
 ### Claude scoped limits compatibility
 

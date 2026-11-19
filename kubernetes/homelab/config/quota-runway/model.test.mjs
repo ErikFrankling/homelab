@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {HOUR,burnRate,observations,accountState,forecastPool,historicalPool} from './model.mjs';
+import {HOUR,burnRate,observations,accountState,accountSeries,forecastAccount,cycleSummaries,maskedMatch,modelStacks,firstUsedIndex,limitRow} from './model.mjs';
 const now=Date.parse('2026-11-07T12:00:00Z'),iso=t=>new Date(t).toISOString();
 function history(start,end,from,to,reset=now+HOUR,id=1){return {cycles:[{id,first_observed_at:iso(start),last_observed_at:iso(end),first_remaining_percent:from,last_remaining_percent:to,reset_at:iso(reset),transitions:[{from_remaining_percent:from,to_remaining_percent:to,interval_started_at:iso(start),interval_ended_at:iso(end)}]}]};}
 test('rate measures percentage points per hour and does not count reset gains',()=>{
@@ -14,51 +14,65 @@ test('depleted time is censored and sparse histories cannot claim a rate',()=>{
  assert.equal(burnRate(history(now-60000,now,50,45),now),null);
  assert.equal(burnRate(history(now-3*HOUR,now,50,45),now,4*HOUR),null);
 });
-test('stale quota and passed reset are not presented as current or forecast',()=>{
- const a={histories:{primary:history(now-HOUR,now,90,60,now-1)}};
- assert.equal(accountState(a,'primary',now).stale,true);
- assert.equal(accountState({histories:{primary:history(now-HOUR,now-HOUR/2,90,60)}},'primary',now).stale,true);
- assert.equal(accountState({histories:{}},'primary',now).remaining,null);
+test('stale quota and passed reset are not presented as current',()=>{
+ assert.equal(accountState({histories:{short:history(now-HOUR,now,90,60,now-1)}},'short',now).stale,true);
+ assert.equal(accountState({histories:{short:history(now-HOUR,now-HOUR/2,90,60)}},'short',now).stale,true);
+ assert.equal(accountState({histories:{}},'short',now).remaining,null);
 });
-test('pool forecast jumps at staggered resets and changes with pace',()=>{
- const a={remaining:20,stale:false,rate:{perHour:20},reset:now+HOUR};
- const b={remaining:40,stale:false,rate:{perHour:10},reset:now+2*HOUR};
- const series=forecastPool([a,b],now,now+3*HOUR);
- assert.deepEqual(series.filter(p=>p.t===now+HOUR).map(p=>Number(p.value.toFixed(8))),[.3,1.3]);
- assert.ok(Math.abs(series.at(-1).value-1.5)<1e-8);
- assert.ok(forecastPool([a,b],now,now+3*HOUR,2).at(-1).value<series.at(-1).value);
- assert.deepEqual(forecastPool([a,{...b,rate:null}],now,now+3*HOUR),[]);
+test('cached quota uses usedPercent and a missing 5h limit stays unknown',()=>{
+ const a={provider:'codex',cache:{refreshed_at:iso(now),quota:{quota:[{key:'rate_limit.secondary_window',usedPercent:16,window:{seconds:604800},resetAt:iso(now+HOUR)}]}},histories:{}};
+ assert.equal(accountState(a,'weekly',now).remaining,84);
+ assert.equal(accountState(a,'short',now).remaining,null);
 });
-test('history has genuine gaps and account membership is never silently filled with zero',()=>{
- const h=history(now-HOUR,now,90,60);const a={points:observations(h)};
- assert.equal(historicalPool([a,{points:[]}],now-HOUR,now).every(p=>p.value===null),true);
- assert.equal(historicalPool([a],now-2*HOUR,now)[0].value,null);
+test('Codex Pro weekly limit in the primary slot is found by window length',()=>{
+ const a={provider:'codex',cache:{refreshed_at:iso(now),quota:{quota:[{key:'rate_limit.primary_window',usedPercent:100,window:{seconds:604800},resetAt:iso(now+HOUR)}]}},histories:{}};
+ assert.equal(accountState(a,'weekly',now).remaining,0);
+ assert.equal(limitRow(a,'short'),null);
 });
-test('cached quota uses usedPercent correctly and a missing 5h limit stays unknown',()=>{
- const a={cache:{refreshed_at:iso(now),quota:{quota:[{usedPercent:16,window:{seconds:604800},resetAt:iso(now+HOUR)}]}},histories:{}};
- assert.equal(accountState(a,'secondary',now).remaining,84);
- assert.equal(accountState(a,'primary',now).remaining,null);
-});
-
-test('a long gap between two valid observations breaks the drawn history line',()=>{
- const a={points:[{t:now-4*HOUR,p:90,reset:now+HOUR},{t:now,p:50,reset:now+HOUR}]};
- const values=historicalPool([a],now-4*HOUR,now);
- assert.ok(values.some(p=>p.value===null));
- assert.equal(values[0].value,.9);assert.equal(values.at(-1).value,.5);
-});
-
-test('unchanged observations in one reset cycle keep a known depleted plateau',()=>{
- const a={points:[{t:now-4*HOUR,p:0,reset:now+HOUR,cycle:1},{t:now,p:0,reset:now+HOUR,cycle:1}]};
- assert.ok(historicalPool([a],now-4*HOUR,now).every(p=>p.value===0));
-});
-
 test('model-specific weekly rows never masquerade as the all-model allowance',()=>{
  const a={provider:'claude',histories:{},cache:{refreshed_at:iso(now),quota:{quota:[
   {key:'limits.weekly_scoped.Fable',scope:'model',usedPercent:0,window:{seconds:604800}},
   {key:'seven_day_oauth_apps',scope:'window',usedPercent:20,window:{seconds:604800}},
   {key:'seven_day',scope:'window',usedPercent:100,window:{seconds:604800}}
  ]}}};
- assert.equal(accountState(a,'secondary',now).remaining,0);
+ assert.equal(accountState(a,'weekly',now).remaining,0);
  a.cache.quota.quota.pop();
- assert.equal(accountState(a,'secondary',now).remaining,null);
+ assert.equal(accountState(a,'weekly',now).remaining,null);
+});
+test('an account line breaks at a new cycle and keeps a flat plateau connected',()=>{
+ const pts=[{t:now-10*HOUR,p:40,cycle:1,reset:now-5*HOUR},{t:now-6*HOUR,p:40,cycle:1,reset:now-5*HOUR},{t:now-5*HOUR,p:100,cycle:2,reset:now+HOUR},{t:now,p:80,cycle:2,reset:now+HOUR}];
+ const s=accountSeries(pts,now-12*HOUR,now);
+ assert.deepEqual(s.map(p=>p.value),[40,40,null,100,80]);
+});
+test('a line entering the window starts at the window edge from the earlier reading',()=>{
+ const pts=[{t:now-10*HOUR,p:90,cycle:1,reset:now+HOUR},{t:now-HOUR,p:89,cycle:1,reset:now+HOUR}];
+ const s=accountSeries(pts,now-2*HOUR,now);
+ assert.deepEqual(s.map(p=>[p.t,p.value]),[[now-2*HOUR,90],[now-HOUR,89]]);
+});
+test('one account missing history never hides the other accounts',()=>{
+ const a=accountSeries(observations(history(now-5*HOUR,now,90,60)),now-6*HOUR,now);
+ assert.ok(a.some(p=>p.value!==null));
+ assert.deepEqual(accountSeries([],now-6*HOUR,now),[]);
+});
+test('forecast refills at the next reset and changes with pace',()=>{
+ const a={remaining:20,stale:false,rate:{perHour:20},reset:now+2*HOUR};
+ const f=forecastAccount(a,now,now+3*HOUR);
+ assert.equal(f.find(p=>p.reset).value,1);
+ assert.ok(forecastAccount(a,now,now+3*HOUR,2).at(-1).value<f.at(-1).value);
+ assert.deepEqual(forecastAccount({...a,stale:true},now,now+HOUR),[]);
+});
+test('weekly cycles report used points, tokens and tokens per point',()=>{
+ const c=cycleSummaries({cycles:[{id:2,status:'current',effective_started_at:iso(now),effective_ended_at:iso(now+7*24*HOUR),last_remaining_percent:60,usage:{total_tokens:4000,requests:3},transitions:[{percentage_points:30},{percentage_points:10}]},
+  {id:1,status:'completed',effective_started_at:iso(now-7*24*HOUR),effective_ended_at:iso(now),last_remaining_percent:0,usage:{total_tokens:0},transitions:[]}]});
+ assert.equal(c[0].id,2);assert.equal(c[0].used,40);assert.equal(c[0].perPoint,100);
+ assert.equal(c[1].perPoint,null);
+});
+test('masked credential keys match their identity',()=>{
+ assert.ok(maskedMatch('fc2*********cbd22f','fc2d635577cbd22f'));
+ assert.ok(!maskedMatch('fc2*********cbd22f','507648a22452c814'));
+});
+test('model stacks keep the busiest models and fold the rest into Other',()=>{
+ const s=modelStacks({buckets:[1,2],series:[{model:'a',total_tokens:[5,5]},{model:'b',total_tokens:[1,0]},{model:'c',total_tokens:[0,2]},{model:'z',total_tokens:[0,0]}]},2);
+ assert.deepEqual(s.map(x=>[x.model,x.total]),[['a',10],['c',2],['Other',1]]);
+ assert.equal(firstUsedIndex([{total_tokens:0},{total_tokens:0},{total_tokens:3}]),2);
 });

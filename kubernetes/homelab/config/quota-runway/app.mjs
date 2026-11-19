@@ -1,12 +1,21 @@
-import {HOUR,accountState,historicalPool,forecastPool,time,percent} from './model.mjs';
+import {HOUR,DAY,WINDOWS,windowKind,accountState,accountSeries,forecastAccount,cycleSummaries,maskedMatch,modelStacks,firstUsedIndex,time,percent} from './model.mjs';
 const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
-const colors=['#edac87','#8faeff','#a5d8a6','#d7a4e9','#e7cf87'];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=t=>t?new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(t):'Not reported';
+const fmtDay=t=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(t);
+const fmtWeekday=t=>new Intl.DateTimeFormat(undefined,{weekday:'short',month:'short',day:'numeric'}).format(t);
+const fmtHour=t=>new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(t);
 const num=n=>Number(n.toFixed(1)).toLocaleString();
-const groupId=a=>`${a.provider}|${a.plan}${a.plan==='Unknown plan'?'|'+a.id:''}`;
-const groupName=g=>{const [p,plan]=g.split('|');return `${p==='claude'?'Claude':'Codex'} · ${plan}`;};
-let data=[],loading=false,role='secondary',retryTimer,failures=0,resetBusy=false;
+const tok=n=>{if(n===null||n===undefined||!Number.isFinite(n))return '—';const a=Math.abs(n);return a>=1e9?(n/1e9).toFixed(a>=1e11?0:a>=1e10?1:2)+'B':a>=1e6?(n/1e6).toFixed(a>=1e8?0:a>=1e7?1:2)+'M':a>=1e3?(n/1e3).toFixed(a>=1e5?0:1)+'K':String(Math.round(n));};
+const reqs=n=>`${(n||0).toLocaleString()} request${n===1?'':'s'}`;
+const localDate=t=>{const d=new Date(t);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const providerName=p=>p==='claude'?'Claude':p==='codex'?'Codex':p==='xai'?'xAI':p||'Other';
+// Data colors only. Claude accounts get warm shades, Codex accounts cool ones.
+const palette={claude:['#f0a77c','#e8c48a','#d9826b','#f3d2b3','#c99a6c'],codex:['#8faeff','#7fd6e8','#b3a3ff','#6f8fd6','#a9c7ff']};
+const modelColors=['#8faeff','#f0a77c','#a5d8a6','#d7a4e9','#e7cf87','#7f8a96'];
+const RANGES={'24h':{label:'24 hours',ms:DAY},'7d':{label:'7 days',ms:7*DAY},'30d':{label:'30 days',ms:30*DAY},all:{label:'all time',ms:null}};
+let range=RANGES[location.hash.slice(1)]?location.hash.slice(1):RANGES[localStorage.getItem('runway-range')]?localStorage.getItem('runway-range'):'7d';
+let others=[],data=[],spend=null,spendError=null,loading=false,kind='weekly',mode='bars',retryTimer,failures=0,resetBusy=false,spendSeq=0;
 const attempts=new Map(),messages=new Map();
 async function api(path,body){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
@@ -35,36 +44,46 @@ function needsRefresh(cache){
  const now=Date.now(),observed=time(cache?.refreshed_at);
  return !observed||now-observed>5*60000||cache.status==='failed'||!cache.quota?.quota?.length||cache.quota.quota.some(r=>time(r.resetAt)!==null&&time(r.resetAt)<=now);
 }
+// Keeper's histories are per slot (primary/secondary); file them by window length.
+async function loadHistories(id){
+ const out={},base='quota/history/'+encodeURIComponent(id);
+ const initial=await api(base);
+ const put=h=>{const k=windowKind(h?.selected_window?.window_seconds);if(k)out[k]=h;};
+ put(initial);
+ await Promise.all((initial.windows||[]).filter(w=>w.window_role!==initial.selected_window?.window_role).map(async w=>put(await api(base+'?window_role='+encodeURIComponent(w.window_role)))));
+ return out;
+}
+const accountFrom=(a,index,cache,old)=>({id:a.identity,name:a.alias||a.displayName||a.name||`${a.provider} ${index+1}`,provider:a.provider||a.type,disabled:a.disabled,plan:cache?.quota?.subscription?.plan||old?.plan||'Unknown plan',cache:cache?.quota?cache:old?.cache,histories:{...old?.histories},errors:[]});
 async function load(forceIds=null){
  if(loading||resetBusy)return;
  clearTimeout(retryTimer);loading=true;$('refresh').disabled=true;$('updated').textContent='Checking accounts…';
+ const spendDone=loadSpend();
  try{
-  const identities=(await api('usage/identities')).identities.filter(a=>!a.is_deleted&&['claude','codex'].includes(a.provider||a.type));
+  const all=(await api('usage/identities')).identities.filter(a=>!a.is_deleted);
+  others=all.filter(a=>!['claude','codex'].includes(a.provider||a.type)).map(a=>({id:a.identity,provider:a.provider||a.type,disabled:a.disabled}));
+  const identities=all.filter(a=>['claude','codex'].includes(a.provider||a.type));
   const ids=identities.map(a=>a.identity);
   let cached=ids.length?await api('quota/cache',{auth_indexes:ids}):{items:[]};
   const existing=new Map(data.map(a=>[a.id,a]));
-  data=identities.map((a,index)=>{
-   const cache=cached.items?.find(c=>c.auth_index===a.identity),old=existing.get(a.identity);
-   return {id:a.identity,name:a.alias||a.displayName||a.name||`${a.provider} ${index+1}`,provider:a.provider||a.type,disabled:a.disabled,plan:cache?.quota?.subscription?.plan||old?.plan||'Unknown plan',cache:cache?.quota?cache:old?.cache,histories:old?.histories||{},errors:[]};
-  });renderAccounts();
+  data=identities.map((a,i)=>accountFrom(a,i,cached.items?.find(c=>c.auth_index===a.identity),existing.get(a.identity)));renderAccounts();
   const refreshIds=forceIds===true?ids:forceIds||identities.filter(a=>!a.disabled&&needsRefresh(cached.items?.find(c=>c.auth_index===a.identity))&&Date.now()-(attempts.get(a.identity)||0)>60000).map(a=>a.identity);
   if(refreshIds.length){$('updated').textContent=`Fetching fresh limits for ${refreshIds.length} account(s)…`;try{await refreshAccounts(refreshIds);}catch{for(const id of refreshIds)messages.set(id,'Provider refresh failed. Will retry automatically.');}cached=await api('quota/cache',{auth_indexes:ids});}
   const previous=new Map(data.map(a=>[a.id,a]));
-  data=await Promise.all(identities.map(async(a,index)=>{
-   const old=previous.get(a.identity),cache=cached.items?.find(c=>c.auth_index===a.identity);
-   const account={id:a.identity,name:a.alias||a.displayName||a.name||`${a.provider} ${index+1}`,provider:a.provider||a.type,disabled:a.disabled,plan:cache?.quota?.subscription?.plan||old?.plan||'Unknown plan',cache:cache?.quota?cache:old?.cache,histories:{...old?.histories},errors:[]};
-   try{const initial=await api('quota/history/'+encodeURIComponent(a.identity));
-    if(initial.selected_window)account.histories[initial.selected_window.window_role]=initial;
-    await Promise.all((initial.windows||[]).filter(w=>w.window_role!==initial.selected_window?.window_role).map(async w=>{account.histories[w.window_role]=await api('quota/history/'+encodeURIComponent(a.identity)+'?window_role='+encodeURIComponent(w.window_role));}));
-   }catch{account.errors.push('History unavailable; retrying automatically.');}
+  data=await Promise.all(identities.map(async(a,i)=>{
+   const account=accountFrom(a,i,cached.items?.find(c=>c.auth_index===a.identity),previous.get(a.identity));
+   try{account.histories=await loadHistories(a.identity);}catch{account.errors.push('History unavailable; retrying automatically.');}
    return account;
   }));
-  const selected=$('pool').value,groups=[...new Set(data.filter(a=>!a.disabled).map(groupId))];
-  $('pool').innerHTML='<option value="all">Claude + Codex</option>'+groups.map(g=>`<option value="${esc(g)}">${esc(groupName(g))}</option>`).join('');
-  $('pool').value=groups.includes(selected)?selected:'all';
-  $('error').hidden=true;$('updated').textContent='Checked '+fmt(Date.now());failures=0;
+  $('error').hidden=true;$('updated').textContent='Updated '+fmtHour(Date.now());failures=0;
  }catch(e){failures++;$('error').textContent=e.message+'. Retrying automatically. Previous readings keep their original timestamps.';$('error').hidden=false;$('updated').textContent='Connection interrupted';}
- finally{loading=false;$('refresh').disabled=false;render();retryTimer=setTimeout(()=>load(),failures?Math.min(60000,10000*2**failures):60000);}
+ finally{await spendDone;loading=false;$('refresh').disabled=false;render();retryTimer=setTimeout(()=>load(),failures?Math.min(60000,10000*2**failures):60000);}
+}
+async function loadSpend(){
+ const seq=++spendSeq,now=Date.now();
+ // "All time" asks Keeper for its longest supported custom range and trims empty days.
+ const query=range==='all'?`range=custom&start=${localDate(now-364*DAY)}&end=${localDate(now)}`:`range=${range}`;
+ try{const result=await api('usage/analysis?'+query);if(seq!==spendSeq)return;spend={range,result};spendError=null;}
+ catch(e){if(seq!==spendSeq)return;spendError=e.message;}
 }
 function rowCard(row,observed){
  const remaining=percent(typeof row.usedPercent==='number'?100-row.usedPercent:typeof row.remainingFraction==='number'?row.remainingFraction*100:null);
@@ -73,57 +92,129 @@ function rowCard(row,observed){
  return `<div class="limit"><div class="limit-heading"><span>${esc(row.label||row.key)}</span><span class="subtle">${esc(status)}</span></div><strong class="${remaining===0?'warning':''}">${remaining===null?'Not reported':num(remaining)+'%'}${remaining!==null?'<small> left</small>':''}</strong><div class="bar"><span style="width:${remaining??0}%;${row.active===false?'background:var(--muted)':''}"></span></div><p>Resets ${fmt(reset)}</p></div>`;
 }
 function renderAccounts(){
- const now=Date.now();$('coverage').textContent=`${data.length} accounts · all reported limits`;
+ const now=Date.now();$('coverage').textContent=`${data.length} accounts · every reported limit`;
  $('accounts').innerHTML=data.map(a=>{
   const q=a.cache?.quota,rows=[...(q?.quota||[])],observed=time(a.cache?.refreshed_at);
-  for(const [key,label] of (a.provider==='claude'?[['five_hour','5 hours'],['seven_day','7 days']]:[['rate_limit.primary_window','5 hours'],['rate_limit.secondary_window','7 days']]))if(!rows.some(r=>r.key===key))rows.unshift({key,label});
+  for(const k of ['short','weekly'])if(!rows.some(r=>r.window?.seconds===WINDOWS[k]&&r.scope!=='model'))rows.unshift({key:k,label:k==='short'?'5 hours':'Weekly'});
   const grants=q?.claudeResetGrants,credit=q?.rateLimitResetCreditsAvailableCount;
-  return `<article class="account"><div class="account-heading"><div><h3><span class="provider ${a.provider}">${a.provider==='claude'?'Claude':'Codex'}</span>${esc(a.name)}</h3><p>${esc(a.plan)}${a.disabled?' · Disabled':''} · Updated ${fmt(observed)}${observed&&now-observed>15*60000?' · stale':''}</p></div><div class="account-actions"><button data-refresh="${esc(a.id)}" ${loading||resetBusy?'disabled':''}>Refresh limits</button><button data-reset="${esc(a.id)}" ${resetBusy||loading?'disabled':''}>Reset usage${a.provider==='claude'&&grants?' · '+grants.availableCount:a.provider==='codex'&&typeof credit==='number'?' · '+credit:''}</button></div></div><div class="limits">${rows.map(r=>rowCard(r,observed)).join('')}</div>${grants?.grants?.length?`<p class="grant-note">${grants.grants.map(g=>`${esc(g.label)}: ${g.resetsLeft}/${g.resetsTotal} left${g.usableNow?' · available now':' · unavailable now'}`).join('<br>')}</p>`:''}<p class="account-message" role="status">${esc(messages.get(a.id)||a.errors.join(' '))}</p></article>`;
+  return `<article class="account"><div class="account-heading"><div><h3><span class="provider ${a.provider}">${providerName(a.provider)}</span>${esc(a.name)}</h3><p>${esc(a.plan)}${a.disabled?' · Disabled':''} · Updated ${fmt(observed)}${observed&&now-observed>15*60000?' · stale':''}</p></div><div class="account-actions"><button data-refresh="${esc(a.id)}" ${loading||resetBusy?'disabled':''}>Refresh limits</button><button data-reset="${esc(a.id)}" ${resetBusy||loading?'disabled':''}>Reset usage${a.provider==='claude'&&grants?' · '+grants.availableCount:a.provider==='codex'&&typeof credit==='number'?' · '+credit:''}</button></div></div><div class="limits">${rows.map(r=>rowCard(r,observed)).join('')}</div>${grants?.grants?.length?`<p class="grant-note">${grants.grants.map(g=>`${esc(g.label)}: ${g.resetsLeft}/${g.resetsTotal} left${g.usableNow?' · available now':' · unavailable now'}`).join('<br>')}</p>`:''}<p class="account-message" role="status">${esc(messages.get(a.id)||a.errors.join(' '))}</p></article>`;
  }).join('')||'<p class="empty">No accounts loaded yet. Retrying automatically.</p>';
 }
-function render(){
- const now=Date.now(),pace=Number($('pace').value)/100,lookback=Number($('lookback').value)*HOUR;
- $('pace-value').textContent=`at ${pace}× the pace`;
- const accounts=data.filter(a=>!a.disabled&&($('pool').value==='all'||groupId(a)===$('pool').value));
- const groups=[...new Set(accounts.map(groupId))].map((id,i)=>({id,name:groupName(id),color:colors[i%colors.length],accounts:accounts.filter(a=>groupId(a)===id).map(a=>accountState(a,role,now,lookback))}));
- $('stats').innerHTML=groups.map(g=>{
-  const known=g.accounts.filter(a=>!a.stale&&a.remaining!==null),total=known.reduce((n,a)=>n+a.remaining,0),reset=known.map(a=>a.reset).filter(t=>t>now).sort((a,b)=>a-b)[0];
-  return `<article class="stat" style="--series:${g.color}"><small>${esc(g.name)}</small><strong>${known.length?num(total/known.length)+'%':'—'}<span> remaining</span></strong><p>${known.length}/${g.accounts.length} current readings${known.length!==g.accounts.length?' · incomplete':''}</p><p>Next reset ${fmt(reset)}</p></article>`;
- }).join('');
- $('chart-note').textContent=`${role==='primary'?'5-hour':'7-day'} limits · percentage remaining per provider and plan`;
- $('method').textContent='Solid: observed. Dashed: estimated at the selected pace. Each line averages accounts on the same plan; Claude and Codex have different token budgets. Gaps mean missing data. Other limits can still block usage.';
- $('legend').innerHTML=groups.map(g=>`<span><i style="border-color:${g.color}"></i>${esc(g.name)}</span>`).join('');
- draw(groups,now-Number($('past').value)*HOUR,now,now+Number($('future').value)*HOUR,pace);
- renderAccounts();
+// The selected token range, trimmed to recorded days for "All time".
+function spendView(){
+ if(!spend||spend.range!==range)return null;
+ const r=spend.result,usage=r.token_usage||[],i0=range==='all'?firstUsedIndex(usage):0;
+ const buckets=usage.slice(i0).map(b=>({...b,t:time(b.bucket)}));
+ const mu=r.model_usage||{buckets:[],series:[]};
+ const stacks=modelStacks({buckets:(mu.buckets||[]).slice(i0),series:(mu.series||[]).map(s=>({...s,total_tokens:(s.total_tokens||[]).slice(i0)}))});
+ const hourly=r.granularity==='hourly';
+ return {buckets,stacks,hourly,step:hourly?HOUR:DAY,credentials:r.credentials_composition||[],models:r.model_composition||[]};
+}
+function weeklyGroups(now){
+ return ['claude','codex'].map(p=>{
+  const accounts=data.filter(a=>!a.disabled&&a.provider===p).map(a=>accountState(a,'weekly',now));
+  const known=accounts.filter(a=>!a.stale&&a.remaining!==null);
+  return {p,accounts,known,left:known.reduce((n,a)=>n+a.remaining,0)/100,next:known.map(a=>a.reset).filter(t=>t>now).sort((a,b)=>a-b)[0]};
+ }).filter(g=>g.accounts.length);
+}
+function renderKpis(view,now){
+ const cards=[];
+ if(view){
+  const b=view.buckets,total=b.reduce((n,x)=>n+(x.total_tokens||0),0),requests=b.reduce((n,x)=>n+(x.requests||0),0),output=b.reduce((n,x)=>n+(x.output_tokens||0),0),cache=b.reduce((n,x)=>n+(x.cache_read_tokens||0),0);
+  const used=b.filter(x=>(x.total_tokens||0)>0),peak=b.reduce((m,x)=>!m||(x.total_tokens||0)>(m.total_tokens||0)?x:m,null);
+  const unit=view.hourly?'hour':'day',avg=used.length?total/used.length:0;
+  cards.push(`<article class="stat"><small>Tokens · ${esc(range==='all'?'all time':'last '+RANGES[range].label)}</small><strong>${tok(total)}</strong><p>${tok(cache)} cache reads · ${tok(output)} output</p></article>`);
+  cards.push(`<article class="stat"><small>Requests</small><strong>${requests.toLocaleString()}</strong><p>${b.length?`since ${view.hourly?fmt(b[0].t):fmtDay(b[0].t)}`:''}</p></article>`);
+  cards.push(`<article class="stat"><small>Average per active ${unit}</small><strong>${tok(avg)}</strong><p>${used.length} active ${unit}${used.length===1?'':'s'}</p></article>`);
+  cards.push(`<article class="stat"><small>Busiest ${unit}</small><strong>${peak?tok(peak.total_tokens):'—'}</strong><p>${peak?.total_tokens?(view.hourly?fmt(peak.t):fmtWeekday(peak.t)):'No usage yet'}</p></article>`);
+ }else cards.push(`<article class="stat"><small>Tokens</small><strong>…</strong><p>${esc(spendError?spendError+'. Retrying.':'Loading')}</p></article>`);
+ for(const g of weeklyGroups(now)){
+  const color=palette[g.p][0];
+  cards.push(`<article class="stat" style="--series:${color}"><small>${providerName(g.p)} weekly allowance left</small><strong>${g.known.length?num(g.left):'—'}<span> of ${g.accounts.length} account${g.accounts.length===1?'':'s'}</span></strong><p>${g.known.length!==g.accounts.length?`${g.accounts.length-g.known.length} without a current reading · `:''}next reset ${g.next?fmt(g.next):'not reported'}</p></article>`);
+ }
+ $('kpis').innerHTML=cards.join('');
 }
 function node(tag,attrs={},text){const el=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(text!==undefined)el.textContent=text;return el;}
-function draw(groups,start,now,end,pace){
- const svg=$('chart');svg.replaceChildren();$('tooltip').hidden=true;
- const W=Math.max(300,svg.clientWidth||1100),H=350,L=45,R=15,T=30,B=45,x=t=>L+(t-start)/(end-start)*(W-L-R),y=v=>H-B-v/100*(H-T-B);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
- svg.append(node('title',{},'Claude and Codex remaining quota, grouped by plan'));
- for(let v=0;v<=100;v+=25)svg.append(node('line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'#30383f'}),node('text',{x:L-8,y:y(v)+4,'text-anchor':'end'},v+'%'));
- const ticks=W<550?2:4;for(let i=0;i<=ticks;i++)svg.append(node('text',{x:x(start+(end-start)*i/ticks),y:H-15,'text-anchor':i===0?'start':i===ticks?'end':'middle'},fmt(start+(end-start)*i/ticks)));
- svg.append(node('line',{x1:x(now),x2:x(now),y1:T,y2:H-B,stroke:'#a4b1bc','stroke-dasharray':'3 5'}),node('text',{x:x(now)+6,y:18},'NOW'));
- let points=[],hasHistory=false;
- for(const g of groups){
-  const scale=100/g.accounts.length,history=historicalPool(g.accounts,start,now),projection=forecastPool(g.accounts,now,end,pace);
-  for(const [series,dashed,kind] of [[history,false,'Observed'],[projection,true,'Estimate']]){
-   let d='',active=false;
-   for(const p of series){if(p.value===null){active=false;continue;}const value=p.value*scale;d+=`${active?'L':'M'}${x(p.t)},${y(value)} `;active=true;points.push({t:p.t,value,label:g.name,kind});}
-   if(d){svg.append(node('path',{d,fill:'none',stroke:g.color,'stroke-width':2.5,...(dashed?{'stroke-dasharray':'6 5'}:{})}));if(!dashed)hasHistory=true;}
-  }
-  if(g.accounts.every(a=>!a.stale&&a.remaining!==null)){
-   const value=g.accounts.reduce((n,a)=>n+a.remaining,0)/g.accounts.length;
-   svg.append(node('circle',{cx:x(now),cy:y(value),r:4,fill:g.color}));points.push({t:now,value,label:g.name,kind:'Current'});
-  }
-  for(const a of g.accounts.filter(a=>!a.stale&&a.reset>now&&a.reset<end))svg.append(node('line',{x1:x(a.reset),x2:x(a.reset),y1:T,y2:H-B,stroke:g.color,opacity:'.35','stroke-dasharray':'2 6'},null),node('text',{x:x(a.reset)+3,y:T+12,fill:g.color},'↥'));
+function niceMax(v){if(!(v>0))return 1;const e=10**Math.floor(Math.log10(v)),f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e;}
+function renderSpend(view){
+ const svg=$('spend');svg.replaceChildren();$('spend-tip').hidden=true;
+ if(!view){$('spend-note').textContent=spendError?`Could not load token history: ${spendError}. Retrying.`:'Loading token history…';$('spend-legend').innerHTML='';$('by-account').innerHTML='';$('by-model').innerHTML='';return;}
+ const {buckets,stacks,hourly,step}=view,n=buckets.length;
+ $('spend-note').textContent=`${hourly?'Per hour':'Per day'} · split by model${mode==='total'?' · running total':''}`;
+ $('spend-legend').innerHTML=stacks.map((s,i)=>`<span><i class="sw" style="background:${modelColors[i%modelColors.length]}"></i>${esc(s.model)} <b>${tok(s.total)}</b></span>`).join('');
+ const W=Math.max(300,svg.clientWidth||1100),H=W<600?240:300,L=W<600?44:56,R=10,T=14,B=30;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+ if(!n){svg.append(node('text',{x:L,y:T+40},'No usage recorded in this range.'));return;}
+ // Values per bucket per model; running total accumulates each model separately.
+ const values=stacks.map(s=>buckets.map((_,i)=>s.values[i]||0));
+ if(mode==='total')for(const v of values)for(let i=1;i<n;i++)v[i]+=v[i-1];
+ const totals=buckets.map((_,i)=>values.reduce((t,v)=>t+v[i],0));
+ const max=niceMax(Math.max(...totals)),band=(W-L-R)/n,x=i=>L+i*band,y=v=>H-B-v/max*(H-T-B);
+ for(let k=0;k<=4;k++){const v=max*k/4;svg.append(node('line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'#2b3036'}),node('text',{x:L-8,y:y(v)+4,'text-anchor':'end'},tok(v)));}
+ const every=Math.max(1,Math.ceil(n/(W<600?5:hourly?12:10)));
+ for(let i=0;i<n;i+=every)svg.append(node('text',{x:x(i)+band/2,y:H-10,'text-anchor':'middle'},hourly?fmtHour(buckets[i].t):fmtDay(buckets[i].t)));
+ if(mode==='bars'){
+  const gap=Math.min(6,band*.2);
+  for(let i=0;i<n;i++){let base=0;values.forEach((v,s)=>{if(!v[i])return;svg.append(node('rect',{x:x(i)+gap/2,width:Math.max(1,band-gap),y:y(base+v[i]),height:Math.max(.5,y(base)-y(base+v[i])),fill:modelColors[s%modelColors.length]}));base+=v[i];});}
+ }else{
+  let lower=buckets.map(()=>0);
+  values.forEach((v,s)=>{const upper=lower.map((b,i)=>b+v[i]);const pts=upper.map((u,i)=>`${x(i)+band/2},${y(u)}`).concat(lower.map((b,i)=>`${x(i)+band/2},${y(b)}`).reverse());svg.append(node('polygon',{points:pts.join(' '),fill:modelColors[s%modelColors.length],opacity:.9}));lower=upper;});
  }
- if(!hasHistory)svg.append(node('text',{x:L+8,y:T+55},'History will appear as readings arrive. Current readings are shown as dots.'));
+ const hover=node('rect',{x:0,y:T,width:band,height:H-T-B,fill:'#ffffff10',visibility:'hidden'});svg.append(hover);
  svg.onpointermove=e=>{
-  const rect=svg.getBoundingClientRect(),t=start+((e.clientX-rect.left)/rect.width*W-L)/(W-L-R)*(end-start),value=(H-B-(e.clientY-rect.top)/rect.height*H)/(H-T-B)*100;
-  const nearest=points.reduce((best,p)=>{const distance=Math.abs(p.t-t)/(end-start)+Math.abs(p.value-value)/500;return !best||distance<best.distance?{...p,distance}:best;},null);if(!nearest)return;
-  $('tooltip').hidden=false;$('tooltip').textContent=`${nearest.label} · ${nearest.kind}\n${fmt(nearest.t)} · ${num(nearest.value)}% left`;$('tooltip').style.left=Math.min(Math.max(0,e.clientX-rect.left),Math.max(0,rect.width-260))+'px';
+  const rect=svg.getBoundingClientRect(),px=(e.clientX-rect.left)/rect.width*W,i=Math.floor((px-L)/band);
+  if(i<0||i>=n){hover.setAttribute('visibility','hidden');$('spend-tip').hidden=true;return;}
+  hover.setAttribute('x',x(i));hover.setAttribute('visibility','visible');
+  const b=buckets[i],label=hourly?`${fmtWeekday(b.t)} ${fmtHour(b.t)}–${fmtHour(b.t+step)}`:fmtWeekday(b.t);
+  const lines=stacks.map((s,k)=>({m:s.model,v:values[k][i]})).filter(l=>l.v>0).map(l=>`${l.m}: ${tok(l.v)}`);
+  $('spend-tip').textContent=`${label}${mode==='total'?' · running total':''}\n${tok(totals[i])} tokens${mode==='bars'?` · ${(b.requests||0).toLocaleString()} requests`:''}\n${lines.join('\n')}`;
+  $('spend-tip').hidden=false;$('spend-tip').style.left=Math.min(Math.max(0,e.clientX-rect.left+12),Math.max(0,rect.width-240))+'px';
+ };svg.onpointerleave=()=>{hover.setAttribute('visibility','hidden');$('spend-tip').hidden=true;};
+ const accounts=view.credentials.filter(c=>c.total_tokens>0),maxA=Math.max(1,...accounts.map(c=>c.total_tokens));
+ $('by-account').innerHTML=accounts.map(c=>{const a=[...data,...others].find(a=>maskedMatch(c.key,a.id));return `<div class="share"><div><span class="provider ${a?.provider||''}">${esc(providerName(a?.provider))}</span>${esc(c.label)}${a?.disabled?' <span class="subtle">· disabled</span>':''}</div><b>${tok(c.total_tokens)}</b><div class="bar"><span style="width:${c.total_tokens/maxA*100}%"></span></div><small>${reqs(c.requests)} · ${num(c.percent||0)}%</small></div>`;}).join('')||'<p class="empty">No usage in this range.</p>';
+ const models=view.models.filter(m=>m.total_tokens>0),maxM=Math.max(1,...models.map(m=>m.total_tokens));
+ $('by-model').innerHTML=models.map(m=>`<div class="share"><div>${esc(m.label)}</div><b>${tok(m.total_tokens)}</b><div class="bar"><span style="width:${m.total_tokens/maxM*100}%"></span></div><small>${reqs(m.requests)} · ${num(m.percent||0)}%</small></div>`).join('')||'<p class="empty">No usage in this range.</p>';
+}
+function renderAllowance(now){
+ const pace=Number($('pace').value)/100,lookback=Number($('lookback').value)*HOUR,future=Number($('future').value)*HOUR,pool=$('pool').value;
+ $('pace-value').textContent=`at ${pace}× the pace`;
+ const counters={claude:0,codex:0};
+ const accounts=data.filter(a=>!a.disabled&&palette[a.provider]&&(pool==='all'||a.provider===pool)).map(a=>({...accountState(a,kind,now,lookback),color:palette[a.provider][counters[a.provider]++%5]}));
+ const earliest=Math.min(...accounts.flatMap(a=>a.points.map(p=>p.t)),now-DAY);
+ const start=range==='all'?earliest:Math.max(now-RANGES[range].ms,Math.min(earliest,now-HOUR)),end=now+future;
+ $('chart-note').textContent=`${kind==='short'?'5-hour':'Weekly'} limit · remaining per account${range==='all'||range==='30d'?' · Keeper keeps 30 days of quota history':''}`;
+ $('method').textContent='Solid: observed. Dashed: estimated at the selected pace.';
+ $('legend').innerHTML=accounts.map(a=>`<span><i style="border-color:${a.color}"></i>${esc(providerName(a.provider))} · ${esc(a.name)} <b class="${a.remaining===0?'warning':''}">${a.remaining===null||a.stale?'no current reading':num(a.remaining)+'%'}</b></span>`).join('')||'<span>No enabled accounts with this limit.</span>';
+ const svg=$('chart');svg.replaceChildren();$('tooltip').hidden=true;
+ const W=Math.max(300,svg.clientWidth||1100),H=W<600?260:330,L=40,R=12,T=24,B=30,x=t=>L+(t-start)/(end-start)*(W-L-R),y=v=>H-B-v/100*(H-T-B);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+ for(let v=0;v<=100;v+=25)svg.append(node('line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'#2b3036'}),node('text',{x:L-8,y:y(v)+4,'text-anchor':'end'},v+'%'));
+ const span=end-start,ticks=W<600?3:6;
+ for(let i=0;i<=ticks;i++){const t=start+span*i/ticks;svg.append(node('text',{x:x(t),y:H-10,'text-anchor':i===0?'start':i===ticks?'end':'middle'},span>3*DAY?fmtDay(t):fmt(t)));}
+ if(future>0)svg.append(node('rect',{x:x(now),y:T,width:x(end)-x(now),height:H-T-B,fill:'#ffffff06'}));
+ svg.append(node('line',{x1:x(now),x2:x(now),y1:T-6,y2:H-B,stroke:'#a4b1bc','stroke-dasharray':'3 5'}),node('text',{x:x(now)+5,y:T-10},'now'));
+ const points=[];let any=false;
+ for(const a of accounts){
+  const series=accountSeries(a.points,start,now);let d='',on=false;
+  for(const p of series){if(p.value===null){on=false;continue;}d+=`${on?'L':'M'}${x(p.t).toFixed(1)},${y(p.value).toFixed(1)} `;on=true;points.push({t:p.t,value:p.value,a,kind:'Observed'});}
+  if(d){svg.append(node('path',{d,fill:'none',stroke:a.color,'stroke-width':2,'stroke-linejoin':'round'}));any=true;}
+  if(future>0){const f=forecastAccount(a,now,end,pace);if(f.length>1){svg.append(node('path',{d:f.map((p,i)=>`${i?'L':'M'}${x(p.t).toFixed(1)},${y(p.value*100).toFixed(1)}`).join(' '),fill:'none',stroke:a.color,'stroke-width':1.6,'stroke-dasharray':'5 5',opacity:.85}));for(const p of f)points.push({t:p.t,value:p.value*100,a,kind:p.uncertain?'No measured pace; held flat':'Estimate'});}}
+  if(!a.stale&&a.remaining!==null){svg.append(node('circle',{cx:x(now),cy:y(a.remaining),r:4,fill:a.color}));points.push({t:now,value:a.remaining,a,kind:'Now'});}
+ }
+ if(!any)svg.append(node('text',{x:L+8,y:T+40},'No quota history for this range yet.'));
+ svg.onpointermove=e=>{
+  const rect=svg.getBoundingClientRect(),t=start+((e.clientX-rect.left)/rect.width*W-L)/(W-L-R)*span,value=(H-B-(e.clientY-rect.top)/rect.height*H)/(H-T-B)*100;
+  const nearest=points.reduce((best,p)=>{const dist=Math.abs(p.t-t)/span+Math.abs(p.value-value)/400;return !best||dist<best.dist?{...p,dist}:best;},null);if(!nearest)return;
+  $('tooltip').hidden=false;$('tooltip').textContent=`${providerName(nearest.a.provider)} · ${nearest.a.name}\n${nearest.kind} · ${fmt(nearest.t)}\n${num(nearest.value)}% left${nearest.a.reset&&nearest.kind!=='Observed'?`\nResets ${fmt(nearest.a.reset)}`:''}`;$('tooltip').style.left=Math.min(Math.max(0,e.clientX-rect.left+12),Math.max(0,rect.width-260))+'px';
  };svg.onpointerleave=()=>$('tooltip').hidden=true;
+}
+function renderCycles(now){
+ const start=range==='all'?0:now-RANGES[range].ms;
+ const rows=data.flatMap(a=>cycleSummaries(a.histories?.weekly).filter(c=>c.end===null||c.end>=start).map(c=>({a,...c}))).sort((x,y)=>y.start-x.start||x.a.name.localeCompare(y.a.name));
+ $('cycles').innerHTML=rows.length?`<div class="table"><table><thead><tr><th>Account</th><th>Week</th><th>Used</th><th>Tokens</th><th>Tokens per 1%</th></tr></thead><tbody>${rows.map(r=>`<tr><td><span class="provider ${r.a.provider}">${providerName(r.a.provider)}</span>${esc(r.a.name)}${r.a.disabled?' <span class="subtle">· disabled</span>':''}</td><td data-l="Week">${fmt(r.start)} → ${fmt(r.end)}${r.status==='current'?' <span class="badge">current</span>':''}</td><td data-l="Used"><div class="used"><div class="bar"><span style="width:${Math.min(100,r.used)}%"></span></div>${r.used}%${r.status==='current'&&r.remaining!==null?` <span class="subtle">· ${num(r.remaining)}% left</span>`:''}</div></td><td data-l="Tokens">${tok(r.tokens)}</td><td data-l="Tokens per 1%">${r.perPoint?tok(r.perPoint):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">No weekly cycles in this range yet.</p>';
+}
+function render(){
+ const now=Date.now(),view=spendView();
+ document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range===range));
+ renderKpis(view,now);renderSpend(view);renderAllowance(now);renderCycles(now);renderAccounts();
 }
 async function resetAccount(id){
  if(resetBusy||loading)return;resetBusy=true;renderAccounts();const a=data.find(a=>a.id===id);
@@ -151,7 +242,13 @@ async function resetAccount(id){
  finally{resetBusy=false;renderAccounts();await load([id]);}
 }
 $('accounts').onclick=e=>{const b=e.target.closest('button');if(b?.dataset.refresh)load([b.dataset.refresh]);if(b?.dataset.reset)resetAccount(b.dataset.reset);};
-for(const id of ['pool','past','future','lookback'])$(id).onchange=render;
+for(const id of ['pool','future','lookback'])$(id).onchange=render;
 $('pace').oninput=render;$('refresh').onclick=()=>load(true);
-for(const b of document.querySelectorAll('[data-role]'))b.onclick=()=>{role=b.dataset.role;$('future').value=role==='primary'?'12':'168';document.querySelectorAll('[data-role]').forEach(x=>x.classList.toggle('active',x===b));render();};
-window.addEventListener('resize',render);window.addEventListener('online',()=>load());document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});load();
+const setRange=r=>{if(!RANGES[r]||r===range)return;range=r;localStorage.setItem('runway-range',r);history.replaceState(null,'','#'+r);render();loadSpend().then(render);};
+for(const b of document.querySelectorAll('[data-range]'))b.onclick=()=>setRange(b.dataset.range);
+window.addEventListener('hashchange',()=>setRange(location.hash.slice(1)));
+for(const b of document.querySelectorAll('[data-mode]'))b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));render();};
+for(const b of document.querySelectorAll('[data-kind]'))b.onclick=()=>{kind=b.dataset.kind;$('future').value=kind==='short'?'12':'168';document.querySelectorAll('[data-kind]').forEach(x=>x.classList.toggle('active',x===b));render();};
+let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(render,100);});
+window.addEventListener('online',()=>load());document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});
+render();load();
