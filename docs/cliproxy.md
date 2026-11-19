@@ -102,7 +102,7 @@ by-model totals are fetched for the visible days after the window settles:
   Keeper's longest custom range, 365 days, and trims empty leading days);
 - what you can still spend, per provider: every enabled account's remaining
   allowance stacked (in tokens, from what 1% of each account bought in its latest
-  cycle with at least 20% used, or in % of one allowance), and from now a dashed
+  cycle with at least 20 one-point drops, counting only those drops, or in % of one allowance), and from now a dashed
   expected line: the pooled pace (allowance used per hour across all of the
   provider's accounts while any had some left; widened to 3, 7 or 30 days when
   nothing could be used) drains the account that resets first, and each reset

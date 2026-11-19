@@ -98,10 +98,11 @@ export function cycleSummaries(history) {
   return (history?.cycles || []).map(c=>{
     const used=(c.transitions||[]).reduce((n,x)=>n+(typeof x.percentage_points==='number'?x.percentage_points:0),0);
     const tokens=c.usage?.total_tokens??null;
+    let dp=0,dt=0;for(const x of c.transitions||[])if(x.is_direct&&x.percentage_points>0&&x.usage?.total_tokens>0){dp+=x.percentage_points;dt+=x.usage.total_tokens;}
     return {id:c.id,status:c.status,start:time(c.effective_started_at)??time(c.first_observed_at),
       end:time(c.effective_ended_at)??time(c.reset_at),firstSeen:time(c.first_observed_at),lastSeen:time(c.last_observed_at),
       remaining:percent(c.last_remaining_percent),used,tokens,requests:c.usage?.requests??null,
-      perPoint:used>0&&tokens!==null?tokens/used:null};
+      perPoint:dp>0?dt/dp:used>0&&tokens?tokens/used:null};
   }).filter(c=>c.start!==null).sort((a,b)=>b.start-a.start);
 }
 // Keeper masks credential keys as the first 3 and last 6 characters.
@@ -134,10 +135,16 @@ export function remainingAt(points, t) {
   return resetPassed?null:a.p;
 }
 // Tokens one percentage point of this account's allowance bought in its most
-// recent cycle that used at least 20 points.
+// recent cycle with at least 20 points measured. Only direct one-point drops
+// count: a cycle's total also holds tokens that never moved the reading.
 export function tokensPerPoint(history) {
-  const c=cycleSummaries(history).find(c=>c.used>=20&&c.tokens>0);
-  return c?c.tokens/c.used:null;
+  const cycles=[...(history?.cycles||[])].sort((a,b)=>(time(b.effective_started_at)??0)-(time(a.effective_started_at)??0));
+  for(const c of cycles){
+    let points=0,tokens=0;
+    for(const x of c.transitions||[])if(x.is_direct&&x.percentage_points>0&&x.usage?.total_tokens>0){points+=x.percentage_points;tokens+=x.usage.total_tokens;}
+    if(points>=20)return tokens/points;
+  }
+  return null;
 }
 const median=v=>{const s=[...v].sort((a,b)=>a-b);return s.length?s[s.length>>1]:null;};
 // Per-account scale: tokens per point, falling back to the median of the same

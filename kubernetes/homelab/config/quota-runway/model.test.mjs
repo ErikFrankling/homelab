@@ -85,7 +85,8 @@ test('remaining is interpolated inside a cycle, switches at reset and is unknown
  assert.equal(remainingAt([{t:0,p:40,cycle:1,reset:HOUR}],HOUR/2),40);
 });
 test('tokens per point use the latest cycle with real use and fall back to the plan',()=>{
- const h={cycles:[{id:2,effective_started_at:iso(now),transitions:[{percentage_points:5}],usage:{total_tokens:1}},{id:1,effective_started_at:iso(now-HOUR),transitions:[{percentage_points:50}],usage:{total_tokens:5000}}]};
+ const d=(p,t,direct=true)=>({percentage_points:p,is_direct:direct,usage:{total_tokens:t}});
+ const h={cycles:[{id:2,effective_started_at:iso(now),transitions:[d(5,1)]},{id:1,effective_started_at:iso(now-HOUR),transitions:[d(30,3000),d(20,2000),d(10,99999,false)],usage:{total_tokens:999999}}]};
  assert.equal(tokensPerPoint(h),100);
  const s=pointScales([{id:'a',provider:'claude',plan:'max',histories:{weekly:h}},{id:'b',provider:'claude',plan:'max',histories:{}}],'weekly');
  assert.deepEqual(s.get('b'),{value:100,source:'plan'});
