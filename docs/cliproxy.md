@@ -118,8 +118,8 @@ account cards list every account, including disabled ones, with every quota row.
 
 When a cache is empty, failed, older than five minutes, or past reset, the page
 POSTs `/quota/refresh` and polls `/quota/refresh/:auth_index` to completion
-(up to 45 seconds). Provider attempts have a one-minute cooldown. Cache/history
-reads repeat every minute, with bounded retry after network errors and immediate
+(up to 45 seconds). Provider attempts have a one-minute cooldown. Cache reads repeat every minute; histories (seconds each for busy accounts)
+load two at a time with a 90-second timeout and refresh every five minutes, with bounded retry after network errors and immediate
 recovery on reconnect/focus. Last good readings retain their original timestamps.
 Account cards appear before a slow provider refresh completes. Refresh buttons
 force provider reads rather than merely rereading the cache.

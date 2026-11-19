@@ -17,8 +17,8 @@ const RANGES={'24h':{label:'24 hours',ms:DAY},'7d':{label:'7 days',ms:7*DAY},'30
 let range=RANGES[location.hash.slice(1)]?location.hash.slice(1):RANGES[localStorage.getItem('runway-range')]?localStorage.getItem('runway-range'):'7d';
 let others=[],data=[],spend=null,spendError=null,loading=false,kind='weekly',mode='bars',retryTimer,failures=0,resetBusy=false,spendSeq=0;
 const attempts=new Map(),messages=new Map();
-async function api(path,body){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+async function api(path,body,timeout=20000){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
  try{const r=await fetch('/api/v1/'+path,{method:body?'POST':'GET',cache:'no-store',headers:{'x-cpa-usage-keeper-request':'fetch',...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:controller.signal});if(!r.ok)throw new Error(`Request failed (${r.status})`);return await r.json();}finally{clearTimeout(timer);}
 }
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -47,13 +47,13 @@ function needsRefresh(cache){
 // Keeper's histories are per slot (primary/secondary); file them by window length.
 async function loadHistories(id){
  const out={},base='quota/history/'+encodeURIComponent(id);
- const initial=await api(base);
+ const initial=await api(base,undefined,90000);
  const put=h=>{const k=windowKind(h?.selected_window?.window_seconds);if(k)out[k]=h;};
  put(initial);
- await Promise.all((initial.windows||[]).filter(w=>w.window_role!==initial.selected_window?.window_role).map(async w=>put(await api(base+'?window_role='+encodeURIComponent(w.window_role)))));
+ await Promise.all((initial.windows||[]).filter(w=>w.window_role!==initial.selected_window?.window_role).map(async w=>put(await api(base+'?window_role='+encodeURIComponent(w.window_role),undefined,90000))));
  return out;
 }
-const accountFrom=(a,index,cache,old)=>({id:a.identity,name:a.alias||a.displayName||a.name||`${a.provider} ${index+1}`,provider:a.provider||a.type,disabled:a.disabled,plan:cache?.quota?.subscription?.plan||old?.plan||'Unknown plan',cache:cache?.quota?cache:old?.cache,histories:{...old?.histories},errors:[]});
+const accountFrom=(a,index,cache,old)=>({id:a.identity,name:a.alias||a.displayName||a.name||`${a.provider} ${index+1}`,provider:a.provider||a.type,disabled:a.disabled,plan:cache?.quota?.subscription?.plan||old?.plan||'Unknown plan',cache:cache?.quota?cache:old?.cache,histories:{...old?.histories},historiesAt:old?.historiesAt||0,errors:[]});
 async function load(forceIds=null){
  if(loading||resetBusy)return;
  clearTimeout(retryTimer);loading=true;$('refresh').disabled=true;$('updated').textContent='Checking accounts…';
@@ -69,11 +69,12 @@ async function load(forceIds=null){
   const refreshIds=forceIds===true?ids:forceIds||identities.filter(a=>!a.disabled&&needsRefresh(cached.items?.find(c=>c.auth_index===a.identity))&&Date.now()-(attempts.get(a.identity)||0)>60000).map(a=>a.identity);
   if(refreshIds.length){$('updated').textContent=`Fetching fresh limits for ${refreshIds.length} account(s)…`;try{await refreshAccounts(refreshIds);}catch{for(const id of refreshIds)messages.set(id,'Provider refresh failed. Will retry automatically.');}cached=await api('quota/cache',{auth_indexes:ids});}
   const previous=new Map(data.map(a=>[a.id,a]));
-  data=await Promise.all(identities.map(async(a,i)=>{
-   const account=accountFrom(a,i,cached.items?.find(c=>c.auth_index===a.identity),previous.get(a.identity));
-   try{account.histories=await loadHistories(a.identity);}catch{account.errors.push('History unavailable; retrying automatically.');}
-   return account;
-  }));
+  data=identities.map((a,i)=>accountFrom(a,i,cached.items?.find(c=>c.auth_index===a.identity),previous.get(a.identity)));
+  // Keeper takes seconds per history on a busy account: two at a time, every 5 minutes,
+  // sooner for accounts just refreshed by hand. Live limits still come from the cache each minute.
+  const due=data.filter(a=>forceIds===true||(Array.isArray(forceIds)&&forceIds.includes(a.id))||Date.now()-a.historiesAt>5*60000);
+  const queue=[...due];render();
+  await Promise.all([0,1].map(async()=>{for(let a;(a=queue.shift());){try{a.histories=await loadHistories(a.id);a.historiesAt=Date.now();}catch{a.errors.push('History unavailable; retrying automatically.');}render();}}));
   $('error').hidden=true;$('updated').textContent='Updated '+fmtHour(Date.now());failures=0;
  }catch(e){failures++;$('error').textContent=e.message+'. Retrying automatically. Previous readings keep their original timestamps.';$('error').hidden=false;$('updated').textContent='Connection interrupted';}
  finally{await spendDone;loading=false;$('refresh').disabled=false;render();retryTimer=setTimeout(()=>load(),failures?Math.min(60000,10000*2**failures):60000);}
