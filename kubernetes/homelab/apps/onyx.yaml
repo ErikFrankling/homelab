@@ -109,7 +109,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: postgres
-          image: docker.io/library/postgres:15.2-alpine@sha256:d9c304353c031b21e9a7e33dc4781e272a9fa802a2ab9703fe4199d72ba1422c
+          image: docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
           args: ["-c", "max_connections=250"]
           env:
             - name: PGDATA
