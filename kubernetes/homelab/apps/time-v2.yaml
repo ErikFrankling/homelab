@@ -108,8 +108,9 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 5
           resources:
+            # 512Mi sat at 485Mi under reclassification (OOMKilled 2026-11-19, healthz 3-10 s).
             limits:
-              memory: 512Mi
+              memory: 1Gi
             requests:
               memory: 64Mi
           securityContext:
