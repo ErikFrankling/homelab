@@ -60,7 +60,7 @@ spec:
         fsGroup: 1000
       initContainers:
         - name: config
-          image: docker.io/eceasy/cli-proxy-api:v8.1.0@sha256:098ee6aaadf399f1812f3bba959c593182e3a44f5f1d28a8ec44b8c827ebd942
+          image: docker.io/eceasy/cli-proxy-api:v8.1.2@sha256:37733f2a1eaa029e3915a37087b617f85535fe1b25534c8d2cb7f5152e23b02b
           command:
             - sh
             - -c
@@ -78,7 +78,7 @@ spec:
               readOnly: true
       containers:
         - name: cliproxy
-          image: docker.io/eceasy/cli-proxy-api:v8.1.0@sha256:098ee6aaadf399f1812f3bba959c593182e3a44f5f1d28a8ec44b8c827ebd942
+          image: docker.io/eceasy/cli-proxy-api:v8.1.2@sha256:37733f2a1eaa029e3915a37087b617f85535fe1b25534c8d2cb7f5152e23b02b
           imagePullPolicy: IfNotPresent
           workingDir: /data
           command: ["/CLIProxyAPI/CLIProxyAPI", "-config", "/data/config.yaml"]
