@@ -66,6 +66,19 @@ The value is stored in the auth file on the PVC. Set it in the panel's edit dial
   every in-flight stream), also PUT it through the management API
   (`/v0/management/openai-compatibility`, `/v0/management/force-model-prefix`).
 
+## Antigravity (Google, tried 2026-11-24)
+
+CLIProxyAPI's built-in Antigravity OAuth (`GET /v0/management/antigravity-auth-url`,
+the same Google client as Google's own agent; paste the
+`http://localhost:51121/oauth-callback?...` address back with
+`POST /v0/management/oauth-callback` `{provider: "antigravity", redirect_url}`)
+works. After the sign-in, the proxy asks Cloud Code for the account's project
+(`loadCodeAssist`, then `onboardUser`). For `erik.frankling@gmail.com` Google
+refuses that until the account passes Google's phone verification ("User is
+ineligible for free-tier … Verify your account to continue"), so the login ends
+with `Failed to fetch project ID` and no auth file is saved. Once the account is
+verified, sign in again the same way.
+
 ## Clients
 
 Dotfiles `modules/home-manager/cliproxy.nix` sets `ANTHROPIC_BASE_URL` and an
