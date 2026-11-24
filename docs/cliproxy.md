@@ -1,4 +1,4 @@
-# CLIProxyAPI: one home for every Claude, Codex, Grok and OpenCode login
+# CLIProxyAPI: one home for every Claude, Codex, Grok, OpenCode and Antigravity login
 
 `apps/cliproxy.yaml` runs [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 at `https://cliproxy.erikfrankling.duckdns.org` (lan-only: LAN and Tailscale).
@@ -66,19 +66,32 @@ The value is stored in the auth file on the PVC. Set it in the panel's edit dial
   every in-flight stream), also PUT it through the management API
   (`/v0/management/openai-compatibility`, `/v0/management/force-model-prefix`).
 
-## Antigravity (Google, tried 2026-11-24)
+## Antigravity (Google, added 2026-11-24)
 
-CLIProxyAPI's built-in Antigravity OAuth (`GET /v0/management/antigravity-auth-url`,
-the same Google client as Google's own agent; paste the
-`http://localhost:51121/oauth-callback?...` address back with
-`POST /v0/management/oauth-callback` `{provider: "antigravity", redirect_url}`)
-works. After the sign-in, the proxy asks Cloud Code for the account's project
-(`loadCodeAssist`, then `onboardUser`). For `erik.frankling@gmail.com` Google
-refuses that until the account passes Google's phone verification ("User is
-ineligible for free-tier … Verify your account to continue"), so the login ends
-with `Failed to fetch project ID` and no auth file is saved. Once the account is
-verified, sign in again the same way.
-
+- **Login**: `erik.frankling@gmail.com`, through CLIProxyAPI's built-in Antigravity
+  OAuth (`GET /v0/management/antigravity-auth-url`, the same Google client as
+  Google's own agent; paste the `http://localhost:51121/oauth-callback?...`
+  address back with `POST /v0/management/oauth-callback`
+  `{provider: "antigravity", redirect_url}`), or the panel. Google first required
+  the account's phone verification: until then the sign-in ends with `Failed to
+  fetch project ID` and requests get `403 VALIDATION_REQUIRED`.
+- **Models** are the account's Cloud Code ids (`gemini-4-neon-xhigh`,
+  `gemini-4-hydrogen-xhigh`, `gemini-4-argon-high`, `gemini-4-carbon-high`,
+  `gemini-3.8-flash-high`, `gemini-3-flash`, ...).
+- **Aliases for Google's agent**: `agy` strips the effort suffix and sends the
+  bare name (`gemini-4-neon` plus a thinking level). The login's auth file
+  (`/data/auths/antigravity-erik.frankling@gmail.com.json`) therefore has
+  per-login `model_aliases` with `fork: true` (both names work):
+  `gemini-4-neon`, `gemini-4-hydrogen` (-xhigh), `gemini-4-argon`,
+  `gemini-4-carbon`, `gemini-3.8-flash` (-high). They live on the PVC, not in the
+  secret. A new sign-in rewrites the file: re-add them (download the file with
+  `GET /v0/management/auth-files/download?name=...`, set `model_aliases`, upload
+  with `POST /v0/management/auth-files?name=...`; never print the file).
+- **Clients**: dotfiles `modules/home-manager/cliproxy` installs an `agy` wrapper
+  that runs Google's agent in its LLM gateway mode against this hub
+  (`AGY_LLM_GATEWAY_URL`, the client key, wire protocol `genai`, a Gemini-only
+  `AGY_LLM_GATEWAY_MODELS` allowlist). T3 Code's Antigravity provider on the pc
+  and samsung-ablo runs that `agy`, so neither signs in to Google itself.
 ## Clients
 
 Dotfiles `modules/home-manager/cliproxy.nix` sets `ANTHROPIC_BASE_URL` and an
